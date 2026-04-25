@@ -5,11 +5,10 @@ import {
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { BookIcon, HomeIcon, Plus } from "lucide-react"
+import { BookIcon, HelpCircleIcon, HomeIcon, TimerIcon, TrophyIcon } from "lucide-react"
 import Link from "next/link"
 
 export function AppSidebar() {
@@ -24,13 +23,56 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild>
-                            <Link href="/"><HomeIcon /> Home</Link>
+                            <Link href="/">
+                                <div className="flex items-center gap-2">
+                                    <HomeIcon />
+                                    <span>Home</span>
+                                </div>
+                            </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild>
-                            <Link href="/rules"><BookIcon /> Rules</Link>
+                            <Link href="/rules">
+                                <div className="flex items-center gap-2">
+                                    <BookIcon />
+                                    <span>Rules</span>
+                                </div>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/information">
+                                <div className="flex items-center gap-2">
+                                    <HelpCircleIcon />
+                                    <span>Information</span>
+                                </div>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/wrs">
+                                <div className="flex items-center gap-2">
+                                    <TrophyIcon />
+                                    <span>WRs</span>
+                                </div>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/scores">
+                                <div className="flex items-center gap-2">
+                                    <TimerIcon />
+                                    <span>Scores</span>
+                                </div>
+                            </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
