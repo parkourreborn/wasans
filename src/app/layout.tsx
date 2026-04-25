@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Open_Sans } from "next/font/google";
+import {  Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
 import "./globals.css";
 
-const font = Open_Sans({ subsets: ["latin"] });
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: "wasans",
@@ -14,13 +15,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={cn("font-sans", geist.variable, "dark")}>
         <head>
           {/* <link rel="icon" type="image/png" sizes="16x16" href="https://tully.sh/icons/favicon-16x16.png" />
           <link rel="icon" type="image/png" sizes="32x32" href="https://tully.sh/icons/favicon-32x32.png" />
           <link rel="icon" type="image/x-icon" sizes="16x16" href="https://tully.sh/icons/favicon.ico" /> */}
         </head>
-      <body className={font.className}>
+      <body>
         {children}
       </body>
     </html>

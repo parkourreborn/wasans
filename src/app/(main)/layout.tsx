@@ -1,11 +1,17 @@
+import { AppSidebar } from "@/components/ui/app-sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <div className="h-screen w-full bg-background p-8">
-      {children}
-    </div>
+    <SidebarProvider>
+        <AppSidebar />
+        <main className="h-screen w-full p-8">
+            {children}
+        </main>
+    </SidebarProvider>
   );
 }
