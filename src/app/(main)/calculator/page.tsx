@@ -59,7 +59,7 @@ const districtStyles: Record<string, string> = {
 };
 
 const scoreFor = (wr: number, your_time: number) => {
-  if (your_time <= wr) return 0;
+  if (your_time < wr) return 0;
   return Number(Math.pow(wr / your_time, 3).toFixed(3));
 };
 
