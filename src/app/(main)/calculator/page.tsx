@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -154,7 +155,13 @@ export default function Home() {
                     </TableCell>
                     <TableCell className="px-3 py-2 font-semibold">{row.trial}</TableCell>
                   <TableCell className="px-3 py-2 text-left text-sm font-medium text-sky-600">
-                    {row.wr.toFixed(3)}
+                    <Link
+                      href={`/wrs/${encodeURIComponent(row.trial.toLowerCase())}`}
+                      className="underline underline-offset-4 transition hover:text-sky-700"
+                      target="_blank"
+                    >
+                      {row.wr.toFixed(3)}
+                    </Link>
                   </TableCell>
                   <TableCell className="px-3 py-2 text-left text-sm font-medium">
                     <div className="flex items-center gap-2">
