@@ -75,7 +75,7 @@ export default function Home() {
       Object.entries(trials).map(([trial, data]) => {
         const your_time_value = times[trial] ?? "";
         const your_time = Number(your_time_value);
-        const isValidTime = your_time_value.trim() !== "" && !Number.isNaN(your_time) && your_time > data.wr;
+        const isValidTime = your_time_value.trim() !== "" && !Number.isNaN(your_time) && your_time >= data.wr;
 
         return {
           trial,
