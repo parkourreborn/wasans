@@ -8,7 +8,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { BookIcon, HelpCircleIcon, HomeIcon, TimerIcon, TrophyIcon } from "lucide-react"
+import { BookIcon, CalculatorIcon, HelpCircleIcon, HomeIcon, TimerIcon, TrophyIcon } from "lucide-react"
 import Link from "next/link"
 
 export function AppSidebar() {
@@ -71,6 +71,17 @@ export function AppSidebar() {
                                 <div className="flex items-center gap-2">
                                     <TimerIcon />
                                     <span>Scores</span>
+                                </div>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/calculator">
+                                <div className="flex items-center gap-2">
+                                    <CalculatorIcon />
+                                    <span>Calculator</span>
                                 </div>
                             </Link>
                         </SidebarMenuButton>
