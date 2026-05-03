@@ -1,7 +1,8 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
-export async function GET() {
+export async function GET(_: Request, { params }: { params: Promise<{ trial: string }> }) {
   const { env } = await getCloudflareContext({ async: true })
+  const { trial } = await params;
 
   if (!env?.wasans) {
     return new Response(JSON.stringify({ error: "DB binding not available" }), {
@@ -10,9 +11,10 @@ export async function GET() {
     })
   }
 
-  const { results } = await env.wasans.prepare(
-    `SELECT * FROM submissions ORDER BY date DESC`
-  ).all()
+  const { results } = await env.wasans.prepare(`SELECT * FROM wrs WHERE trial = ?`)
+    .bind(trial)
+    .run()
 
   return Response.json({ results })
+
 }

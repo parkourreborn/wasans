@@ -17,6 +17,7 @@ function setLastRequestTs(value: number) {
 }
 
 export function middleware(request: NextRequest) {
+    return NextResponse.next()
   if (!request.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.next()
   }
@@ -25,7 +26,7 @@ export function middleware(request: NextRequest) {
   const lastRequest = getLastRequestTs()
   if (now - lastRequest < WINDOW_MS) {
     const response = NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 })
-    response.headers.set("Retry-After", "1")
+    response.headers.set("Retry-After", "0.25")
     return response
   }
 

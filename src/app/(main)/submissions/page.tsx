@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import Badges from "@/components/custom/badges"
 import { Card, CardContent } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
+import { Input } from "@/components/ui/input"
 
 type Submission = {
   uuid: string
@@ -47,13 +47,27 @@ function formatDate(timestamp: string) {
 
 export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const filteredSubmissions = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+
+    if (!normalizedQuery) {
+      return submissions
+    }
+
+    return submissions.filter((submission) =>
+      submission.trial_name.toLowerCase().includes(normalizedQuery)
+    )
+  }, [searchQuery, submissions])
 
   useEffect(() => {
     const fetchSubmissions = async () => {
       try {
-        const response = await fetch("https://wasans.tully.sh/api/submissions")
+        const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://wasans.tully.sh"
+        const response = await fetch(`${baseUrl}/api/submissions`)
         if (!response.ok) {
           setError("Failed to load submissions")
           return
@@ -97,52 +111,71 @@ export default function SubmissionsPage() {
   }
 
   return (
-    <div className="w-full flex flex-col gap-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {submissions.map((submission) => (
-          <Link key={submission.uuid} href={`/submissions/${submission.uuid}`}>
-            <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer">
-              <CardContent className="p-4">
-                <div className="w-full flex flex-col gap-4">
-                  {/* Video preview */}
-                  <div className="w-full aspect-video bg-muted rounded-lg overflow-hidden">
-                    <video
-                      src={`https://assets.wasans.tully.sh/scores/${submission.uuid}.mp4`}
-                      className="w-full h-full object-cover"
-                      controls={false}
-                    />
-                  </div>
+    <div className="flex h-full w-full flex-col gap-4">
+      <Input
+        type="search"
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.target.value)}
+        placeholder="Search by trial name"
+        aria-label="Search submissions by trial name"
+        className="h-10"
+      />
 
-                  {/* Submission info */}
-                  <div className="w-full flex flex-col gap-2">
-                    <div className="w-full flex items-center justify-between gap-2">
-                      <h3 className="text-lg font-bold">
-                        {submission.trial_name} {formatTime(submission.time)}
-                      </h3>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {filteredSubmissions.length === 0 ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <p className="text-muted-foreground">No matching submissions</p>
+          </div>
+        ) : (
+          <div className="submissions-grid">
+            {filteredSubmissions.map((submission) => (
+              <Link
+                key={submission.uuid}
+                href={`/submissions/${submission.uuid}`}
+                className="submission-grid-item"
+              >
+                <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer overflow-hidden">
+                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                    <div className="flex min-w-0 flex-1 items-center justify-center">
+                      <div className="aspect-video max-h-full w-full bg-muted rounded-lg overflow-hidden">
+                        <video
+                          src={`https://assets.wasans.tully.sh/scores/${submission.uuid}.mp4`}
+                          className="w-full h-full object-cover"
+                          controls={false}
+                        />
+                      </div>
                     </div>
 
-                    <div className="w-full flex flex-col gap-1 text-sm">
-                      <p className="text-muted-foreground">{submission.player_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(submission.date)}
-                      </p>
-                    </div>
+                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                      <div className="w-full flex items-center justify-between gap-2">
+                        <h3 className="text-xl font-bold leading-tight xl:text-2xl">
+                          {submission.trial_name} {formatTime(submission.time)}
+                        </h3>
+                      </div>
 
-                    <Badges
-                      badges={[
-                        submission.state === "approved"
-                          ? "approved"
-                          : submission.state === "denied"
-                            ? "denied"
-                            : "pending",
-                      ]}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+                      <div className="w-full flex flex-col gap-1.5 text-base">
+                        <p className="text-muted-foreground truncate">{submission.player_name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(submission.date)}
+                        </p>
+                      </div>
+
+                      <Badges
+                        badges={[
+                          submission.state === "approved"
+                            ? "approved"
+                            : submission.state === "denied"
+                              ? "denied"
+                              : "pending",
+                        ]}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
