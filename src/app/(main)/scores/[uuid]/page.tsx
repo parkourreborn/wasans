@@ -27,18 +27,17 @@ function formatTime(rawTime: string) {
 
 export default async function Home({ params }: { params: { uuid: string } }) {
   const { uuid } = await params
-  const response = await fetch(`https://wasans.tully.sh/api/scores/${uuid}`, { cache: "force-cache" })
-  console.log(response)
-  const json = await response.json().catch(() => null)
+  const response = await fetch(`https://wasans.tully.sh/api/scores/${uuid}`)
+  const json: unknown = await response.json().catch(() => null)
 
   if (!response.ok) {
+    const errorMessage = "Unable to load score data."
+
     return (
       <div className="w-full min-h-screen flex items-center justify-center p-4">
         <Card className="max-w-2xl w-full">
           <CardContent>
-            <p className="text-destructive text-center">
-              {json?.error ?? "Unable to load score data."}
-            </p>
+            <p className="text-destructive text-center">{errorMessage}</p>
           </CardContent>
         </Card>
       </div>
