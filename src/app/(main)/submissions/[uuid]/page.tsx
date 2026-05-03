@@ -87,7 +87,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center p-4">
-        <Card className="max-w-2xl w-full">
+        <Card className="w-full">
           <CardContent>
             <p className="text-destructive text-center">{error}</p>
           </CardContent>
@@ -99,7 +99,7 @@ export default function Home() {
   if (!submission) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center p-4">
-        <Card className="max-w-2xl w-full">
+        <Card className="w-full">
           <CardContent>
             <p className="text-muted-foreground text-center">No submission found.</p>
           </CardContent>
@@ -117,7 +117,7 @@ export default function Home() {
 
   return (
     <div className="w-full min-h-screen flex items-center justify-center p-4">
-      <Card className="max-w-4xl w-full">
+      <Card className="w-full">
         <CardHeader>
           <div className="w-full flex flex-col gap-2">
             <div className="w-full flex items-center justify-between">
