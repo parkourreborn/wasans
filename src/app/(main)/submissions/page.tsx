@@ -71,7 +71,7 @@ export default function SubmissionsPage() {
           setError("Failed to load submissions")
           return
         }
-
+        
         const json = (await response.json()) as SubmissionsResponse
         setSubmissions(json.results || [])
       } catch (err) {
