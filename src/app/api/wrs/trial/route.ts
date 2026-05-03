@@ -1,8 +1,15 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
-export async function GET(_: Request, { params }: { params: Promise<{ trial: string }> }) {
+export async function GET(request: Request) {
   const { env } = await getCloudflareContext({ async: true })
-  const { trial } = await params;
+  const trial = new URL(request.url).searchParams.get("trial")
+
+  if (!trial) {
+    return new Response(JSON.stringify({ error: "Missing trial query parameter" }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    })
+  }
 
   if (!env?.wasans) {
     return new Response(JSON.stringify({ error: "DB binding not available" }), {
@@ -16,5 +23,4 @@ export async function GET(_: Request, { params }: { params: Promise<{ trial: str
     .run()
 
   return Response.json({ results })
-
 }
