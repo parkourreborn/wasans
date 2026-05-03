@@ -67,10 +67,10 @@ export function AppSidebar() {
 
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild>
-                            <Link href="/scores">
+                            <Link href="/submissions">
                                 <div className="flex items-center gap-2">
                                     <TimerIcon />
-                                    <span>Scores</span>
+                                    <span>Submissions</span>
                                 </div>
                             </Link>
                         </SidebarMenuButton>
