@@ -66,8 +66,7 @@ export default function SubmissionsPage() {
   useEffect(() => {
     const fetchSubmissions = async () => {
       try {
-        const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://wasans.tully.sh"
-        const response = await fetch(`${baseUrl}/api/wrs`)
+        const response = await fetch(`https://wasans.tully.sh/api/wrs`)
         if (!response.ok) {
           setError("Failed to load submissions")
           return

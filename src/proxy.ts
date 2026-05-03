@@ -16,8 +16,9 @@ function setLastRequestTs(value: number) {
   state[GLOBAL_STATE_KEY] = value
 }
 
-export function middleware(request: NextRequest) {
-    return NextResponse.next()
+export function proxy(request: NextRequest) {
+  return NextResponse.next()
+
   if (!request.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.next()
   }
