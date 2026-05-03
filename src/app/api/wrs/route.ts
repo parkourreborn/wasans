@@ -11,7 +11,7 @@ export async function GET() {
   }
 
   const { results } = await env.wasans.prepare(
-    `SELECT * FROM submissions ORDER BY date DESC`
+    `SELECT * FROM wrs`
   ).all()
 
   return Response.json({ results })

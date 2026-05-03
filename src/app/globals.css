@@ -157,3 +157,23 @@ body {
     @apply font-sans;
   }
 }
+
+.submissions-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  width: 100%;
+  align-items: stretch;
+}
+
+.submission-grid-item {
+  display: block;
+  height: calc((100vh - 10rem) / 3);
+  min-height: 0;
+}
+
+@media (min-width: 640px) {
+  .submissions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
