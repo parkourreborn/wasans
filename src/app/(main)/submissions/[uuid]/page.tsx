@@ -28,6 +28,19 @@ function formatTime(rawTime: string) {
   return `${String(Number(seconds))}.${formattedMs}`
 }
 
+function formatDate(timestamp: string) {
+  const unixTime = parseInt(timestamp, 10)
+  if (isNaN(unixTime)) {
+    return timestamp
+  }
+
+  const date = new Date(unixTime * 1000)
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  const year = date.getFullYear()
+  return `${month}-${day}-${year}`
+}
+
 export default async function Home({ params }: { params: { uuid: string } }) {
   const { uuid } = await params
 
@@ -66,6 +79,7 @@ export default async function Home({ params }: { params: { uuid: string } }) {
   const { player_name, trial_name, date, time: rawTimeValue, state } = submission
   const rawTimeString = String(rawTimeValue)
   const time = formatTime(rawTimeString)
+  const formattedDate = formatDate(date)
   const badges = [state === "approved" ? "approved" : state === "denied" ? "denied" : "pending"]
   const videoSrc = `https://assets.wasans.tully.sh/scores/${uuid}.mp4`
 
@@ -80,7 +94,7 @@ export default async function Home({ params }: { params: { uuid: string } }) {
                 <Separator orientation="vertical" />
                 <p className="lg:text-lg text-muted-foreground">{player_name}</p>
                 <Separator orientation="vertical" />
-                <p className="text-muted-foreground">{date}</p>
+                <p className="text-muted-foreground">{formattedDate}</p>
               </div>
             </div>
 
