@@ -6,7 +6,8 @@ type ScoreValue = {
   player: string
   trial: string
   time: string
-  date: string
+  date: string,
+  badges: string[]
 }
 
 type ScoreData = {
@@ -15,14 +16,14 @@ type ScoreData = {
 }
 
 function formatTime(rawTime: string) {
-  const match = rawTime.match(/^0*([0-9]+):0*([0-9]+)\.(\d{1,3})$/)
+  const match = rawTime.match(/^0*([0-9]+)\.(\d{1,3})$/)
   if (!match) {
     return rawTime
   }
 
-  const [, minutes, seconds, ms] = match
+  const [, seconds, ms] = match
   const formattedMs = ms.padEnd(3, "0")
-  return `${String(Number(minutes))}:${String(Number(seconds))}.${formattedMs}`
+  return `${String(Number(seconds))}.${formattedMs}`
 }
 
 export default async function Home({ params }: { params: { uuid: string } }) {
@@ -45,7 +46,7 @@ export default async function Home({ params }: { params: { uuid: string } }) {
   }
 
   const data = json as ScoreData
-  const { player, trial, date, time: rawTime } = data.value
+  const { player, trial, date, time: rawTime, badges } = data.value
   const time = formatTime(rawTime)
   const videoSrc = `https://assets.wasans.tully.sh/scores/${uuid}.mp4`
 
@@ -64,7 +65,7 @@ export default async function Home({ params }: { params: { uuid: string } }) {
               </div>
             </div>
 
-            <Badges badges={["wr", "approved"]} />
+            <Badges badges={badges} />
           </div>
         </CardHeader>
 
