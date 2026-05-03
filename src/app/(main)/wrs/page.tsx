@@ -5,6 +5,7 @@ import Link from "next/link"
 import Badges from "@/components/custom/badges"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 
 type Submission = {
   submission_uuid: string
@@ -88,7 +89,7 @@ export default function SubmissionsPage() {
   if (loading) {
     return (
       <div className="w-full h-full flex items-center justify-center">
-        <p className="text-muted-foreground">Loading submissions...</p>
+        <Spinner className="size-8 text-muted-foreground" />
       </div>
     )
   }

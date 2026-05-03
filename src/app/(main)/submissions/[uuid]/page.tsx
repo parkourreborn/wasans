@@ -1,7 +1,11 @@
-import { headers } from "next/headers"
+"use client"
+
+import { useEffect, useState } from "react"
 import Badges from "@/components/custom/badges"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Spinner } from "@/components/ui/spinner"
+import { useParams } from "next/navigation"
 
 type SubmissionValue = {
   uuid: string
@@ -41,28 +45,56 @@ function formatDate(timestamp: string) {
   return `${month}-${day}-${year}`
 }
 
-export default async function Home({ params }: { params: { uuid: string } }) {
-  const { uuid } = await params
+export default function Home() {
+  const params = useParams<{ uuid: string }>()
+  const uuid = params.uuid
+  const [submission, setSubmission] = useState<SubmissionValue | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const response = await fetch(`https://wasans.tully.sh/api/submissions/${uuid}`, { cache: "no-store" })
-  const json: unknown = await response.json().catch(() => null)
+  useEffect(() => {
+    const fetchSubmission = async () => {
+      try {
+        const response = await fetch(`https://wasans.tully.sh/api/submissions/${uuid}`)
+        const json: unknown = await response.json().catch(() => null)
 
-  if (!response.ok) {
-    const errorMessage ="Unable to load submission data."
+        if (!response.ok) {
+          setError("Unable to load submission data.")
+          return
+        }
 
+        const responseData = json as SubmissionResponse
+        setSubmission(responseData.results?.[0] ?? null)
+      } catch (err) {
+        setError("Unable to load submission data.")
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchSubmission()
+  }, [uuid])
+
+  if (loading) {
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center p-4">
+        <Spinner className="size-8 text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (error) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center p-4">
         <Card className="max-w-2xl w-full">
           <CardContent>
-            <p className="text-destructive text-center">{errorMessage}</p>
+            <p className="text-destructive text-center">{error}</p>
           </CardContent>
         </Card>
       </div>
     )
   }
-
-  const responseData = json as SubmissionResponse
-  const submission = responseData.results?.[0]
 
   if (!submission) {
     return (
