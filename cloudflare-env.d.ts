@@ -3,7 +3,7 @@
 // Runtime types generated with workerd@1.20260424.1 2026-04-25 nodejs_compat
 declare namespace Cloudflare {
 	interface Env {
-		wasans: KVNamespace;
+		wasans: D1Database;
 		NEXT_INC_CACHE_R2_BUCKET: R2Bucket;
 		IMAGES: ImagesBinding;
 		ASSETS: Fetcher;
