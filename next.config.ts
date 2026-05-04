@@ -5,7 +5,8 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   experimental: {
     proxyClientMaxBodySize: "100mb"
-  }
+  },
+  devIndicators: false
 };
 
 export default nextConfig;

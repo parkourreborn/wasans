@@ -1,4 +1,5 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
+import { refreshPlayerScore } from "@/lib/server/player-scores"
 import { trials } from "@/lib/trials"
 
 type IncomingSubmission = {
@@ -59,7 +60,10 @@ export async function GET() {
   }
 
   const { results } = await env.wasans.prepare(
-    `SELECT * FROM submissions ORDER BY date DESC`
+    `SELECT submissions.*, players.score as player_score
+     FROM submissions
+     LEFT JOIN players ON players.uuid = submissions.player_uuid
+     ORDER BY submissions.date DESC`
   ).all()
 
   return Response.json({ results })
@@ -186,6 +190,7 @@ export async function POST(request: Request) {
         throw err
       }
 
+      await refreshPlayerScore(env.wasans, player.uuid)
       created.push({ uuid, trial_name: trialName, proof_url: proofUrl, object_key: objectKey })
       continue
     }
@@ -204,6 +209,7 @@ export async function POST(request: Request) {
       .bind(uuid, player.uuid, trialName, player.player_name, time, now, "pending")
       .run()
 
+    await refreshPlayerScore(env.wasans, player.uuid)
     created.push({ uuid, trial_name: trialName, proof_url: link })
   }
 

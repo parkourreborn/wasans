@@ -11,7 +11,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ uuid: stri
     })
   }
 
-  const { results } = await env.wasans.prepare(`SELECT * FROM submissions WHERE player_uuid = ?`)
+  const { results } = await env.wasans.prepare(
+    `SELECT submissions.*, players.score as player_score
+     FROM submissions
+     LEFT JOIN players ON players.uuid = submissions.player_uuid
+     WHERE submissions.player_uuid = ?`
+  )
     .bind(uuid)
     .run()
 

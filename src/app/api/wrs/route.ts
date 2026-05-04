@@ -1,4 +1,5 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
+import { refreshAllPlayerScores } from "@/lib/server/player-scores"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 
 export async function GET() {
@@ -12,9 +13,13 @@ export async function GET() {
   }
 
   await refreshWorldRecords(env.wasans)
+  await refreshAllPlayerScores(env.wasans)
 
   const { results } = await env.wasans.prepare(
-    `SELECT * FROM wrs ORDER BY trial_name`
+    `SELECT wrs.*, players.score as player_score
+     FROM wrs
+     LEFT JOIN players ON players.uuid = wrs.player_uuid
+     ORDER BY wrs.trial_name`
   ).all()
 
   return Response.json({ results })
