@@ -4,6 +4,7 @@ type PlayerAuthRow = {
   uuid: string
   player_id: string
   player_name: string
+  score: number
   permission: number
 }
 
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   }
 
   const linkedPlayer = await env.wasans.prepare(
-    `SELECT players.uuid, players.player_id, players.player_name, players.permission
+    `SELECT players.uuid, players.player_id, players.player_name, players.score, players.permission
      FROM oauth_accounts
      JOIN players ON players.uuid = oauth_accounts.player_uuid
      WHERE oauth_accounts.provider = 'discord'
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
     .first<PlayerAuthRow>()
 
   let player = linkedPlayer ?? await env.wasans.prepare(
-    `SELECT uuid, player_id, player_name, permission
+    `SELECT uuid, player_id, player_name, score, permission
      FROM players
      WHERE player_id = ?`
   )
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
       uuid: playerUuid,
       player_id: discordUserId,
       player_name: playerName,
+      score: 0,
       permission: 0,
     }
   }

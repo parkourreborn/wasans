@@ -281,7 +281,7 @@ export default function NewSubmissionPage() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="mx-auto flex h-full w-full max-w-4xl flex-col gap-4 overflow-y-auto pb-8"
+      className="mx-auto flex w-full max-w-4xl flex-col gap-4 pb-8"
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>

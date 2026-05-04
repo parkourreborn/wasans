@@ -12,7 +12,8 @@ CREATE TABLE players (
   player_id TEXT NOT NULL,
   player_name TEXT NOT NULL,
   date_joined TEXT NOT NULL,
-  permission INTEGER NOT NULL DEFAULT 0
+  permission INTEGER NOT NULL DEFAULT 0,
+  score REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE auth_sessions (

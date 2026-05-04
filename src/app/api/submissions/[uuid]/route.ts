@@ -1,5 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { canModerate, getAuthUser } from "@/lib/server/auth"
+import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 
 export async function GET(_: Request, { params }: { params: Promise<{ uuid: string }> }) {
@@ -13,7 +14,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ uuid: stri
     })
   }
 
-  const { results } = await env.wasans.prepare(`SELECT * FROM submissions WHERE uuid = ?`)
+  const { results } = await env.wasans.prepare(
+    `SELECT submissions.*, players.score as player_score
+     FROM submissions
+     LEFT JOIN players ON players.uuid = submissions.player_uuid
+     WHERE submissions.uuid = ?`
+  )
     .bind(uuid)
     .run()
 
@@ -79,8 +85,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     .run()
 
   await refreshWorldRecords(env.wasans, submission.trial_name)
+  await refreshAllPlayerScores(env.wasans)
 
-  const { results } = await env.wasans.prepare(`SELECT * FROM submissions WHERE uuid = ?`)
+  const { results } = await env.wasans.prepare(
+    `SELECT submissions.*, players.score as player_score
+     FROM submissions
+     LEFT JOIN players ON players.uuid = submissions.player_uuid
+     WHERE submissions.uuid = ?`
+  )
     .bind(uuid)
     .run()
 
@@ -127,6 +139,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
   }
 
   await refreshWorldRecords(env.wasans, submission.trial_name)
+  await refreshPlayerScore(env.wasans, submission.player_uuid)
+  await refreshAllPlayerScores(env.wasans)
 
   return Response.json({ ok: true })
 }

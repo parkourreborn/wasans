@@ -19,37 +19,36 @@ import {
 
 type Trial = {
   district: string;
-  your_time: number;
 };
 
 const trials: Record<string, Trial> = {
-  CRYSTAL: { district: "DOWNTOWN", your_time: 7.218 },
-  GENESIS: { district: "DOWNTOWN", your_time: 8.318 },
-  GLASS: { district: "DOWNTOWN", your_time: 7.173 },
-  RISER: { district: "DOWNTOWN", your_time: 7.470 },
-  SOLAR: { district: "DOWNTOWN", your_time: 12.076 },
-  VESTIBULE: { district: "DOWNTOWN", your_time: 6.759 },
+  CRYSTAL: { district: "DOWNTOWN" },
+  GENESIS: { district: "DOWNTOWN" },
+  GLASS: { district: "DOWNTOWN" },
+  RISER: { district: "DOWNTOWN" },
+  SOLAR: { district: "DOWNTOWN" },
+  VESTIBULE: { district: "DOWNTOWN" },
 
-  CELSIUS: { district: "DIRWIK", your_time: 8.130 },
-  CIRCULATION: { district: "DIRWIK", your_time: 7.754 },
-  FLOW: { district: "DIRWIK", your_time: 9.552 },
-  MARTYR: { district: "DIRWIK", your_time: 8.881 },
-  "NEON BOLD": { district: "DIRWIK", your_time: 14.734 },
-  SAWDUST: { district: "DIRWIK", your_time: 13.434 },
+  CELSIUS: { district: "DIRWIK" },
+  CIRCULATION: { district: "DIRWIK" },
+  FLOW: { district: "DIRWIK" },
+  MARTYR: { district: "DIRWIK" },
+  "NEON BOLD": { district: "DIRWIK" },
+  SAWDUST: { district: "DIRWIK" },
 
-  ASCENSION: { district: "FRAGMENT", your_time: 9.251 },
-  FAITH: { district: "FRAGMENT", your_time: 12.167 },
-  GALE: { district: "FRAGMENT", your_time: 5.685 },
-  GRIP: { district: "FRAGMENT", your_time: 8.712 },
-  THREAD: { district: "FRAGMENT", your_time: 8.470 },
-  UMBREL: { district: "FRAGMENT", your_time: 26.112 },
+  ASCENSION: { district: "FRAGMENT" },
+  FAITH: { district: "FRAGMENT" },
+  GALE: { district: "FRAGMENT" },
+  GRIP: { district: "FRAGMENT" },
+  THREAD: { district: "FRAGMENT" },
+  UMBREL: { district: "FRAGMENT" },
 
-  DEPOT: { district: "STACK", your_time: 11.398 },
-  FLAME: { district: "STACK", your_time: 8.871 },
-  IRONSING: { district: "STACK", your_time: 10.510 },
-  MONOXIDE: { district: "STACK", your_time: 7.691 },
-  "RUST BELT": { district: "STACK", your_time: 13.467 },
-  WISP: { district: "STACK", your_time: 10.759 },
+  DEPOT: { district: "STACK" },
+  FLAME: { district: "STACK" },
+  IRONSING: { district: "STACK" },
+  MONOXIDE: { district: "STACK" },
+  "RUST BELT": { district: "STACK" },
+  WISP: { district: "STACK" },
 };
 
 const districtStyles: Record<string, string> = {
@@ -74,17 +73,42 @@ type WorldRecordsResponse = {
   error?: string;
 };
 
+type AuthResponse = {
+  user: {
+    uuid: string;
+    player_name: string;
+  } | null;
+};
+
+type SubmissionValue = {
+  trial_name: string;
+  time: number | string;
+  state: string;
+};
+
+type SubmissionsResponse = {
+  results?: SubmissionValue[];
+  error?: string;
+};
+
 const trialKey = (trial: string) => trial.toUpperCase();
+const zeroTimes = Object.fromEntries(trialNames.map((trial) => [trialKey(trial), "0.000"]));
+
+function getPlayerUuid() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.localStorage.getItem("player_uuid") || "";
+}
 
 export default function Home() {
   const [worldRecords, setWorldRecords] = React.useState<Record<string, number>>({});
   const [loadingWorldRecords, setLoadingWorldRecords] = React.useState(true);
   const [worldRecordError, setWorldRecordError] = React.useState<string | null>(null);
-  const [times, setTimes] = React.useState<Record<string, string>>(
-    Object.fromEntries(
-      Object.entries(trials).map(([trial, data]) => [trial, data.your_time.toFixed(3)])
-    ) as Record<string, string>
-  );
+  const [loadingUserTimes, setLoadingUserTimes] = React.useState(true);
+  const [userTimesError, setUserTimesError] = React.useState<string | null>(null);
+  const [times, setTimes] = React.useState<Record<string, string>>(zeroTimes);
 
   React.useEffect(() => {
     const loadWorldRecords = async () => {
@@ -113,6 +137,64 @@ export default function Home() {
     };
 
     loadWorldRecords();
+  }, []);
+
+  React.useEffect(() => {
+    const loadUserTimes = async () => {
+      try {
+        const playerUuid = getPlayerUuid();
+        const authResponse = await fetch("/api/auth/me", {
+          headers: playerUuid
+            ? {
+                "x-wasans-player-uuid": playerUuid,
+              }
+            : undefined,
+        });
+        const authJson = (await authResponse.json()) as AuthResponse;
+        const userUuid = authJson.user?.uuid || playerUuid;
+
+        if (!userUuid) {
+          return;
+        }
+
+        const response = await fetch(`/api/submissions/player/${encodeURIComponent(userUuid)}`);
+        const json = (await response.json()) as SubmissionsResponse;
+
+        if (!response.ok) {
+          throw new Error(json.error || "Unable to load your times");
+        }
+
+        const bestTimes: Record<string, number> = {};
+
+        for (const submission of json.results || []) {
+          if (submission.state !== "approved") {
+            continue;
+          }
+
+          const trial = trialKey(submission.trial_name);
+          const time = Number(submission.time);
+          const currentBest = bestTimes[trial];
+
+          if (Number.isFinite(time) && time > 0 && (!currentBest || time < currentBest)) {
+            bestTimes[trial] = time;
+          }
+        }
+
+        setTimes({
+          ...zeroTimes,
+          ...Object.fromEntries(
+            Object.entries(bestTimes).map(([trial, time]) => [trial, time.toFixed(3)])
+          ),
+        });
+      } catch (err) {
+        console.error(err);
+        setUserTimesError(err instanceof Error ? err.message : "Unable to load your times");
+      } finally {
+        setLoadingUserTimes(false);
+      }
+    };
+
+    loadUserTimes();
   }, []);
 
   const rows = React.useMemo(
@@ -152,7 +234,7 @@ export default function Home() {
   const resetTimes = (trial: string) => {
     setTimes((current) => ({
       ...current,
-      [trial]: trials[trial].your_time.toFixed(3),
+      [trial]: "0.000",
     }));
   };
 
@@ -172,7 +254,11 @@ export default function Home() {
                   ? worldRecordError
                   : loadingWorldRecords
                     ? "Loading world records."
-                    : <>Score is calculated as <span className="font-semibold">(WR / your time)&sup3;</span>, then averaged.</>}
+                    : userTimesError
+                      ? userTimesError
+                      : loadingUserTimes
+                        ? "Loading your approved times."
+                        : <>Score is calculated as <span className="font-semibold">(WR / your time)&sup3;</span>, then averaged.</>}
               </p>
             </div>
             <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-right">
@@ -233,7 +319,7 @@ export default function Home() {
                         type="button"
                         onClick={() => resetTimes(row.trial)}
                         className={`inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition ${
-                          row.your_time_value !== trials[row.trial].your_time.toFixed(3)
+                          row.your_time_value !== "0.000"
                             ? "hover:bg-background opacity-100"
                             : "opacity-0 pointer-events-none"
                         }`}

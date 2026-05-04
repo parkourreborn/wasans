@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Badges from "@/components/custom/badges"
+import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -30,6 +31,7 @@ type SubmissionValue = {
   player_uuid: string
   trial_name: string
   player_name: string
+  player_score: number
   time: number | string
   date: string
   state: string
@@ -277,7 +279,9 @@ export default function Home() {
               <div className="w-full flex items-center justify-start gap-4">
                 <h2 className="lg:text-3xl font-bold">{trial_name} {time}</h2>
                 <Separator orientation="vertical" />
-                <p className="lg:text-lg text-muted-foreground">{player_name}</p>
+                <p className="lg:text-lg text-muted-foreground">
+                  {formatPlayerNameWithScore(player_name, submission.player_score)}
+                </p>
                 <Separator orientation="vertical" />
                 <p className="text-muted-foreground">{formattedDate}</p>
               </div>

@@ -4,6 +4,7 @@ export type AuthUser = {
   uuid: string
   player_id: string
   player_name: string
+  score: number
   permission: number
 }
 
@@ -78,7 +79,7 @@ export async function getAuthUser(request: Request, db: D1Database) {
   }
 
   return db.prepare(
-    `SELECT uuid, player_id, player_name, permission
+    `SELECT uuid, player_id, player_name, score, permission
      FROM players
      WHERE uuid = ?`
   )

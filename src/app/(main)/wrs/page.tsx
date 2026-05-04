@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import Badges from "@/components/custom/badges"
+import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
@@ -12,6 +13,7 @@ type Submission = {
   player_uuid: string
   trial_name: string
   player_name: string
+  player_score: number
   time: number
   date: string
   state: string
@@ -67,7 +69,7 @@ export default function SubmissionsPage() {
   useEffect(() => {
     const fetchSubmissions = async () => {
       try {
-        const response = await fetch(`https://wasans.tully.sh/api/wrs`)
+        const response = await fetch(`/api/wrs`)
         if (!response.ok) {
           setError("Failed to load submissions")
           return
@@ -154,7 +156,12 @@ export default function SubmissionsPage() {
                       </div>
 
                       <div className="w-full flex flex-col gap-1.5 text-base">
-                        <p className="text-muted-foreground truncate">{submission.player_name}</p>
+                        <p className="text-muted-foreground truncate">
+                          {formatPlayerNameWithScore(
+                            submission.player_name,
+                            submission.player_score
+                          )}
+                        </p>
                         <p className="text-sm text-muted-foreground">
                           {formatDate(submission.date)}
                         </p>
