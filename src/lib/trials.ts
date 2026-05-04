@@ -22,5 +22,7 @@ export const trials = [
   "Ironsing",
   "Monoxide",
   "Rust Belt",
-  "Wisp"
-];
+  "Wisp",
+] as const
+
+export type TrialName = (typeof trials)[number]
