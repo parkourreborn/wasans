@@ -66,6 +66,7 @@ const scoreFor = (wr: number, your_time: number) => {
 type WorldRecordValue = {
   trial_name: string;
   time: number | string;
+  submission_uuid: string;
 };
 
 type WorldRecordsResponse = {
@@ -103,12 +104,13 @@ function getPlayerUuid() {
 }
 
 export default function Home() {
-  const [worldRecords, setWorldRecords] = React.useState<Record<string, number>>({});
+  const [worldRecords, setWorldRecords] = React.useState<Array<WorldRecordValue>>([]);
   const [loadingWorldRecords, setLoadingWorldRecords] = React.useState(true);
   const [worldRecordError, setWorldRecordError] = React.useState<string | null>(null);
   const [loadingUserTimes, setLoadingUserTimes] = React.useState(true);
   const [userTimesError, setUserTimesError] = React.useState<string | null>(null);
   const [times, setTimes] = React.useState<Record<string, string>>(zeroTimes);
+  const [pbs, setPbs] = React.useState<Record<string, string>>(zeroTimes);
 
   React.useEffect(() => {
     const loadWorldRecords = async () => {
@@ -121,12 +123,7 @@ export default function Home() {
         }
 
         setWorldRecords(
-          Object.fromEntries(
-            (json.results || []).map((record) => [
-              trialKey(record.trial_name),
-              Number(record.time),
-            ])
-          )
+          json.results || []
         );
       } catch (err) {
         console.error(err);
@@ -180,6 +177,13 @@ export default function Home() {
           }
         }
 
+        setPbs({
+          ...zeroTimes,
+          ...Object.fromEntries(
+            Object.entries(bestTimes).map(([trial, time]) => [trial, time.toFixed(3)])
+          ),
+        });
+
         setTimes({
           ...zeroTimes,
           ...Object.fromEntries(
@@ -202,7 +206,7 @@ export default function Home() {
       trialNames.map((trialName) => {
         const trial = trialKey(trialName);
         const data = trials[trial];
-        const wr = worldRecords[trial];
+        const wr = Number(worldRecords.find((u) => trialKey(u.trial_name) === trial)?.time || 0);
         const your_time_value = times[trial] ?? "";
         const your_time = Number(your_time_value);
         const isValidTime =
@@ -234,7 +238,7 @@ export default function Home() {
   const resetTimes = (trial: string) => {
     setTimes((current) => ({
       ...current,
-      [trial]: "0.000",
+      [trial]: pbs[trial],
     }));
   };
 
@@ -299,7 +303,7 @@ export default function Home() {
                     <TableCell className="px-3 py-2 font-semibold">{row.trial}</TableCell>
                   <TableCell className="px-3 py-2 text-left text-sm font-medium text-sky-600">
                     <Link
-                      href={`/wrs/${encodeURIComponent(row.trial.toLowerCase())}`}
+                      href={`/submissions/${encodeURIComponent(worldRecords.find(u=>u.trial_name === row.trial)?.submission_uuid || "")}`}
                       className="underline underline-offset-4 transition hover:text-sky-700"
                       target="_blank"
                     >
