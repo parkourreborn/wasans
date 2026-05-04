@@ -106,6 +106,17 @@ export default function InformationPage() {
         </div>
       </InfoCard>
 
+      <InfoCard title="FAQ">
+        <div className="grid gap-4">
+          {faq.map(([question, answer]) => (
+            <div key={question}>
+              <h2 className="font-semibold">{question}</h2>
+              <p className="text-muted-foreground">{answer}</p>
+            </div>
+          ))}
+        </div>
+      </InfoCard>
+
       <InfoCard title="Discord Roles">
         <div className="grid gap-2 md:grid-cols-2">
           {roles.map(([role, description]) => (
@@ -128,16 +139,7 @@ export default function InformationPage() {
         </div>
       </InfoCard>
 
-      <InfoCard title="FAQ">
-        <div className="grid gap-4">
-          {faq.map(([question, answer]) => (
-            <div key={question}>
-              <h2 className="font-semibold">{question}</h2>
-              <p className="text-muted-foreground">{answer}</p>
-            </div>
-          ))}
-        </div>
-      </InfoCard>
+      
 
     </div>
   )
