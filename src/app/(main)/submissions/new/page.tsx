@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
 
 type SubmissionDraft = {
@@ -39,6 +40,12 @@ type WorldRecordValue = {
 type ListResponse<T> = {
   results?: T[]
   error?: string
+}
+
+type UploadState = {
+  progress: number
+  status: "idle" | "uploading" | "processing" | "done" | "error"
+  message?: string
 }
 
 let cachedWorldRecords: Record<string, number> | null = null
@@ -113,21 +120,93 @@ function formatTime(value: number) {
   return value.toFixed(3).replace(/\.?0+$/, "")
 }
 
+function uploadSubmission(
+  playerUuid: string,
+  submission: SubmissionDraft,
+  onProgress: (progress: number, status: UploadState["status"]) => void
+) {
+  return new Promise<ListResponse<unknown>>((resolve, reject) => {
+    const formData = new FormData()
+    formData.append("player_uuid", playerUuid)
+    formData.append(
+      "submissions",
+      JSON.stringify([
+        {
+          trial_name: submission.trial_name,
+          time: submission.time,
+          proof_url: submission.proof_url.trim(),
+        },
+      ])
+    )
+
+    if (submission.proof_file) {
+      formData.append("proof_file_0", submission.proof_file)
+    }
+
+    const request = new XMLHttpRequest()
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) {
+        onProgress(50, "uploading")
+        return
+      }
+
+      const progress = Math.min(Math.round((event.loaded / event.total) * 90), 90)
+      onProgress(progress, "uploading")
+    }
+
+    request.upload.onload = () => {
+      onProgress(90, "processing")
+    }
+
+    request.onload = () => {
+      let json: ListResponse<unknown> | null = null
+
+      try {
+        json = JSON.parse(request.responseText || "null") as ListResponse<unknown> | null
+      } catch {
+        json = null
+      }
+
+      if (request.status >= 200 && request.status < 300) {
+        onProgress(100, "done")
+        resolve(json || {})
+        return
+      }
+
+      reject(new Error(json?.error || "Unable to create submission"))
+    }
+
+    request.onerror = () => {
+      reject(new Error("Unable to create submission"))
+    }
+
+    request.onabort = () => {
+      reject(new Error("Upload was cancelled"))
+    }
+
+    onProgress(submission.proof_file ? 0 : 90, submission.proof_file ? "uploading" : "processing")
+    request.open("POST", "/api/submissions")
+    request.send(formData)
+  })
+}
+
 export default function NewSubmissionPage() {
   const router = useRouter()
   const [playerUuid] = useState(getPlayerUuid)
   const [personalBests, setPersonalBests] = useState<Record<string, number>>({})
   const [worldRecords, setWorldRecords] = useState<Record<string, number>>({})
-  const [loadingContext, setLoadingContext] = useState(true)
+  const [loadingContext, setLoadingContext] = useState(() => Boolean(playerUuid))
   const [submissions, setSubmissions] = useState<SubmissionDraft[]>([createDraft()])
   const [submitting, setSubmitting] = useState(false)
+  const [uploadStates, setUploadStates] = useState<Record<string, UploadState>>({})
   const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    playerUuid ? null : "Player could not be identified"
+  )
 
   useEffect(() => {
     if (!playerUuid) {
-      setError("Player could not be identified")
-      setLoadingContext(false)
       return
     }
 
@@ -222,6 +301,21 @@ export default function NewSubmissionPage() {
         ? current
         : current.filter((submission) => submission.id !== id)
     )
+    setUploadStates((current) => {
+      const next = { ...current }
+      delete next[id]
+      return next
+    })
+  }
+
+  const updateUploadState = (id: string, values: Partial<UploadState>) => {
+    setUploadStates((current) => ({
+      ...current,
+      [id]: {
+        ...(current[id] || { progress: 0, status: "idle" as const }),
+        ...values,
+      },
+    }))
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -235,36 +329,40 @@ export default function NewSubmissionPage() {
     }
 
     setSubmitting(true)
-
-    const formData = new FormData()
-    formData.append("player_uuid", playerUuid)
-    formData.append(
-      "submissions",
-      JSON.stringify(
-        submissions.map((submission) => ({
-          trial_name: submission.trial_name,
-          time: submission.time,
-          proof_url: submission.proof_url.trim(),
-        }))
+    setUploadStates(
+      Object.fromEntries(
+        submissions.map((submission) => [
+          submission.id,
+          { progress: 0, status: "idle" as const },
+        ])
       )
     )
 
-    submissions.forEach((submission, index) => {
-      if (submission.proof_file) {
-        formData.append(`proof_file_${index}`, submission.proof_file)
-      }
-    })
+    let activeSubmissionId: string | null = null
 
     try {
-      const response = await fetch("/api/submissions", {
-        method: "POST",
-        body: formData,
-      })
-      const json = (await response.json().catch(() => null)) as ListResponse<unknown> | null
+      for (let index = 0; index < submissions.length; index += 1) {
+        const submission = submissions[index]
+        activeSubmissionId = submission.id
 
-      if (!response.ok) {
-        setError(json?.error || "Unable to create submissions")
-        return
+        updateUploadState(submission.id, {
+          progress: 0,
+          status: "uploading",
+          message: `Uploading submission ${index + 1}`,
+        })
+
+        await uploadSubmission(playerUuid, submission, (progress, status) => {
+          updateUploadState(submission.id, {
+            progress,
+            status,
+            message:
+              status === "processing"
+                ? "Processing submission"
+                : status === "done"
+                  ? "Uploaded"
+                  : `Uploading ${progress}%`,
+          })
+        })
       }
 
       setMessage("Submitted")
@@ -272,7 +370,15 @@ export default function NewSubmissionPage() {
       router.refresh()
     } catch (err) {
       console.error(err)
-      setError("Unable to create submissions")
+      const message = err instanceof Error ? err.message : "Unable to create submissions"
+      setError(message)
+
+      if (activeSubmissionId) {
+        updateUploadState(activeSubmissionId, {
+          status: "error",
+          message,
+        })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -321,6 +427,7 @@ export default function NewSubmissionPage() {
         {submissions.map((submission, index) => {
           const personalBest = personalBests[submission.trial_name]
           const worldRecord = worldRecords[submission.trial_name]
+          const uploadState = uploadStates[submission.id]
           const uploadedTime = Number(submission.time)
           const isSlowerThanPb =
             Number.isFinite(uploadedTime) && personalBest && uploadedTime > personalBest
@@ -335,7 +442,7 @@ export default function NewSubmissionPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => removeSubmission(submission.id)}
-                  disabled={submissions.length === 1}
+                  disabled={submitting || submissions.length === 1}
                   aria-label={`Remove submission ${index + 1}`}
                 >
                   <Trash2Icon className="cursor-pointer" />
@@ -354,6 +461,7 @@ export default function NewSubmissionPage() {
                           trial_name: event.target.value,
                         })
                       }
+                      disabled={submitting}
                       required
                     >
                       {trials.map((trial) => (
@@ -375,6 +483,7 @@ export default function NewSubmissionPage() {
                         updateTime(submission.id, event.target.value)
                       }
                       aria-invalid={Boolean(isSlowerThanPb)}
+                      disabled={submitting}
                       required
                     />
                   </div>
@@ -408,6 +517,7 @@ export default function NewSubmissionPage() {
                           proof_url: event.target.value,
                         })
                       }
+                      disabled={submitting}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -421,9 +531,23 @@ export default function NewSubmissionPage() {
                           proof_file: event.target.files?.[0] ?? null,
                         })
                       }
+                      disabled={submitting}
                     />
                   </div>
                 </div>
+
+                {uploadState && uploadState.status !== "idle" && (
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                      <span>{uploadState.message || "Waiting"}</span>
+                      <span>{uploadState.progress}%</span>
+                    </div>
+                    <Progress
+                      value={uploadState.progress}
+                      aria-label={`Submission ${index + 1} upload progress`}
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
           )
@@ -434,6 +558,7 @@ export default function NewSubmissionPage() {
         type="button"
         variant="outline"
         onClick={addSubmission}
+        disabled={submitting}
         className="h-10 w-full"
       >
         <PlusIcon />
