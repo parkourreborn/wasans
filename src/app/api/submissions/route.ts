@@ -165,6 +165,12 @@ export async function POST(request: Request) {
         },
       })
 
+      const uploadedObject = await env.SUBMISSION_VIDEOS.head(objectKey)
+
+      if (!uploadedObject) {
+        return jsonError(`Unable to verify uploaded video for submission ${index + 1}`, 500)
+      }
+
       try {
         await env.wasans.prepare(
           `INSERT INTO submissions (
@@ -180,7 +186,7 @@ export async function POST(request: Request) {
         throw err
       }
 
-      created.push({ uuid, trial_name: trialName, proof_url: proofUrl })
+      created.push({ uuid, trial_name: trialName, proof_url: proofUrl, object_key: objectKey })
       continue
     }
 

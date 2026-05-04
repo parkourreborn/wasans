@@ -6,6 +6,14 @@ import Badges from "@/components/custom/badges"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { PlusCircleIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
@@ -39,6 +47,7 @@ type AuthResponse = {
     permission: number
   }
   error?: string
+  needs_player_name?: boolean
 }
 
 function formatTime(rawTime: number | string) {
@@ -72,6 +81,9 @@ export default function SubmissionsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [discordUserId, setDiscordUserId] = useState("")
+  const [newPlayerName, setNewPlayerName] = useState("")
+  const [showNewPlayerDialog, setShowNewPlayerDialog] = useState(false)
+  const [authenticating, setAuthenticating] = useState(false)
   const [authLabel, setAuthLabel] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -135,16 +147,20 @@ export default function SubmissionsPage() {
     )
   }
 
-  if (submissions.length === 0) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-muted-foreground">No submissions yet</p>
-      </div>
-    )
+  const completeLogin = (json: AuthResponse) => {
+    if (!json.user) {
+      return
+    }
+
+    window.localStorage.setItem("player_uuid", json.user.uuid)
+    setAuthLabel(`${json.user.player_name}${json.user.permission >= 1 ? " (admin)" : ""}`)
+    setShowNewPlayerDialog(false)
+    setNewPlayerName("")
   }
 
-  const loginWithDiscordId = async () => {
+  const loginWithDiscordId = async (playerName?: string) => {
     setError(null)
+    setAuthenticating(true)
 
     try {
       const response = await fetch("/api/auth/discord/manual", {
@@ -152,21 +168,34 @@ export default function SubmissionsPage() {
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify({ discord_user_id: discordUserId }),
+        body: JSON.stringify({
+          discord_user_id: discordUserId,
+          ...(playerName ? { player_name: playerName } : {}),
+        }),
       })
       const json = (await response.json().catch(() => null)) as AuthResponse | null
+
+      if (json?.needs_player_name) {
+        setShowNewPlayerDialog(true)
+        return
+      }
 
       if (!response.ok || !json?.user) {
         setError(json?.error || "Unable to authenticate")
         return
       }
 
-      window.localStorage.setItem("player_uuid", json.user.uuid)
-      setAuthLabel(`${json.user.player_name}${json.user.permission >= 1 ? " (admin)" : ""}`)
+      completeLogin(json)
     } catch (err) {
       console.error(err)
       setError("Unable to authenticate")
+    } finally {
+      setAuthenticating(false)
     }
+  }
+
+  const createPlayerAndLogin = () => {
+    loginWithDiscordId(newPlayerName)
   }
 
   return (
@@ -199,7 +228,14 @@ export default function SubmissionsPage() {
             inputMode="numeric"
             className="h-10"
           />
-          <Button type="button" variant="outline" onClick={loginWithDiscordId} className="h-10">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => loginWithDiscordId()}
+            disabled={authenticating}
+            className="h-10"
+          >
+            {authenticating ? <Spinner className="size-4" /> : null}
             Login
           </Button>
         </div>
@@ -210,11 +246,51 @@ export default function SubmissionsPage() {
 
       {authLabel && <p className="text-sm text-muted-foreground">Logged in as {authLabel}</p>}
 
+      <Dialog open={showNewPlayerDialog} onOpenChange={setShowNewPlayerDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create player</DialogTitle>
+            <DialogDescription>
+              Choose the username to use for this Discord ID.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Input
+              value={newPlayerName}
+              onChange={(event) => setNewPlayerName(event.target.value)}
+              placeholder="Username"
+              minLength={2}
+              maxLength={32}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowNewPlayerDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={createPlayerAndLogin}
+              disabled={authenticating || newPlayerName.trim().length < 2}
+            >
+              {authenticating ? <Spinner className="size-4" /> : null}
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {filteredSubmissions.length === 0 ? (
           <div className="flex h-full w-full items-center justify-center">
-            <p className="text-muted-foreground">No matching submissions</p>
+            <p className="text-muted-foreground">
+              {submissions.length === 0 ? "No submissions yet" : "No matching submissions"}
+            </p>
           </div>
         ) : (
           <div className="submissions-grid">

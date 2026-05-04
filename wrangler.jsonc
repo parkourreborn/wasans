@@ -23,7 +23,8 @@
 		},
 		{
 			"binding": "SUBMISSION_VIDEOS",
-			"bucket_name": "wasans"
+			"bucket_name": "wasans",
+			"remote": true
 		}
 	],
 	"images": {
