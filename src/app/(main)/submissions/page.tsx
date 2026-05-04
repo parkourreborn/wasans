@@ -1,10 +1,15 @@
 "use client"
 
+import { trials } from "@/lib/trials"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import Badges from "@/components/custom/badges"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { PlusCircleIcon } from "lucide-react"
+import { Dialog } from "@/components/ui/dialog"
+import { Spinner } from "@/components/ui/spinner"
 
 type Submission = {
   uuid: string
@@ -88,7 +93,7 @@ export default function SubmissionsPage() {
   if (loading) {
     return (
       <div className="w-full h-full flex items-center justify-center">
-        <p className="text-muted-foreground">Loading submissions...</p>
+        <Spinner className="size-8 text-muted-foreground" />
       </div>
     )
   }
@@ -111,14 +116,20 @@ export default function SubmissionsPage() {
 
   return (
     <div className="flex h-full w-full flex-col gap-4">
-      <Input
-        type="search"
-        value={searchQuery}
-        onChange={(event) => setSearchQuery(event.target.value)}
-        placeholder="Search by trial name"
-        aria-label="Search submissions by trial name"
-        className="h-10"
-      />
+      <div className="w-full h-10 flex flex-row items-center justify-between gap-1">
+        <Input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by trial name"
+          aria-label="Search submissions by trial name"
+          className="flex-1 h-10"
+        />
+        <Link href="/submissions/new">
+          <Button variant="outline" className="w-10 h-10 cursor-pointer "><PlusCircleIcon /></Button>
+        </Link>
+      </div>
+
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {filteredSubmissions.length === 0 ? (
