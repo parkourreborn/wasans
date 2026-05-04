@@ -3,9 +3,27 @@
 import { useEffect, useState } from "react"
 import Badges from "@/components/custom/badges"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
-import { useParams } from "next/navigation"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  CheckIcon,
+  ClockIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react"
+import { useParams, useRouter } from "next/navigation"
 
 type SubmissionValue = {
   uuid: string
@@ -19,6 +37,37 @@ type SubmissionValue = {
 
 type SubmissionResponse = {
   results: SubmissionValue[]
+}
+
+type WorldRecordResponse = {
+  results: {
+    submission_uuid: string
+  }[]
+}
+
+type AuthUser = {
+  uuid: string
+  permission: number
+}
+
+type AuthResponse = {
+  user: AuthUser | null
+}
+
+function getPlayerUuid() {
+  if (typeof window === "undefined") {
+    return ""
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  const fromUrl = params.get("player") || params.get("player_uuid") || params.get("uuid")
+
+  if (fromUrl) {
+    window.localStorage.setItem("player_uuid", fromUrl)
+    return fromUrl
+  }
+
+  return window.localStorage.getItem("player_uuid") || ""
 }
 
 function formatTime(rawTime: string) {
@@ -47,15 +96,23 @@ function formatDate(timestamp: string) {
 
 export default function Home() {
   const params = useParams<{ uuid: string }>()
+  const router = useRouter()
   const uuid = params.uuid
+  const [playerUuid] = useState(getPlayerUuid)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [submission, setSubmission] = useState<SubmissionValue | null>(null)
+  const [isWorldRecord, setIsWorldRecord] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchSubmission = async () => {
       try {
-        const response = await fetch(`https://wasans.tully.sh/api/submissions/${uuid}`)
+        const [response, wrResponse] = await Promise.all([
+          fetch(`/api/submissions/${uuid}`),
+          fetch(`/api/wrs`),
+        ])
         const json: unknown = await response.json().catch(() => null)
 
         if (!response.ok) {
@@ -65,6 +122,11 @@ export default function Home() {
 
         const responseData = json as SubmissionResponse
         setSubmission(responseData.results?.[0] ?? null)
+
+        if (wrResponse.ok) {
+          const wrJson = (await wrResponse.json()) as WorldRecordResponse
+          setIsWorldRecord((wrJson.results || []).some((wr) => wr.submission_uuid === uuid))
+        }
       } catch (err) {
         setError("Unable to load submission data.")
         console.error(err)
@@ -75,6 +137,92 @@ export default function Home() {
 
     fetchSubmission()
   }, [uuid])
+
+  useEffect(() => {
+    if (!playerUuid) {
+      return
+    }
+
+    const fetchUser = async () => {
+      try {
+        const response = await fetch("/api/auth/me", {
+          headers: {
+            "x-wasans-player-uuid": playerUuid,
+          },
+        })
+        const json = (await response.json()) as AuthResponse
+
+        if (response.ok) {
+          setAuthUser(json.user)
+        }
+      } catch (err) {
+        console.error(err)
+      }
+    }
+
+    fetchUser()
+  }, [playerUuid])
+
+  const authHeaders = playerUuid
+    ? {
+        "x-wasans-player-uuid": playerUuid,
+      }
+    : undefined
+
+  const updateState = async (state: string) => {
+    setSaving(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/submissions/${uuid}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          ...(authHeaders || {}),
+        },
+        body: JSON.stringify({ state }),
+      })
+      const json = (await response.json().catch(() => null)) as SubmissionResponse & { error?: string } | null
+
+      if (!response.ok) {
+        setError(json?.error || "Unable to update submission")
+        return
+      }
+
+      setSubmission(json?.results?.[0] ?? null)
+    } catch (err) {
+      console.error(err)
+      setError("Unable to update submission")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteSubmission = async () => {
+    setSaving(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/submissions/${uuid}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      })
+      const json = (await response.json().catch(() => null)) as { error?: string } | null
+
+      if (!response.ok) {
+        setError(json?.error || "Unable to delete submission")
+        return
+      }
+
+      router.push("/submissions")
+      router.refresh()
+    } catch (err) {
+      console.error(err)
+      setError("Unable to delete submission")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -112,8 +260,13 @@ export default function Home() {
   const rawTimeString = String(rawTimeValue)
   const time = formatTime(rawTimeString)
   const formattedDate = formatDate(date)
-  const badges = [state === "approved" ? "approved" : state === "denied" ? "denied" : "pending"]
+  const badges = [
+    state === "approved" ? "approved" : state === "denied" ? "denied" : "pending",
+    isWorldRecord ? "wr" : "",
+  ]
   const videoSrc = `https://assets.wasans.tully.sh/scores/${uuid}.mp4`
+  const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 1
+  const canModerate = (authUser?.permission ?? 0) >= 1
 
   return (
     <div className="w-full min-h-screen flex items-center justify-center p-4">
@@ -131,6 +284,67 @@ export default function Home() {
             </div>
 
             <Badges badges={badges} />
+
+            {(canModerate || canDelete) && (
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {canModerate && (
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      type="button"
+                      variant={state === "pending" ? "default" : "outline"}
+                      disabled={saving}
+                      onClick={() => updateState("pending")}
+                    >
+                      <ClockIcon />
+                      Pending
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={state === "approved" ? "default" : "outline"}
+                      disabled={saving}
+                      onClick={() => updateState("approved")}
+                    >
+                      <CheckIcon />
+                      Accepted
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={state === "denied" ? "destructive" : "outline"}
+                      disabled={saving}
+                      onClick={() => updateState("denied")}
+                    >
+                      <XIcon />
+                      Denied
+                    </Button>
+                  </div>
+                )}
+
+                {canDelete && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" disabled={saving}>
+                        <Trash2Icon />
+                        Delete
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete submission?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This removes the submission and its stored score video. This cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={deleteSubmission}>
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+              </div>
+            )}
           </div>
         </CardHeader>
 

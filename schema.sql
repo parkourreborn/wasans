@@ -1,6 +1,8 @@
 -- Table cleanup
 DROP TABLE IF EXISTS wrs;
 DROP TABLE IF EXISTS submissions;
+DROP TABLE IF EXISTS oauth_accounts;
+DROP TABLE IF EXISTS auth_sessions;
 DROP TABLE IF EXISTS players;
 DROP TABLE IF EXISTS trials;
 
@@ -9,7 +11,29 @@ CREATE TABLE players (
   uuid TEXT PRIMARY KEY,
   player_id TEXT NOT NULL,
   player_name TEXT NOT NULL,
-  date_joined TEXT NOT NULL
+  date_joined TEXT NOT NULL,
+  permission INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE auth_sessions (
+  token TEXT PRIMARY KEY,
+  player_uuid TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid)
+);
+
+CREATE TABLE oauth_accounts (
+  provider TEXT NOT NULL,
+  provider_account_id TEXT NOT NULL,
+  player_uuid TEXT NOT NULL,
+  access_token TEXT,
+  refresh_token TEXT,
+  expires_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (provider, provider_account_id),
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid)
 );
 
 -- Trials (name is now the primary key)

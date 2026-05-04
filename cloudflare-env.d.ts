@@ -4,6 +4,7 @@
 declare namespace Cloudflare {
 	interface Env {
 		wasans: D1Database;
+        SUBMISSION_VIDEOS: R2Bucket;
 		NEXT_INC_CACHE_R2_BUCKET: R2Bucket;
 		IMAGES: ImagesBinding;
 		ASSETS: Fetcher;

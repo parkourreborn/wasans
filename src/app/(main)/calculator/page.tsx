@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { trials as trialNames } from "@/lib/trials";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,38 +19,37 @@ import {
 
 type Trial = {
   district: string;
-  wr: number;
   your_time: number;
 };
 
 const trials: Record<string, Trial> = {
-  CRYSTAL: { district: "DOWNTOWN", wr: 6.351, your_time: 7.218 },
-  GENESIS: { district: "DOWNTOWN", wr: 7.310, your_time: 8.318 },
-  GLASS: { district: "DOWNTOWN", wr: 6.948, your_time: 7.173 },
-  RISER: { district: "DOWNTOWN", wr: 6.193, your_time: 7.470 },
-  SOLAR: { district: "DOWNTOWN", wr: 8.187, your_time: 12.076 },
-  VESTIBULE: { district: "DOWNTOWN", wr: 5.832, your_time: 6.759 },
+  CRYSTAL: { district: "DOWNTOWN", your_time: 7.218 },
+  GENESIS: { district: "DOWNTOWN", your_time: 8.318 },
+  GLASS: { district: "DOWNTOWN", your_time: 7.173 },
+  RISER: { district: "DOWNTOWN", your_time: 7.470 },
+  SOLAR: { district: "DOWNTOWN", your_time: 12.076 },
+  VESTIBULE: { district: "DOWNTOWN", your_time: 6.759 },
 
-  CELSIUS: { district: "DIRWIK", wr: 6.320, your_time: 8.130 },
-  CIRCULATION: { district: "DIRWIK", wr: 7.339, your_time: 7.754 },
-  FLOW: { district: "DIRWIK", wr: 9.106, your_time: 9.552 },
-  MARTYR: { district: "DIRWIK", wr: 7.233, your_time: 8.881 },
-  "NEON BOLD": { district: "DIRWIK", wr: 10.508, your_time: 14.734 },
-  SAWDUST: { district: "DIRWIK", wr: 8.481, your_time: 13.434 },
+  CELSIUS: { district: "DIRWIK", your_time: 8.130 },
+  CIRCULATION: { district: "DIRWIK", your_time: 7.754 },
+  FLOW: { district: "DIRWIK", your_time: 9.552 },
+  MARTYR: { district: "DIRWIK", your_time: 8.881 },
+  "NEON BOLD": { district: "DIRWIK", your_time: 14.734 },
+  SAWDUST: { district: "DIRWIK", your_time: 13.434 },
 
-  ASCENSION: { district: "FRAGMENT", wr: 7.649, your_time: 9.251 },
-  FAITH: { district: "FRAGMENT", wr: 8.829, your_time: 12.167 },
-  GALE: { district: "FRAGMENT", wr: 5.460, your_time: 5.685 },
-  GRIP: { district: "FRAGMENT", wr: 8.157, your_time: 8.712 },
-  THREAD: { district: "FRAGMENT", wr: 7.482, your_time: 8.470 },
-  UMBREL: { district: "FRAGMENT", wr: 10.619, your_time: 26.112 },
+  ASCENSION: { district: "FRAGMENT", your_time: 9.251 },
+  FAITH: { district: "FRAGMENT", your_time: 12.167 },
+  GALE: { district: "FRAGMENT", your_time: 5.685 },
+  GRIP: { district: "FRAGMENT", your_time: 8.712 },
+  THREAD: { district: "FRAGMENT", your_time: 8.470 },
+  UMBREL: { district: "FRAGMENT", your_time: 26.112 },
 
-  DEPOT: { district: "STACK", wr: 9.071, your_time: 11.398 },
-  FLAME: { district: "STACK", wr: 7.431, your_time: 8.871 },
-  IRONSING: { district: "STACK", wr: 8.885, your_time: 10.510 },
-  MONOXIDE: { district: "STACK", wr: 7.215, your_time: 7.691 },
-  "RUST BELT": { district: "STACK", wr: 10.966, your_time: 13.467 },
-  WISP: { district: "STACK", wr: 6.761, your_time: 10.759 },
+  DEPOT: { district: "STACK", your_time: 11.398 },
+  FLAME: { district: "STACK", your_time: 8.871 },
+  IRONSING: { district: "STACK", your_time: 10.510 },
+  MONOXIDE: { district: "STACK", your_time: 7.691 },
+  "RUST BELT": { district: "STACK", your_time: 13.467 },
+  WISP: { district: "STACK", your_time: 10.759 },
 };
 
 const districtStyles: Record<string, string> = {
@@ -64,29 +64,82 @@ const scoreFor = (wr: number, your_time: number) => {
   return Number(Math.pow(wr / your_time, 3).toFixed(3));
 };
 
+type WorldRecordValue = {
+  trial_name: string;
+  time: number | string;
+};
+
+type WorldRecordsResponse = {
+  results?: WorldRecordValue[];
+  error?: string;
+};
+
+const trialKey = (trial: string) => trial.toUpperCase();
+
 export default function Home() {
+  const [worldRecords, setWorldRecords] = React.useState<Record<string, number>>({});
+  const [loadingWorldRecords, setLoadingWorldRecords] = React.useState(true);
+  const [worldRecordError, setWorldRecordError] = React.useState<string | null>(null);
   const [times, setTimes] = React.useState<Record<string, string>>(
     Object.fromEntries(
       Object.entries(trials).map(([trial, data]) => [trial, data.your_time.toFixed(3)])
     ) as Record<string, string>
   );
 
+  React.useEffect(() => {
+    const loadWorldRecords = async () => {
+      try {
+        const response = await fetch("/api/wrs");
+        const json = (await response.json()) as WorldRecordsResponse;
+
+        if (!response.ok) {
+          throw new Error(json.error || "Unable to load world records");
+        }
+
+        setWorldRecords(
+          Object.fromEntries(
+            (json.results || []).map((record) => [
+              trialKey(record.trial_name),
+              Number(record.time),
+            ])
+          )
+        );
+      } catch (err) {
+        console.error(err);
+        setWorldRecordError(err instanceof Error ? err.message : "Unable to load world records");
+      } finally {
+        setLoadingWorldRecords(false);
+      }
+    };
+
+    loadWorldRecords();
+  }, []);
+
   const rows = React.useMemo(
     () =>
-      Object.entries(trials).map(([trial, data]) => {
+      trialNames.map((trialName) => {
+        const trial = trialKey(trialName);
+        const data = trials[trial];
+        const wr = worldRecords[trial];
         const your_time_value = times[trial] ?? "";
         const your_time = Number(your_time_value);
-        const isValidTime = your_time_value.trim() !== "" && !Number.isNaN(your_time) && your_time >= data.wr;
+        const isValidTime =
+          typeof wr === "number" &&
+          Number.isFinite(wr) &&
+          wr > 0 &&
+          your_time_value.trim() !== "" &&
+          !Number.isNaN(your_time) &&
+          your_time >= wr;
 
         return {
           trial,
           district: data.district,
-          wr: data.wr,
+          wr,
           your_time_value,
-          score: isValidTime ? scoreFor(data.wr, your_time) : 0,
+          score: isValidTime ? scoreFor(wr, your_time) : 0,
         };
       }),
-    [times]
+    [times, worldRecords]
   );
 
   const averageScore = React.useMemo(() => {
@@ -115,7 +168,11 @@ export default function Home() {
             <div>
               <h2 className="text-2xl font-bold">Score Calculator</h2>
               <p className="text-sm text-muted-foreground">
-                Score is calculated as <span className="font-semibold">(WR / your time)&sup3;</span>, then averaged.
+                {worldRecordError
+                  ? worldRecordError
+                  : loadingWorldRecords
+                    ? "Loading world records."
+                    : <>Score is calculated as <span className="font-semibold">(WR / your time)&sup3;</span>, then averaged.</>}
               </p>
             </div>
             <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-right">
@@ -160,7 +217,7 @@ export default function Home() {
                       className="underline underline-offset-4 transition hover:text-sky-700"
                       target="_blank"
                     >
-                      {row.wr.toFixed(3)}
+                      {row.wr ? row.wr.toFixed(3) : "0.000"}
                     </Link>
                   </TableCell>
                   <TableCell className="px-3 py-2 text-left text-sm font-medium">

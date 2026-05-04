@@ -1,8 +1,8 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
-import { refreshWorldRecords } from "@/lib/server/wrs"
 
-export async function GET() {
+export async function GET(_: Request, { params }: { params: Promise<{ uuid: string }> }) {
   const { env } = await getCloudflareContext({ async: true })
+  const { uuid } = await params;
 
   if (!env?.wasans) {
     return new Response(JSON.stringify({ error: "DB binding not available" }), {
@@ -11,11 +11,10 @@ export async function GET() {
     })
   }
 
-  await refreshWorldRecords(env.wasans)
-
-  const { results } = await env.wasans.prepare(
-    `SELECT * FROM wrs ORDER BY trial_name`
-  ).all()
+  const { results } = await env.wasans.prepare(`SELECT * FROM submissions WHERE player_uuid = ?`)
+    .bind(uuid)
+    .run()
 
   return Response.json({ results })
+
 }

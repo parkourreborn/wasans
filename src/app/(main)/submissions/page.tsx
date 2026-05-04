@@ -1,6 +1,5 @@
 "use client"
 
-import { trials } from "@/lib/trials"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import Badges from "@/components/custom/badges"
@@ -8,8 +7,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { PlusCircleIcon } from "lucide-react"
-import { Dialog } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 
 type Submission = {
   uuid: string
@@ -21,8 +20,25 @@ type Submission = {
   state: string
 }
 
+type WorldRecord = {
+  submission_uuid: string
+}
+
 type SubmissionsResponse = {
   results: Submission[]
+}
+
+type WorldRecordsResponse = {
+  results: WorldRecord[]
+}
+
+type AuthResponse = {
+  user?: {
+    uuid: string
+    player_name: string
+    permission: number
+  }
+  error?: string
 }
 
 function formatTime(rawTime: number | string) {
@@ -52,33 +68,46 @@ function formatDate(timestamp: string) {
 
 export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [wrSubmissionIds, setWrSubmissionIds] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [discordUserId, setDiscordUserId] = useState("")
+  const [authLabel, setAuthLabel] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const filteredSubmissions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
-    if (!normalizedQuery) {
-      return submissions
-    }
+    return submissions.filter((submission) => {
+      const matchesStatus = statusFilter === "all" || submission.state === statusFilter
+      const matchesSearch =
+        !normalizedQuery || submission.trial_name.toLowerCase().includes(normalizedQuery)
 
-    return submissions.filter((submission) =>
-      submission.trial_name.toLowerCase().includes(normalizedQuery)
-    )
-  }, [searchQuery, submissions])
+      return matchesStatus && matchesSearch
+    })
+  }, [searchQuery, statusFilter, submissions])
 
   useEffect(() => {
     const fetchSubmissions = async () => {
       try {
-        const response = await fetch(`https://wasans.tully.sh/api/submissions`)
-        if (!response.ok) {
+        const [submissionsResponse, wrsResponse] = await Promise.all([
+          fetch(`/api/submissions`),
+          fetch(`/api/wrs`),
+        ])
+
+        if (!submissionsResponse.ok) {
           setError("Failed to load submissions")
           return
         }
         
-        const json = (await response.json()) as SubmissionsResponse
-        setSubmissions(json.results || [])
+        const submissionsJson = (await submissionsResponse.json()) as SubmissionsResponse
+        setSubmissions(submissionsJson.results || [])
+
+        if (wrsResponse.ok) {
+          const wrsJson = (await wrsResponse.json()) as WorldRecordsResponse
+          setWrSubmissionIds(new Set((wrsJson.results || []).map((wr) => wr.submission_uuid)))
+        }
       } catch (err) {
         setError("Error loading submissions")
         console.error(err)
@@ -114,21 +143,72 @@ export default function SubmissionsPage() {
     )
   }
 
+  const loginWithDiscordId = async () => {
+    setError(null)
+
+    try {
+      const response = await fetch("/api/auth/discord/manual", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ discord_user_id: discordUserId }),
+      })
+      const json = (await response.json().catch(() => null)) as AuthResponse | null
+
+      if (!response.ok || !json?.user) {
+        setError(json?.error || "Unable to authenticate")
+        return
+      }
+
+      window.localStorage.setItem("player_uuid", json.user.uuid)
+      setAuthLabel(`${json.user.player_name}${json.user.permission >= 1 ? " (admin)" : ""}`)
+    } catch (err) {
+      console.error(err)
+      setError("Unable to authenticate")
+    }
+  }
+
   return (
     <div className="flex h-full w-full flex-col gap-4">
-      <div className="w-full h-10 flex flex-row items-center justify-between gap-1">
+      <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <Input
           type="search"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="Search by trial name"
           aria-label="Search submissions by trial name"
-          className="flex-1 h-10"
+          className="h-10 flex-1"
         />
+        <NativeSelect
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          className="w-full lg:w-40"
+          aria-label="Filter submissions by status"
+        >
+          <NativeSelectOption value="all">All</NativeSelectOption>
+          <NativeSelectOption value="pending">Pending</NativeSelectOption>
+          <NativeSelectOption value="approved">Approved</NativeSelectOption>
+          <NativeSelectOption value="denied">Denied</NativeSelectOption>
+        </NativeSelect>
+        <div className="flex gap-1">
+          <Input
+            value={discordUserId}
+            onChange={(event) => setDiscordUserId(event.target.value)}
+            placeholder="Discord user ID"
+            inputMode="numeric"
+            className="h-10"
+          />
+          <Button type="button" variant="outline" onClick={loginWithDiscordId} className="h-10">
+            Login
+          </Button>
+        </div>
         <Link href="/submissions/new">
-          <Button variant="outline" className="w-10 h-10 cursor-pointer "><PlusCircleIcon /></Button>
+          <Button variant="outline" className="h-10 w-10 cursor-pointer"><PlusCircleIcon /></Button>
         </Link>
       </div>
+
+      {authLabel && <p className="text-sm text-muted-foreground">Logged in as {authLabel}</p>}
 
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -177,6 +257,7 @@ export default function SubmissionsPage() {
                             : submission.state === "denied"
                               ? "denied"
                               : "pending",
+                          wrSubmissionIds.has(submission.uuid) ? "wr" : "",
                         ]}
                       />
                     </div>

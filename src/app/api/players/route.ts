@@ -10,6 +10,9 @@ export async function GET() {
     })
   }
 
+  const { results } = await env.wasans.prepare(
+    `SELECT * FROM players`
+  ).all()
 
-  return Response.json({ })
+  return Response.json({ results })
 }
