@@ -20,10 +20,13 @@ import {
 } from "@/components/ui/alert-dialog"
 import {
   CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ClockIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
+import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 
 type SubmissionValue = {
@@ -56,6 +59,8 @@ type AuthResponse = {
   user: AuthUser | null
 }
 
+const submissionUuidListKey = "submission_uuids"
+
 function getPlayerUuid() {
   if (typeof window === "undefined") {
     return ""
@@ -70,6 +75,30 @@ function getPlayerUuid() {
   }
 
   return window.localStorage.getItem("player_uuid") || ""
+}
+
+function getSubmissionUuids() {
+  if (typeof window === "undefined") {
+    return []
+  }
+
+  const rawValue = window.localStorage.getItem(submissionUuidListKey)
+
+  if (!rawValue) {
+    return []
+  }
+
+  try {
+    const parsedValue = JSON.parse(rawValue)
+
+    if (!Array.isArray(parsedValue)) {
+      return []
+    }
+
+    return parsedValue.filter((item): item is string => typeof item === "string")
+  } catch {
+    return []
+  }
 }
 
 function formatTime(rawTime: string) {
@@ -96,11 +125,39 @@ function formatDate(timestamp: string) {
   return `${month}-${day}-${year}`
 }
 
+function SubmissionNavButton({
+  direction,
+  submissionUuid,
+}: {
+  direction: "previous" | "next"
+  submissionUuid: string | null
+}) {
+  const Icon = direction === "previous" ? ChevronLeftIcon : ChevronRightIcon
+  const label = direction === "previous" ? "Previous submission" : "Next submission"
+
+  if (!submissionUuid) {
+    return (
+      <Button type="button" variant="outline" size="icon" disabled aria-label={label}>
+        <Icon />
+      </Button>
+    )
+  }
+
+  return (
+    <Button asChild variant="outline" size="icon" aria-label={label}>
+      <Link href={`/submissions/${submissionUuid}`}>
+        <Icon />
+      </Link>
+    </Button>
+  )
+}
+
 export default function Home() {
   const params = useParams<{ uuid: string }>()
   const router = useRouter()
   const uuid = params.uuid
   const [playerUuid] = useState(getPlayerUuid)
+  const [submissionUuids] = useState<string[]>(getSubmissionUuids)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [submission, setSubmission] = useState<SubmissionValue | null>(null)
   const [isWorldRecord, setIsWorldRecord] = useState(false)
@@ -110,6 +167,9 @@ export default function Home() {
 
   useEffect(() => {
     const fetchSubmission = async () => {
+      setLoading(true)
+      setError(null)
+
       try {
         const [response, wrResponse] = await Promise.all([
           fetch(`/api/submissions/${uuid}`),
@@ -269,30 +329,43 @@ export default function Home() {
   const videoSrc = `https://assets.wasans.tully.sh/scores/${uuid}.mp4`
   const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 1
   const canModerate = (authUser?.permission ?? 0) >= 1
+  const currentSubmissionIndex = submissionUuids.findIndex((item) => item === uuid)
+  const previousSubmissionUuid =
+    currentSubmissionIndex > 0 ? submissionUuids[currentSubmissionIndex - 1] : null
+  const nextSubmissionUuid =
+    currentSubmissionIndex >= 0 && currentSubmissionIndex < submissionUuids.length - 1
+      ? submissionUuids[currentSubmissionIndex + 1]
+      : null
 
   return (
     <div className="w-full min-h-screen flex items-center justify-center p-4">
       <Card className="w-full">
         <CardHeader>
-          <div className="w-full flex flex-col gap-2">
-            <div className="w-full flex items-center justify-between">
-              <div className="w-full flex items-center justify-start gap-4">
-                <h2 className="lg:text-3xl font-bold">{trial_name} {time}</h2>
-                <Separator orientation="vertical" />
-                <p className="lg:text-lg text-muted-foreground">
-                  {formatPlayerNameWithScore(player_name, submission.player_score)}
-                </p>
-                <Separator orientation="vertical" />
-                <p className="text-muted-foreground">{formattedDate}</p>
+          <div className="w-full flex flex-col gap-4">
+            <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)_2rem] items-start gap-3">
+              <SubmissionNavButton direction="previous" submissionUuid={previousSubmissionUuid} />
+
+              <div className="flex min-w-0 flex-col items-center gap-2 text-center">
+                <h2 className="text-2xl font-bold lg:text-3xl">{trial_name} {time}</h2>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <p className="lg:text-lg text-muted-foreground">
+                    {formatPlayerNameWithScore(player_name, submission.player_score)}
+                  </p>
+                  <Separator orientation="vertical" className="hidden h-5 sm:block" />
+                  <p className="text-muted-foreground">{formattedDate}</p>
+                </div>
+                <div className="flex justify-center">
+                  <Badges badges={badges} />
+                </div>
               </div>
+
+              <SubmissionNavButton direction="next" submissionUuid={nextSubmissionUuid} />
             </div>
 
-            <Badges badges={badges} />
-
             {(canModerate || canDelete) && (
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-col justify-center gap-2 sm:flex-row">
                 {canModerate && (
-                  <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="flex flex-col justify-center gap-2 sm:flex-row">
                     <Button
                       type="button"
                       variant={state === "pending" ? "default" : "outline"}

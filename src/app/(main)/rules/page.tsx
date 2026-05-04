@@ -1,51 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
-const serverRules = [
-  {
-    title: "Keep content appropriate",
-    items: [
-      "Do not post NSFW, gore, self-harm content, or other material staff considers unsafe for the server.",
-      "This applies to messages, media, usernames, avatars, profiles, and anything else visible through the community.",
-    ],
-  },
-  {
-    title: "No hate speech or slurs",
-    items: [
-      "Do not target people or groups with hateful language.",
-      "The N-word is not allowed at all.",
-    ],
-  },
-  {
-    title: "No unwanted promotion",
-    items: [
-      "Do not advertise without explicit staff approval.",
-      "Unwanted DM advertising can result in an immediate ban, including cases where your account was compromised.",
-    ],
-  },
-  {
-    title: "Respect other members",
-    items: [
-      "Do not harass, threaten, or repeatedly antagonize people.",
-      "If staff asks you to stop something that is harming the atmosphere, stop.",
-    ],
-  },
-  {
-    title: "No doxxing",
-    items: ["Posting someone else's personal information without consent is an immediate ban."],
-  },
-  {
-    title: "Use English in public channels",
-    items: ["A few words in another language are fine, but public conversations should stay readable to staff."],
-  },
-  {
-    title: "Staff decisions are final",
-    items: [
-      "These rules cannot cover every situation. Staff may act on behavior that damages the server even if it is not listed word for word.",
-      "If you believe a moderator abused power, contact a higher-role staff member.",
-    ],
-  },
-]
-
 const runRules = [
   "Glitches are not allowed.",
   "Autoparkour and autotransition are not allowed and automatically invalidate a run.",
@@ -123,21 +77,6 @@ export default function RulesPage() {
             <li key={rule}>{rule}</li>
           ))}
         </ul>
-      </RuleSection>
-
-      <RuleSection title="Server Conduct">
-        <div className="grid gap-4 md:grid-cols-2">
-          {serverRules.map((section) => (
-            <div key={section.title} className="grid gap-2">
-              <h2 className="font-semibold">{section.title}</h2>
-              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                {section.items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
       </RuleSection>
     </div>
   )

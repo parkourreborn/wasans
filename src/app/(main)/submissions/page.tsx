@@ -53,6 +53,8 @@ type AuthResponse = {
   needs_player_name?: boolean
 }
 
+const submissionUuidListKey = "submission_uuids"
+
 function formatTime(rawTime: number | string) {
   const timeStr = String(rawTime)
   const match = timeStr.match(/^0*([0-9]+)\.(\d{1,3})$/)
@@ -133,6 +135,17 @@ export default function SubmissionsPage() {
 
     fetchSubmissions()
   }, [])
+
+  useEffect(() => {
+    if (loading) {
+      return
+    }
+
+    window.localStorage.setItem(
+      submissionUuidListKey,
+      JSON.stringify(filteredSubmissions.map((submission) => submission.uuid))
+    )
+  }, [filteredSubmissions, loading])
 
   if (loading) {
     return (
