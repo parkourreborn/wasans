@@ -121,6 +121,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
   await env.wasans.prepare(`DELETE FROM submissions WHERE uuid = ?`)
     .bind(uuid)
     .run()
+
+  if (env.SUBMISSION_VIDEOS) {
+    await env.SUBMISSION_VIDEOS.delete(`scores/${uuid}.mp4`)
+  }
+
   await refreshWorldRecords(env.wasans, submission.trial_name)
 
   return Response.json({ ok: true })

@@ -7,8 +7,27 @@ type PlayerAuthRow = {
   permission: number
 }
 
+type ManualAuthBody = {
+  discord_user_id?: unknown
+  player_name?: unknown
+}
+
 function jsonError(message: string, status = 400) {
   return Response.json({ error: message }, { status })
+}
+
+function normalizePlayerName(value: unknown) {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const playerName = value.trim().replace(/\s+/g, " ")
+
+  if (playerName.length < 2 || playerName.length > 32) {
+    return null
+  }
+
+  return playerName
 }
 
 export async function POST(request: Request) {
@@ -18,7 +37,7 @@ export async function POST(request: Request) {
     return jsonError("DB binding not available", 500)
   }
 
-  const body = await request.json().catch(() => null) as { discord_user_id?: unknown } | null
+  const body = await request.json().catch(() => null) as ManualAuthBody | null
   const discordUserId = String(body?.discord_user_id || "").trim()
 
   if (!/^\d{5,32}$/.test(discordUserId)) {
@@ -35,7 +54,7 @@ export async function POST(request: Request) {
     .bind(discordUserId)
     .first<PlayerAuthRow>()
 
-  const player = linkedPlayer ?? await env.wasans.prepare(
+  let player = linkedPlayer ?? await env.wasans.prepare(
     `SELECT uuid, player_id, player_name, permission
      FROM players
      WHERE player_id = ?`
@@ -44,7 +63,42 @@ export async function POST(request: Request) {
     .first<PlayerAuthRow>()
 
   if (!player) {
-    return jsonError("No player is linked to that Discord user ID", 404)
+    const playerName = normalizePlayerName(body?.player_name)
+
+    if (!playerName) {
+      return Response.json(
+        {
+          error: "Username is required for new players",
+          needs_player_name: true,
+        },
+        { status: 404 }
+      )
+    }
+
+    const playerUuid = crypto.randomUUID()
+    const now = String(Math.floor(Date.now() / 1000))
+
+    await env.wasans.prepare(
+      `INSERT INTO players (uuid, player_id, player_name, date_joined, permission)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+      .bind(playerUuid, discordUserId, playerName, now, 0)
+      .run()
+
+    await env.wasans.prepare(
+      `INSERT OR IGNORE INTO oauth_accounts (
+        provider, provider_account_id, player_uuid, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?)`
+    )
+      .bind("discord", discordUserId, playerUuid, now, now)
+      .run()
+
+    player = {
+      uuid: playerUuid,
+      player_id: discordUserId,
+      player_name: playerName,
+      permission: 0,
+    }
   }
 
   const token = crypto.randomUUID()
