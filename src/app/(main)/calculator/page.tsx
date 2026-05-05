@@ -5,7 +5,13 @@ import Link from "next/link";
 import { TrialName, trials as trialNames } from "@/lib/trials";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   RefreshCcw,
 } from "lucide-react";
@@ -74,13 +80,6 @@ type WorldRecordValue = {
 type WorldRecordsResponse = {
   results?: WorldRecordValue[];
   error?: string;
-};
-
-type AuthResponse = {
-  user: {
-    uuid: string;
-    player_name: string;
-  } | null;
 };
 
 type SubmissionValue = {
@@ -295,22 +294,21 @@ export default function Home() {
                       ? userTimesError
                       : loadingUserTimes
                         ? "Loading your approved times."
-                        : <>Score is calculated as <span className="font-semibold">(WR / your time)&sup3;</span>, then averaged.</>}
+                        : "Scores are calculated using a weighted curve: Platinum times are 0.3, times higher are cubed with a cap of 1."}
               </p>
               <div className="mt-3 max-w-xs">
-                <NativeSelect
-                  value={selectedPlayerUuid}
-                  onChange={(event) => setSelectedPlayerUuid(event.target.value)}
-                  className="h-10 w-full"
-                  aria-label="Select a player to view scores"
-                >
-                  <NativeSelectOption value="">Your player or select one</NativeSelectOption>
-                  {players.map((player) => (
-                    <NativeSelectOption key={player.uuid} value={player.uuid}>
-                      {player.player_name} ({player.score.toFixed(3)})
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                <Select value={selectedPlayerUuid} onValueChange={(value) => setSelectedPlayerUuid(value)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Your player or select one" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {players.map((player) => (
+                      <SelectItem key={player.uuid} value={player.uuid}>
+                        {player.player_name} ({player.score.toFixed(3)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-right">

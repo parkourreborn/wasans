@@ -18,8 +18,7 @@ import {
     ArrowRightLeftIcon,
   BookIcon,
   CalculatorIcon,
-  ExternalLinkIcon,
-  HelpCircleIcon,
+  ExternalLinkIcon,  FileTextIcon,  HelpCircleIcon,
   HomeIcon,
   LogInIcon,
   MedalIcon,
@@ -159,6 +158,19 @@ export function AppSidebar() {
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
+
+                    {(user?.permission ?? 0) >= 1 && (
+                      <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                          <Link href="/logs">
+                            <div className="flex items-center gap-2">
+                              <FileTextIcon />
+                              <span>Logs</span>
+                            </div>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )}
 
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild>

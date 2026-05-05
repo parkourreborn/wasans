@@ -3,6 +3,7 @@ import { canModerate, getAuthUser } from "@/lib/server/auth"
 import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
 import { refreshPlayerPb } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
+import { insertAuditLog } from "@/lib/server/audit"
 import {
   queueApprovedHighScoreRuns,
   queueWorldRecordRun,
@@ -37,11 +38,13 @@ type SubmissionRow = {
   uuid: string
   player_uuid: string
   trial_name: string
+  state: string
+  time: number
+  deny_reason: string | null
 }
 
 type SubmissionWithScoreRow = SubmissionRow & {
   player_name: string
-  time: number | string
   player_score: number | string
 }
 
@@ -116,7 +119,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   }
 
   const submission = await env.wasans.prepare(
-    `SELECT uuid, player_uuid, trial_name FROM submissions WHERE uuid = ?`
+    `SELECT uuid, player_uuid, trial_name, state, time, deny_reason
+     FROM submissions
+     WHERE uuid = ?`
   )
     .bind(uuid)
     .first<SubmissionRow>()
@@ -149,8 +154,37 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     .bind(...bindings, uuid)
     .run()
 
+  const auditDetails: Record<string, unknown> = {
+    trial_name: submission.trial_name,
+  }
+  let auditAction: string = "submission_updated"
+
+  if (state && state !== submission.state) {
+    auditDetails.old_state = submission.state
+    auditDetails.new_state = state
+    if (state === "approved") {
+      auditAction = "submission_approved"
+    } else if (state === "denied") {
+      auditAction = "submission_denied"
+      auditDetails.deny_reason = denyReason
+    }
+  }
+
+  if (time !== null && time !== submission.time) {
+    auditDetails.old_time = submission.time
+    auditDetails.new_time = time
+    if (!state || state === submission.state) {
+      auditAction = "submission_updated"
+    }
+  }
+
+  await insertAuditLog(env.wasans, auditAction as any, "submission", uuid, {
+    actor: user,
+    details: auditDetails,
+  })
+
   await refreshPlayerPb(env.wasans, submission.player_uuid, submission.trial_name)
-  await refreshWorldRecords(env.wasans, submission.trial_name)
+  await refreshWorldRecords(env.wasans, submission.trial_name, user)
   await refreshPlayerScore(env.wasans, submission.player_uuid)
   await updateDiscordUsernameOnScoreChange(submission.player_uuid)
 
@@ -229,6 +263,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
     return jsonError("You can only delete your own submissions", 403)
   }
 
+  await insertAuditLog(env.wasans, "submission_deleted", "submission", uuid, {
+    actor: user,
+    details: {
+      trial_name: submission.trial_name,
+    },
+  })
+
   await env.wasans.prepare(`DELETE FROM wrs WHERE submission_uuid = ?`)
     .bind(uuid)
     .run()
@@ -240,7 +281,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
     await env.SUBMISSION_VIDEOS.delete(`scores/${uuid}.mp4`)
   }
 
-  await refreshWorldRecords(env.wasans, submission.trial_name)
+  await refreshWorldRecords(env.wasans, submission.trial_name, user)
   await refreshPlayerScore(env.wasans, submission.player_uuid)
   await refreshAllPlayerScores(env.wasans)
 
