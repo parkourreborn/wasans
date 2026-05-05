@@ -353,7 +353,6 @@ export default function Home() {
                     <Link
                       href={`/submissions/${encodeURIComponent(worldRecords.find(u=>u.trial_name === row.trial)?.submission_uuid || "")}`}
                       className="underline underline-offset-4 transition hover:text-sky-700"
-                      target="_blank"
                     >
                       {row.wr ? row.wr.toFixed(3) : "0.000"}
                     </Link>

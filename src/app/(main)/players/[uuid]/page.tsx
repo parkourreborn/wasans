@@ -42,7 +42,8 @@ type SubmissionValue = {
   uuid: string
   trial_name: string
   time: number | string
-  state: string
+  state: string,
+  date: string
 }
 
 type WorldRecordValue = {
@@ -119,7 +120,7 @@ export default function PlayerProfilePage() {
   }, [uuid])
 
   const personalBestTimes = React.useMemo(() => {
-    const best: Record<string, { time: number; submissionUuid: string }> = {}
+    const best: Record<string, { time: number; submissionUuid: string; date: string }> = {}
     for (const submission of submissions) {
       const time = Number(submission.time)
       if (!submission.trial_name || submission.state !== "approved" || !Number.isFinite(time) || time <= 0) {
@@ -127,7 +128,7 @@ export default function PlayerProfilePage() {
       }
       const trial = submission.trial_name.toUpperCase()
       if (!best[trial] || time < best[trial].time) {
-        best[trial] = { time, submissionUuid: submission.uuid }
+        best[trial] = { time, submissionUuid: submission.uuid, date: submission.date }
       }
     }
 
@@ -137,8 +138,12 @@ export default function PlayerProfilePage() {
         return [
           trial.toUpperCase(),
           bestResult
-            ? { time: bestResult.time.toFixed(3), submissionUuid: bestResult.submissionUuid }
-            : { time: "0.000", submissionUuid: "" },
+            ? {
+                time: bestResult.time.toFixed(3),
+                submissionUuid: bestResult.submissionUuid,
+                date: bestResult.date,
+              }
+            : { time: "0.000", submissionUuid: "", date: "" },
         ]
       })
     )
@@ -159,6 +164,7 @@ export default function PlayerProfilePage() {
           trial: trialName,
           time: timeStr,
           submissionUuid: bestResult.submissionUuid,
+          date: bestResult.date,
           score:
             Number.isFinite(time) && time > 0 && Number.isFinite(wr) && wr > 0
               ? Number(calculateScore(wr, time, trialName).toFixed(3))
@@ -212,42 +218,46 @@ export default function PlayerProfilePage() {
               <h2 className="text-xl font-semibold">Approved Times</h2>
               <p className="text-sm text-muted-foreground">Showing up to the first 50 approved submissions.</p>
             </div>
-            <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`} target="_blank" className="text-sm text-sky-600 underline">
+            <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`} className="text-sm text-sky-600 underline">
               View in calculator
             </Link>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Trial</TableHead>
-                  <TableHead>Best time</TableHead>
-                  <TableHead>Score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.trial}>
-                    <TableCell>{row.trial}</TableCell>
-                    <TableCell>
-                      {row.submissionUuid ? (
-                        <Link
-                          href={`/submissions/${encodeURIComponent(row.submissionUuid)}`}
-                          target="_blank"
-                          className="text-sky-600 underline underline-offset-4"
-                        >
-                          {row.time}
-                        </Link>
-                      ) : (
-                        <span>{row.time}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{row.score.toFixed(3)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="grid gap-4 pt-4">
+            {rows.filter((row) => row.submissionUuid).map((row) => (
+              <Card key={row.trial} className="hover:shadow-lg transition-shadow overflow-hidden">
+                <CardContent className="grid gap-4 p-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">{row.trial}</p>
+                      <h3 className="text-2xl font-semibold">{row.time}</h3>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Score</p>
+                      <p className="text-3xl font-semibold">{row.score.toFixed(3)}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      <p>Date: {formatDate(row.date)}</p>
+                    </div>
+                    <Link
+                      href={`/submissions/${encodeURIComponent(row.submissionUuid)}`}
+                      className="text-sky-600 underline underline-offset-4"
+                    >
+                      View submission
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+
+            {rows.filter((row) => row.submissionUuid).length === 0 && (
+              <div className="rounded-xl border border-border bg-muted p-6 text-center text-sm text-muted-foreground">
+                No personal best submissions available.
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

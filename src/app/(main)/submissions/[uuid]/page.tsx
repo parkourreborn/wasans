@@ -357,7 +357,6 @@ export default function Home() {
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <Link
                     href={`/players/${submission.player_uuid}`}
-                    target="_blank"
                     className="lg:text-lg text-muted-foreground underline underline-offset-4"
                   >
                     {formatPlayerNameWithScore(player_name, submission.player_score)}

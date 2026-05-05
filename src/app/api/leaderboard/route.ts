@@ -12,6 +12,7 @@ type LeaderboardTrialRow = {
   player_uuid: string
   player_name: string
   time: number | null
+  submission_uuid: string | null
   score: number
 }
 
@@ -48,7 +49,8 @@ export async function GET(request: Request) {
     const { results } = await env.wasans.prepare(
       `SELECT players.uuid as player_uuid,
               players.player_name,
-              pbs.time
+              pbs.time,
+              pbs.submission_uuid
        FROM players
        LEFT JOIN pbs ON pbs.player_uuid = players.uuid AND pbs.trial_name = ?
        ORDER BY CASE WHEN pbs.time IS NULL THEN 1 ELSE 0 END, pbs.time ASC, players.player_name ASC`
@@ -60,6 +62,7 @@ export async function GET(request: Request) {
       ...row,
       rank: row.time ? index + 1 : null,
       score: row.time && wr?.time ? Number((Math.pow(wr.time / row.time, 3)).toFixed(3)) : 0,
+      submission_uuid: row.submission_uuid || null,
       is_world_record: row.time === wr?.time,
       wr_submission_uuid: wr?.submission_uuid || null,
     }))

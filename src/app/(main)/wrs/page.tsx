@@ -163,7 +163,6 @@ export default function SubmissionsPage() {
                       <div className="w-full flex flex-col gap-1.5 text-base">
                         <Link
                           href={`/players/${submission.player_uuid}`}
-                          target="_blank"
                           className="text-muted-foreground truncate underline underline-offset-4"
                           onClick={(event) => event.stopPropagation()}
                         >

@@ -33,6 +33,7 @@ type TrialRow = {
   player_uuid: string
   player_name: string
   time: number | null
+  submission_uuid: string | null
   score: number
   is_world_record: boolean
   wr_submission_uuid: string | null
@@ -134,15 +135,30 @@ export default function LeaderboardPage() {
                   <TableRow key={row.player_uuid}>
                     <TableCell>{mode === "trial" ? (row as TrialRow).time ? index + 1 : "—" : index + 1}</TableCell>
                     <TableCell>
-                      <Link href={`/players/${row.player_uuid}`} target="_blank" className="underline underline-offset-4">
+                      <Link href={`/players/${row.player_uuid}`} className="underline underline-offset-4">
                         {row.player_name}
                       </Link>
                     </TableCell>
                     <TableCell>
                       {mode === "trial" ? (
-                        <span className={(row as TrialRow).is_world_record ? "font-semibold text-sky-600" : ""}>
-                          {(row as TrialRow).time ? Number((row as TrialRow).time).toFixed(3) : "—"}
-                        </span>
+                        (row as TrialRow).time ? (
+                          (() => {
+                            const submissionUuid = (row as TrialRow).submission_uuid
+                            const displayTime = Number((row as TrialRow).time).toFixed(3)
+                            return submissionUuid ? (
+                              <Link
+                                href={`/submissions/${encodeURIComponent(submissionUuid)}`}
+                                className="text-sky-600 underline underline-offset-4"
+                              >
+                                {displayTime}
+                              </Link>
+                            ) : (
+                              displayTime
+                            )
+                          })()
+                        ) : (
+                          "—"
+                        )
                       ) : (
                         Number((row as OverallRow).overall_score).toFixed(3)
                       )}

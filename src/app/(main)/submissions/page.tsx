@@ -26,6 +26,8 @@ type Submission = {
 
 type WorldRecord = {
   submission_uuid: string
+  trial_name: string
+  time: number
 }
 
 type SubmissionsResponse = {
@@ -88,10 +90,19 @@ function formatDate(timestamp: string) {
   return `${month}-${day}-${year}`
 }
 
+function scoreForTrial(wr: number | undefined, time: number) {
+  if (!wr || !Number.isFinite(time) || time <= 0) {
+    return 0
+  }
+
+  return Number(Math.min(Math.pow(wr / time, 3), 1).toFixed(3))
+}
+
 export default function SubmissionsPage() {
   const router = useRouter()
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [wrSubmissionIds, setWrSubmissionIds] = useState<Set<string>>(new Set())
+  const [worldRecordTimes, setWorldRecordTimes] = useState<Record<string, number>>({})
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [authLabel, setAuthLabel] = useState<string | null>(null)
@@ -153,6 +164,9 @@ export default function SubmissionsPage() {
         if (wrsResponse.ok) {
           const wrsJson = (await wrsResponse.json()) as WorldRecordsResponse
           setWrSubmissionIds(new Set((wrsJson.results || []).map((wr) => wr.submission_uuid)))
+          setWorldRecordTimes(
+            Object.fromEntries((wrsJson.results || []).map((wr) => [wr.trial_name, Number(wr.time)]))
+          )
         }
 
         if (authResponse.ok) {
@@ -314,9 +328,13 @@ export default function SubmissionsPage() {
                         </div>
 
                         <div className="w-full flex flex-col gap-1.5 text-base">
+                          {submission.state !== "denied" ? (
+                            <p className="text-sm font-semibold">
+                              Score {scoreForTrial(worldRecordTimes[submission.trial_name], submission.time).toFixed(3)}
+                            </p>
+                          ) : null}
                           <Link
                             href={`/players/${submission.player_uuid}`}
-                            target="_blank"
                             className="text-muted-foreground truncate underline underline-offset-4"
                             onClick={(event) => event.stopPropagation()}
                           >
