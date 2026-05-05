@@ -49,6 +49,20 @@ function normalizeState(value: unknown) {
   return null
 }
 
+function normalizeDenyReason(value: unknown) {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const denyReason = value.trim().replace(/\s+/g, " ")
+
+  if (denyReason.length === 0 || denyReason.length > 500) {
+    return null
+  }
+
+  return denyReason
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ uuid: string }> }) {
   const { env } = await getCloudflareContext({ async: true })
   const { uuid } = await params
@@ -63,11 +77,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     return jsonError("Moderator permission is required", 403)
   }
 
-  const body = await request.json().catch(() => null) as { state?: unknown } | null
+  const body = await request.json().catch(() => null) as {
+    state?: unknown
+    deny_reason?: unknown
+  } | null
   const state = normalizeState(body?.state)
+  const denyReason = state === "denied" ? normalizeDenyReason(body?.deny_reason) : null
 
   if (!state) {
     return jsonError("State must be pending, denied, or approved")
+  }
+
+  if (state === "denied" && !denyReason) {
+    return jsonError("Deny reason is required and must be 500 characters or fewer")
   }
 
   const submission = await env.wasans.prepare(
@@ -80,8 +102,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     return jsonError("Submission was not found", 404)
   }
 
-  await env.wasans.prepare(`UPDATE submissions SET state = ? WHERE uuid = ?`)
-    .bind(state, uuid)
+  await env.wasans.prepare(`UPDATE submissions SET state = ?, deny_reason = ? WHERE uuid = ?`)
+    .bind(state, denyReason, uuid)
     .run()
 
   await refreshWorldRecords(env.wasans, submission.trial_name)

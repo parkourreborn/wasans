@@ -80,6 +80,7 @@ CREATE TABLE submissions (
 
   time REAL NOT NULL,
   date TEXT NOT NULL,
+  deny_reason TEXT,
 
   state TEXT NOT NULL DEFAULT 'pending'
     CHECK (state IN ('approved', 'denied', 'pending')),

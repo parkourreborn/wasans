@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
+import { Textarea } from "@/components/ui/textarea"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,16 +39,11 @@ type SubmissionValue = {
   time: number | string
   date: string
   state: string
+  deny_reason?: string | null
 }
 
 type SubmissionResponse = {
   results: SubmissionValue[]
-}
-
-type WorldRecordResponse = {
-  results: {
-    submission_uuid: string
-  }[]
 }
 
 type AuthUser = {
@@ -160,9 +156,10 @@ export default function Home() {
   const [submissionUuids] = useState<string[]>(getSubmissionUuids)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [submission, setSubmission] = useState<SubmissionValue | null>(null)
-  const [isWorldRecord, setIsWorldRecord] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [denyReason, setDenyReason] = useState("")
+  const [denyDialogOpen, setDenyDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -171,10 +168,7 @@ export default function Home() {
       setError(null)
 
       try {
-        const [response, wrResponse] = await Promise.all([
-          fetch(`/api/submissions/${uuid}`),
-          fetch(`/api/wrs`),
-        ])
+        const response = await fetch(`/api/submissions/${uuid}`)
         const json: unknown = await response.json().catch(() => null)
 
         if (!response.ok) {
@@ -184,11 +178,6 @@ export default function Home() {
 
         const responseData = json as SubmissionResponse
         setSubmission(responseData.results?.[0] ?? null)
-
-        if (wrResponse.ok) {
-          const wrJson = (await wrResponse.json()) as WorldRecordResponse
-          setIsWorldRecord((wrJson.results || []).some((wr) => wr.submission_uuid === uuid))
-        }
       } catch (err) {
         setError("Unable to load submission data.")
         console.error(err)
@@ -232,7 +221,7 @@ export default function Home() {
       }
     : undefined
 
-  const updateState = async (state: string) => {
+  const updateState = async (state: string, reason?: string) => {
     setSaving(true)
     setError(null)
 
@@ -243,7 +232,10 @@ export default function Home() {
           "content-type": "application/json",
           ...(authHeaders || {}),
         },
-        body: JSON.stringify({ state }),
+        body: JSON.stringify({
+          state,
+          ...(state === "denied" ? { deny_reason: reason } : {}),
+        }),
       })
       const json = (await response.json().catch(() => null)) as SubmissionResponse & { error?: string } | null
 
@@ -253,12 +245,26 @@ export default function Home() {
       }
 
       setSubmission(json?.results?.[0] ?? null)
+      if (state === "denied") {
+        setDenyDialogOpen(false)
+        setDenyReason("")
+      }
     } catch (err) {
       console.error(err)
       setError("Unable to update submission")
     } finally {
       setSaving(false)
     }
+  }
+
+  const openDenyDialog = () => {
+    setDenyReason(submission?.deny_reason || "")
+    setDenyDialogOpen(true)
+  }
+
+  const submitDenyReason = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    updateState("denied", denyReason)
   }
 
   const deleteSubmission = async () => {
@@ -320,12 +326,12 @@ export default function Home() {
   }
 
   const { player_name, trial_name, date, time: rawTimeValue, state } = submission
+  const storedDenyReason = submission.deny_reason?.trim()
   const rawTimeString = String(rawTimeValue)
   const time = formatTime(rawTimeString)
   const formattedDate = formatDate(date)
   const badges = [
     state === "approved" ? "approved" : state === "denied" ? "denied" : "pending",
-    isWorldRecord ? "wr" : "",
   ]
   const videoSrc = `https://assets.wasans.tully.sh/scores/${uuid}.mp4`
   const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 1
@@ -358,6 +364,11 @@ export default function Home() {
                 <div className="flex justify-center">
                   <Badges badges={badges} />
                 </div>
+                {state === "denied" && storedDenyReason && (
+                  <p className="max-w-2xl text-sm text-destructive">
+                    Denied: {storedDenyReason}
+                  </p>
+                )}
               </div>
 
               <SubmissionNavButton direction="next" submissionUuid={nextSubmissionUuid} />
@@ -389,11 +400,42 @@ export default function Home() {
                       type="button"
                       variant={state === "denied" ? "destructive" : "outline"}
                       disabled={saving}
-                      onClick={() => updateState("denied")}
+                      onClick={openDenyDialog}
                     >
                       <XIcon />
                       Denied
                     </Button>
+                    <AlertDialog open={denyDialogOpen} onOpenChange={setDenyDialogOpen}>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Deny submission?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Add the reason this submission is being denied.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <Textarea
+                          value={denyReason}
+                          onChange={(event) => setDenyReason(event.target.value)}
+                          placeholder="Reason"
+                          maxLength={500}
+                          className="min-h-28"
+                          disabled={saving}
+                        />
+                        <div className="text-right text-xs text-muted-foreground">
+                          {denyReason.trim().length}/500
+                        </div>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            variant="destructive"
+                            disabled={saving || denyReason.trim().length === 0}
+                            onClick={submitDenyReason}
+                          >
+                            Deny
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 )}
 

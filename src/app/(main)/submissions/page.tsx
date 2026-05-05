@@ -195,7 +195,10 @@ export default function SubmissionsPage() {
           <NativeSelectOption value="denied">Denied</NativeSelectOption>
         </NativeSelect>
         <Link href="/submissions/new">
-          <Button variant="outline" className="h-10 w-10 cursor-pointer"><PlusCircleIcon /></Button>
+          <Button className="h-10 w-full cursor-pointer sm:w-auto">
+            <PlusCircleIcon />
+            New submission
+          </Button>
         </Link>
       </div>
 
