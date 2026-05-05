@@ -7,5 +7,5 @@ export function formatPlayerNameWithScore(
   playerName: string,
   score: number | string | null | undefined
 ) {
-  return `${playerName} ${formatPlayerScore(score)}`
+  return `${playerName} (${formatPlayerScore(score)})`
 }
