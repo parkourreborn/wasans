@@ -47,6 +47,7 @@ function getPlayerUuid() {
 
 export function AppSidebar() {
   const [user, setUser] = useState<AuthUser | null>(null)
+  const playerId = user?.player_id || ""
 
   useEffect(() => {
     const playerUuid = getPlayerUuid()
@@ -74,13 +75,13 @@ export function AppSidebar() {
   }, [])
 
   const avatarUrl = useMemo(() => {
-    if (!user?.player_id || !/^\d+$/.test(user.player_id)) {
+    if (!playerId || !/^\d+$/.test(playerId)) {
       return ""
     }
 
-    const lastDigit = Number(user.player_id.slice(-1))
+    const lastDigit = Number(playerId.slice(-1))
     return `https://cdn.discordapp.com/embed/avatars/${lastDigit % 5}.png`
-  }, [user?.player_id])
+  }, [playerId])
 
   const fallback = user?.player_name?.slice(0, 2).toUpperCase() || "WA"
 
@@ -188,7 +189,7 @@ export function AppSidebar() {
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
                 <ExternalLinkIcon className="size-4" />
-                <span>Original Discord</span>
+                <span>Discord</span>
             </Link>
         </SidebarFooter>
     </Sidebar>
