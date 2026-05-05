@@ -58,21 +58,6 @@ type AuthResponse = {
 
 const submissionUuidListKey = "submission_uuids"
 
-function getPlayerUuid() {
-  if (typeof window === "undefined") {
-    return ""
-  }
-
-  const params = new URLSearchParams(window.location.search)
-  const fromUrl = params.get("player") || params.get("player_uuid") || params.get("uuid")
-
-  if (fromUrl) {
-    window.localStorage.setItem("player_uuid", fromUrl)
-    return fromUrl
-  }
-
-  return window.localStorage.getItem("player_uuid") || ""
-}
 
 function getSubmissionUuids() {
   if (typeof window === "undefined") {
@@ -153,7 +138,6 @@ export default function Home() {
   const params = useParams<{ uuid: string }>()
   const router = useRouter()
   const uuid = params.uuid
-  const [playerUuid] = useState(getPlayerUuid)
   const [submissionUuids] = useState<string[]>(getSubmissionUuids)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [submission, setSubmission] = useState<SubmissionValue | null>(null)
@@ -196,20 +180,11 @@ export default function Home() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch("/api/auth/me", {
-          headers: playerUuid
-            ? {
-                "x-wasans-player-uuid": playerUuid,
-              }
-            : undefined,
-        })
+        const response = await fetch("/api/auth/me")
         const json = (await response.json()) as AuthResponse
 
         if (response.ok) {
           setAuthUser(json.user)
-          if (json.user?.uuid) {
-            window.localStorage.setItem("player_uuid", json.user.uuid)
-          }
         }
       } catch (err) {
         console.error(err)
@@ -217,13 +192,9 @@ export default function Home() {
     }
 
     fetchUser()
-  }, [playerUuid])
+  }, [])
 
-  const authHeaders = playerUuid
-    ? {
-        "x-wasans-player-uuid": playerUuid,
-      }
-    : undefined
+  const authHeaders = undefined
 
   const updateState = async (state: string, reason?: string) => {
     setSaving(true)

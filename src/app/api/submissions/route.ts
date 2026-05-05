@@ -1,4 +1,5 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
+import { getAuthUser } from "@/lib/server/auth"
 import { refreshPlayerScore } from "@/lib/server/player-scores"
 import { trials } from "@/lib/trials"
 
@@ -194,6 +195,12 @@ export async function POST(request: Request) {
     return jsonError("DB binding not available", 500)
   }
 
+  const user = await getAuthUser(request, env.wasans)
+
+  if (!user) {
+    return jsonError("Authentication required", 401)
+  }
+
   const formData = await request.formData().catch((err) => {
     console.error(err)
     return null
@@ -203,12 +210,8 @@ export async function POST(request: Request) {
     return jsonError("Submission payload is too large or invalid", 413)
   }
 
-  const playerUuid = String(formData.get("player_uuid") || "").trim()
+  const playerUuid = user.uuid
   const rawSubmissions = String(formData.get("submissions") || "")
-
-  if (!playerUuid) {
-    return jsonError("Player is required")
-  }
 
   let incomingSubmissions: IncomingSubmission[]
 

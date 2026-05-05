@@ -47,33 +47,6 @@ export async function getAuthUser(request: Request, db: D1Database) {
     playerUuid = session?.player_uuid ?? null
   }
 
-  // Temporary bridge until Discord OAuth issues the wasans_session cookie.
-  playerUuid ??= request.headers.get("x-wasans-player-uuid")
-
-  const discordUserId = request.headers.get("x-wasans-discord-user-id")
-
-  if (!playerUuid && discordUserId) {
-    const linkedAccount = await db.prepare(
-      `SELECT player_uuid
-       FROM oauth_accounts
-       WHERE provider = 'discord' AND provider_account_id = ?`
-    )
-      .bind(discordUserId)
-      .first<DiscordAccountRow>()
-
-    if (linkedAccount) {
-      playerUuid = linkedAccount.player_uuid
-    } else {
-      const player = await db.prepare(
-        `SELECT uuid as player_uuid FROM players WHERE player_id = ?`
-      )
-        .bind(discordUserId)
-        .first<DiscordAccountRow>()
-
-      playerUuid = player?.player_uuid ?? null
-    }
-  }
-
   if (!playerUuid) {
     return null
   }

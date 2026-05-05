@@ -2,16 +2,26 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { PlusCircleIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import Link from "next/link"
 
 type Submission = {
   uuid: string
@@ -106,6 +116,8 @@ export default function SubmissionsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [authLabel, setAuthLabel] = useState<string | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [signInDialogOpen, setSignInDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -179,7 +191,12 @@ export default function SubmissionsPage() {
                 authJson.user.permission >= 1 ? " (admin)" : ""
               }`
             )
+            setIsAuthenticated(true)
+          } else {
+            setIsAuthenticated(false)
           }
+        } else {
+          setIsAuthenticated(false)
         }
 
         const authError = new URLSearchParams(window.location.search).get("auth_error")
@@ -280,12 +297,44 @@ export default function SubmissionsPage() {
           <NativeSelectOption value="approved">Approved</NativeSelectOption>
           <NativeSelectOption value="denied">Denied</NativeSelectOption>
         </NativeSelect>
-        <Link href="/submissions/new">
-          <Button className="h-10 w-full cursor-pointer sm:w-auto">
-            <PlusCircleIcon />
-            New submission
-          </Button>
-        </Link>
+        <Button
+          type="button"
+          className="h-10 w-full cursor-pointer sm:w-auto"
+          onClick={() => {
+            if (isAuthenticated) {
+              router.push("/submissions/new")
+            } else {
+              setSignInDialogOpen(true)
+            }
+          }}
+        >
+          <PlusCircleIcon />
+          New submission
+        </Button>
+        <AlertDialog
+          open={signInDialogOpen}
+          onOpenChange={setSignInDialogOpen}
+        >
+          <AlertDialogContent size="sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Sign in with Discord</AlertDialogTitle>
+              <AlertDialogDescription>
+                You need to log in before creating a new submission.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction asChild>
+                <a
+                  href="/api/auth/discord/start"
+                  className="inline-flex w-full items-center justify-center"
+                >
+                  Login with Discord
+                </a>
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {authLabel && <p className="text-sm text-muted-foreground">Logged in as {authLabel}</p>}

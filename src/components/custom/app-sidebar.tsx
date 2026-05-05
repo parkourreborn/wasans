@@ -41,38 +41,18 @@ type AuthResponse = {
 }
 
 const discordInviteUrl = "https://discord.gg/9pnRYDU6wg"
-
-function getPlayerUuid() {
-  if (typeof window === "undefined") {
-    return ""
-  }
-
-  return window.localStorage.getItem("player_uuid") || ""
-}
-
 export function AppSidebar() {
   const [user, setUser] = useState<AuthUser | null>(null)
   const playerId = user?.player_id || ""
 
   useEffect(() => {
-    const playerUuid = getPlayerUuid()
-
     const loadUser = async () => {
       try {
-        const response = await fetch("/api/auth/me", {
-          headers: playerUuid
-            ? {
-                "x-wasans-player-uuid": playerUuid,
-              }
-            : undefined,
-        })
+        const response = await fetch("/api/auth/me")
         const json = (await response.json()) as AuthResponse
 
         if (response.ok) {
           setUser(json.user)
-          if (json.user?.uuid) {
-            window.localStorage.setItem("player_uuid", json.user.uuid)
-          }
         }
       } catch (err) {
         console.error(err)
@@ -204,9 +184,12 @@ export function AppSidebar() {
                         <AvatarFallback>{fallback}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
+                        <Link
+                            href={`/players/${encodeURIComponent(user.uuid)}`}
+                            className="truncate text-sm font-medium text-sky-600 underline underline-offset-2"
+                        >
                             {formatPlayerNameWithScore(user.player_name, user.score)}
-                        </p>
+                        </Link>
                         <p className="truncate text-xs text-muted-foreground">
                             {user.permission >= 1 ? "Moderator" : "Member"}
                         </p>

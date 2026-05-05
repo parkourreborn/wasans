@@ -3,8 +3,18 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
-import { trials } from "@/lib/trials"
+import { TrialName, trials } from "@/lib/trials"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -17,23 +27,24 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
+import calculateScore from "@/lib/calc-score"
 
 type SubmissionDraft = {
   id: string
-  trial_name: string
+  trial_name: TrialName
   time: string
   proof_url: string
   proof_file: File | null
 }
 
 type SubmissionValue = {
-  trial_name: string
+  trial_name: TrialName
   time: number | string
   state?: string
 }
 
 type WorldRecordValue = {
-  trial_name: string
+  trial_name: TrialName
   time: number | string
 }
 
@@ -67,22 +78,6 @@ function createDraft(id = "submission-1"): SubmissionDraft {
   }
 }
 
-function getPlayerUuid() {
-  if (typeof window === "undefined") {
-    return ""
-  }
-
-  const params = new URLSearchParams(window.location.search)
-  const fromUrl = params.get("player") || params.get("player_uuid") || params.get("uuid")
-
-  if (fromUrl) {
-    window.localStorage.setItem("player_uuid", fromUrl)
-    return fromUrl
-  }
-
-  return window.localStorage.getItem("player_uuid") || ""
-}
-
 async function getWorldRecords() {
   if (cachedWorldRecords) {
     return cachedWorldRecords
@@ -112,14 +107,14 @@ async function getWorldRecords() {
   return worldRecordsRequest
 }
 
-function scoreFor(wr: number | undefined, time: string, personalBest?: number) {
+function scoreFor(wr: number | undefined, time: string, trial: TrialName, personalBest?: number) {
   const parsedTime = time === "" ? personalBest : Number(time)
 
   if (!wr || !parsedTime || !Number.isFinite(parsedTime) || parsedTime <= 0) {
     return "0.000"
   }
 
-  return Math.min(Math.pow(wr / parsedTime, 3), 1).toFixed(3)
+  return calculateScore(wr, parsedTime, trial).toFixed(3)
 }
 
 function formatTime(value: number) {
@@ -127,13 +122,11 @@ function formatTime(value: number) {
 }
 
 function uploadSubmission(
-  playerUuid: string,
   submission: SubmissionDraft,
   onProgress: (progress: number, status: UploadState["status"]) => void
 ) {
   return new Promise<ListResponse<unknown>>((resolve, reject) => {
     const formData = new FormData()
-    formData.append("player_uuid", playerUuid)
     formData.append(
       "submissions",
       JSON.stringify([
@@ -199,7 +192,7 @@ function uploadSubmission(
 
 export default function NewSubmissionPage() {
   const router = useRouter()
-  const [playerUuid, setPlayerUuid] = useState(getPlayerUuid)
+  const [authUser, setAuthUser] = useState<{ uuid: string } | null>(null)
   const [personalBests, setPersonalBests] = useState<Record<string, number>>({})
   const [worldRecords, setWorldRecords] = useState<Record<string, number>>({})
   const [loadingContext, setLoadingContext] = useState(true)
@@ -208,27 +201,21 @@ export default function NewSubmissionPage() {
   const [uploadStates, setUploadStates] = useState<Record<string, UploadState>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [signInDialogOpen, setSignInDialogOpen] = useState(false)
 
   useEffect(() => {
     const loadContext = async () => {
       try {
-        let activePlayerUuid = playerUuid
+        const authResponse = await fetch("/api/auth/me")
+        const authJson = (await authResponse.json().catch(() => null)) as AuthResponse | null
+        const activePlayerUuid = authJson?.user?.uuid || ""
 
-        if (!activePlayerUuid) {
-          const authResponse = await fetch("/api/auth/me")
-          const authJson = (await authResponse.json().catch(() => null)) as AuthResponse | null
-          activePlayerUuid = authJson?.user?.uuid || ""
-
-          if (activePlayerUuid) {
-            window.localStorage.setItem("player_uuid", activePlayerUuid)
-            setPlayerUuid(activePlayerUuid)
-          }
-        }
-
-        if (!activePlayerUuid) {
-          setError("Player could not be identified")
+        if (!authResponse.ok || !activePlayerUuid) {
+          setError("Sign in with Discord to create submissions.")
           return
         }
+
+        setAuthUser(authJson?.user || null)
 
         const [pbResponse, wrValues] = await Promise.all([
           fetch(`/api/submissions/player/${encodeURIComponent(activePlayerUuid)}`),
@@ -266,7 +253,7 @@ export default function NewSubmissionPage() {
     }
 
     loadContext()
-  }, [playerUuid])
+  }, [])
 
   const invalidPersonalBest = useMemo(() => {
     return submissions.find((submission) => {
@@ -278,7 +265,6 @@ export default function NewSubmissionPage() {
 
   const canSubmit = useMemo(() => {
     return (
-      playerUuid.length > 0 &&
       !loadingContext &&
       !invalidPersonalBest &&
       submissions.every((submission) => {
@@ -287,7 +273,7 @@ export default function NewSubmissionPage() {
         return submission.trial_name && hasTime && hasProof
       })
     )
-  }, [invalidPersonalBest, loadingContext, playerUuid, submissions])
+  }, [invalidPersonalBest, loadingContext, submissions])
 
   const updateSubmission = (
     id: string,
@@ -341,6 +327,11 @@ export default function NewSubmissionPage() {
     setError(null)
     setMessage(null)
 
+    if (!authUser) {
+      setSignInDialogOpen(true)
+      return
+    }
+
     if (invalidPersonalBest) {
       setError(`${invalidPersonalBest.trial_name} is slower than your current PB`)
       return
@@ -369,7 +360,7 @@ export default function NewSubmissionPage() {
           message: `Uploading submission ${index + 1}`,
         })
 
-        await uploadSubmission(playerUuid, submission, (progress, status) => {
+        await uploadSubmission(submission, (progress, status) => {
           updateUploadState(submission.id, {
             progress,
             status,
@@ -443,6 +434,28 @@ export default function NewSubmissionPage() {
         </Alert>
       )}
 
+      <AlertDialog open={signInDialogOpen} onOpenChange={setSignInDialogOpen}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Login required</AlertDialogTitle>
+            <AlertDialogDescription>
+              You need to sign in with Discord before you can submit scores.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <a
+                href="/api/auth/discord/start"
+                className="inline-flex w-full items-center justify-center"
+              >
+                Sign in with Discord
+              </a>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex flex-col gap-3">
         {submissions.map((submission, index) => {
           const personalBest = personalBests[submission.trial_name]
@@ -451,7 +464,7 @@ export default function NewSubmissionPage() {
           const uploadedTime = Number(submission.time)
           const isSlowerThanPb =
             Number.isFinite(uploadedTime) && personalBest && uploadedTime > personalBest
-          const score = scoreFor(worldRecord, submission.time, personalBest)
+          const score = scoreFor(worldRecord, submission.time, submission.trial_name, personalBest)
 
           return (
             <Card key={submission.id}>
@@ -478,7 +491,7 @@ export default function NewSubmissionPage() {
                       value={submission.trial_name}
                       onChange={(event) =>
                         updateSubmission(submission.id, {
-                          trial_name: event.target.value,
+                          trial_name: event.target.value as TrialName,
                         })
                       }
                       disabled={submitting}
