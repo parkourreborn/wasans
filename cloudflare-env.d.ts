@@ -9,6 +9,8 @@ declare namespace Cloudflare {
 		IMAGES: ImagesBinding;
 		ASSETS: Fetcher;
 		WORKER_SELF_REFERENCE: Fetcher /* wasans */;
+		discordClientId: string;
+		discordClientSecret: string;
 	}
 }
 interface CloudflareEnv extends Cloudflare.Env {}

@@ -201,21 +201,22 @@ export default function Home() {
   }, [uuid])
 
   useEffect(() => {
-    if (!playerUuid) {
-      return
-    }
-
     const fetchUser = async () => {
       try {
         const response = await fetch("/api/auth/me", {
-          headers: {
-            "x-wasans-player-uuid": playerUuid,
-          },
+          headers: playerUuid
+            ? {
+                "x-wasans-player-uuid": playerUuid,
+              }
+            : undefined,
         })
         const json = (await response.json()) as AuthResponse
 
         if (response.ok) {
           setAuthUser(json.user)
+          if (json.user?.uuid) {
+            window.localStorage.setItem("player_uuid", json.user.uuid)
+          }
         }
       } catch (err) {
         console.error(err)

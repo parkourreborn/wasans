@@ -19,12 +19,14 @@ import {
   ExternalLinkIcon,
   HelpCircleIcon,
   HomeIcon,
+  LogInIcon,
   TimerIcon,
   TrophyIcon,
 } from "lucide-react"
 import Link from "next/link"
 
 type AuthUser = {
+  uuid: string
   player_id: string
   player_name: string
   score: number
@@ -65,6 +67,9 @@ export function AppSidebar() {
 
         if (response.ok) {
           setUser(json.user)
+          if (json.user?.uuid) {
+            window.localStorage.setItem("player_uuid", json.user.uuid)
+          }
         }
       } catch (err) {
         console.error(err)
@@ -181,6 +186,15 @@ export function AppSidebar() {
                         </p>
                     </div>
                 </div>
+            )}
+            {!user && (
+                <a
+                    href="/api/auth/discord/start"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                >
+                    <LogInIcon className="size-4" />
+                    <span>Login with Discord</span>
+                </a>
             )}
             <Link
                 href={discordInviteUrl}

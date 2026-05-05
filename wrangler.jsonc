@@ -33,6 +33,9 @@
 	"observability": {
 		"enabled": true
 	},
+	"vars": {
+		"discordClientId": "1501043686828544121"
+	},
 	"d1_databases": [
 		{
 			"binding": "wasans",

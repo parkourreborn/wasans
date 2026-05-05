@@ -42,6 +42,12 @@ type ListResponse<T> = {
   error?: string
 }
 
+type AuthResponse = {
+  user?: {
+    uuid: string
+  } | null
+}
+
 type UploadState = {
   progress: number
   status: "idle" | "uploading" | "processing" | "done" | "error"
@@ -193,27 +199,39 @@ function uploadSubmission(
 
 export default function NewSubmissionPage() {
   const router = useRouter()
-  const [playerUuid] = useState(getPlayerUuid)
+  const [playerUuid, setPlayerUuid] = useState(getPlayerUuid)
   const [personalBests, setPersonalBests] = useState<Record<string, number>>({})
   const [worldRecords, setWorldRecords] = useState<Record<string, number>>({})
-  const [loadingContext, setLoadingContext] = useState(() => Boolean(playerUuid))
+  const [loadingContext, setLoadingContext] = useState(true)
   const [submissions, setSubmissions] = useState<SubmissionDraft[]>([createDraft()])
   const [submitting, setSubmitting] = useState(false)
   const [uploadStates, setUploadStates] = useState<Record<string, UploadState>>({})
   const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(
-    playerUuid ? null : "Player could not be identified"
-  )
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!playerUuid) {
-      return
-    }
-
     const loadContext = async () => {
       try {
+        let activePlayerUuid = playerUuid
+
+        if (!activePlayerUuid) {
+          const authResponse = await fetch("/api/auth/me")
+          const authJson = (await authResponse.json().catch(() => null)) as AuthResponse | null
+          activePlayerUuid = authJson?.user?.uuid || ""
+
+          if (activePlayerUuid) {
+            window.localStorage.setItem("player_uuid", activePlayerUuid)
+            setPlayerUuid(activePlayerUuid)
+          }
+        }
+
+        if (!activePlayerUuid) {
+          setError("Player could not be identified")
+          return
+        }
+
         const [pbResponse, wrValues] = await Promise.all([
-          fetch(`/api/submissions/player/${encodeURIComponent(playerUuid)}`),
+          fetch(`/api/submissions/player/${encodeURIComponent(activePlayerUuid)}`),
           getWorldRecords(),
         ])
         const pbJson = (await pbResponse.json()) as ListResponse<SubmissionValue>
