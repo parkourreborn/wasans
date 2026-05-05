@@ -144,13 +144,16 @@ export default function Home() {
     const loadPlayers = async () => {
       try {
         const response = await fetch("/api/players", { cache: "force-cache" })
-        const json = await response.json()
+        const json = (await response.json()) as {
+          results?: Array<{ uuid: string; player_name: string; score: number }>
+          error?: string
+        }
 
         if (!response.ok) {
           throw new Error(json.error || "Unable to load players")
         }
 
-        const playerList = (json.results || []) as Array<{ uuid: string; player_name: string; score: number }>
+        const playerList = json.results || []
         setPlayers(playerList)
 
         const params = new URLSearchParams(window.location.search)

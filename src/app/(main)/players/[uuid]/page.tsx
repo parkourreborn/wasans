@@ -59,7 +59,7 @@ export default function PlayerProfilePage() {
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    if (!uuid) {
+    if (!uuid || Array.isArray(uuid)) {
       return
     }
 
@@ -76,24 +76,34 @@ export default function PlayerProfilePage() {
           fetch(`/api/wrs`, { cache: "force-cache" }),
         ])
 
+        const playerJson = (await playerResponse.json()) as {
+          player?: PlayerInfo | null
+          error?: string
+        }
+        const submissionsJson = (await submissionsResponse.json()) as {
+          results?: SubmissionValue[]
+          error?: string
+        }
+        const wrJson = (await wrResponse.json()) as {
+          results?: WorldRecordValue[]
+          error?: string
+        }
+
         if (!playerResponse.ok) {
-          const json = await playerResponse.json()
-          throw new Error(json.error || "Unable to load player")
+          throw new Error(playerJson.error || "Unable to load player")
         }
 
         if (!submissionsResponse.ok) {
-          const json = await submissionsResponse.json()
-          throw new Error(json.error || "Unable to load submission history")
+          throw new Error(submissionsJson.error || "Unable to load submission history")
         }
 
         if (!wrResponse.ok) {
-          const json = await wrResponse.json()
-          throw new Error(json.error || "Unable to load world records")
+          throw new Error(wrJson.error || "Unable to load world records")
         }
 
-        const playerJson = await playerResponse.json()
-        const submissionsJson = await submissionsResponse.json()
-        const wrJson = await wrResponse.json()
+        setPlayer(playerJson.player || null)
+        setSubmissions(submissionsJson.results || [])
+        setWorldRecords(wrJson.results || [])
 
         setPlayer(playerJson.player || null)
         setSubmissions(submissionsJson.results || [])
