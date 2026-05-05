@@ -1,6 +1,9 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
-import { refreshAllPlayerScores } from "@/lib/server/player-scores"
 import { refreshWorldRecords } from "@/lib/server/wrs"
+
+const cacheHeaders = {
+  "cache-control": "max-age=10, stale-while-revalidate=30",
+}
 
 export async function GET() {
   const { env } = await getCloudflareContext({ async: true })
@@ -12,15 +15,27 @@ export async function GET() {
     })
   }
 
-  await refreshWorldRecords(env.wasans)
-  await refreshAllPlayerScores(env.wasans)
+  const countRow = await env.wasans
+    .prepare(`SELECT COUNT(1) AS count FROM wrs`)
+    .first<{ count: number }>()
+
+  const count = Number(countRow?.count ?? 0)
+  if (count === 0) {
+    await refreshWorldRecords(env.wasans)
+  }
 
   const { results } = await env.wasans.prepare(
-    `SELECT wrs.*, players.score as player_score
+    `SELECT wrs.*, players.score AS player_score
      FROM wrs
      LEFT JOIN players ON players.uuid = wrs.player_uuid
      ORDER BY wrs.trial_name`
   ).all()
 
-  return Response.json({ results })
+  return new Response(JSON.stringify({ results }), {
+    status: 200,
+    headers: {
+      ...cacheHeaders,
+      "content-type": "application/json",
+    },
+  })
 }

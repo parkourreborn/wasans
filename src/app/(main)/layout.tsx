@@ -16,7 +16,12 @@ export default function RootLayout({
     <SidebarProvider>
       <AppSidebar />
       <main className="min-h-svh min-w-0 flex-1 p-4 md:p-8">
-        <SidebarTrigger className="top-2 p-2 fixed backdrop-blur bg-white/30" />
+        {/* <div className="sticky top-0 z-40 mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-background/90 px-4 py-3 backdrop-blur-sm shadow-sm">
+          <SidebarTrigger className="p-2" />
+          <Button type="button" variant="outline" size="sm" onClick={() => router.back()}>
+            Back
+          </Button>
+        </div> */}
         {children}
       </main>
     </SidebarProvider>

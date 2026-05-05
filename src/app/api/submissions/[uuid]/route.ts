@@ -92,16 +92,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   const body = await request.json().catch(() => null) as {
     state?: unknown
     deny_reason?: unknown
+    time?: unknown
   } | null
   const state = normalizeState(body?.state)
   const denyReason = state === "denied" ? normalizeDenyReason(body?.deny_reason) : null
+  const rawTime = body?.time
+  const time = typeof rawTime === "string" && /^[0-9]+(\.[0-9]{1,3})?$/.test(rawTime.trim())
+    ? Number(rawTime.trim())
+    : typeof rawTime === "number" && Number.isFinite(rawTime)
+    ? rawTime
+    : null
 
-  if (!state) {
-    return jsonError("State must be pending, denied, or approved")
+  if (!state && time === null) {
+    return jsonError("State or time must be provided")
   }
 
-  if (state === "denied" && !denyReason) {
+  if (state && state === "denied" && !denyReason) {
     return jsonError("Deny reason is required and must be 500 characters or fewer")
+  }
+
+  if (time !== null && time <= 0) {
+    return jsonError("Time must be a positive number")
   }
 
   const submission = await env.wasans.prepare(
@@ -114,8 +125,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     return jsonError("Submission was not found", 404)
   }
 
-  await env.wasans.prepare(`UPDATE submissions SET state = ?, deny_reason = ? WHERE uuid = ?`)
-    .bind(state, denyReason, uuid)
+  const updates = [] as string[]
+  const bindings = [] as Array<string | number | null>
+
+  if (state) {
+    updates.push("state = ?")
+    bindings.push(state)
+    if (state === "denied") {
+      updates.push("deny_reason = ?")
+      bindings.push(denyReason)
+    } else {
+      updates.push("deny_reason = ?")
+      bindings.push(null)
+    }
+  }
+
+  if (time !== null) {
+    updates.push("time = ?")
+    bindings.push(time)
+  }
+
+  await env.wasans.prepare(`UPDATE submissions SET ${updates.join(", ")} WHERE uuid = ?`)
+    .bind(...bindings, uuid)
     .run()
 
   await refreshPlayerPb(env.wasans, submission.player_uuid, submission.trial_name)

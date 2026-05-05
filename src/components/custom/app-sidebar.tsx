@@ -10,16 +10,19 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import {
+    ArrowRightLeftIcon,
   BookIcon,
   CalculatorIcon,
   ExternalLinkIcon,
   HelpCircleIcon,
   HomeIcon,
   LogInIcon,
+  MedalIcon,
   TimerIcon,
   TrophyIcon,
 } from "lucide-react"
@@ -91,10 +94,11 @@ export function AppSidebar() {
   const fallback = user?.player_name?.slice(0, 2).toUpperCase() || "WA"
 
   return (
-    <Sidebar>
-        <SidebarHeader >
-            <h2 className="text-2xl font-semibold italic">hi i wasans</h2>
-        </ SidebarHeader>
+    <Sidebar collapsible="icon">
+        <SidebarHeader className="flex items-center justify-between gap-2">
+            <h2 className="text-2xl font-semibold italic group-data-[collapsible=icon]:hidden">hi i wasans</h2>
+            <SidebarTrigger className="p-2" />
+        </SidebarHeader>
         <SidebarContent>
             <SidebarGroup>
 
@@ -136,7 +140,7 @@ export function AppSidebar() {
                         <SidebarMenuButton asChild>
                             <Link href="/wrs">
                                 <div className="flex items-center gap-2">
-                                    <TrophyIcon />
+                                    <MedalIcon />
                                     <span>WRs</span>
                                 </div>
                             </Link>
@@ -158,7 +162,7 @@ export function AppSidebar() {
                         <SidebarMenuButton asChild>
                             <Link href="/compare">
                                 <div className="flex items-center gap-2">
-                                    <CalculatorIcon />
+                                    <ArrowRightLeftIcon />
                                     <span>Compare</span>
                                 </div>
                             </Link>
@@ -212,7 +216,7 @@ export function AppSidebar() {
             {!user && (
                 <a
                     href="/api/auth/discord/start"
-                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
                 >
                     <LogInIcon className="size-4" />
                     <span>Login with Discord</span>
@@ -221,7 +225,7 @@ export function AppSidebar() {
             <Link
                 href={discordInviteUrl}
                 rel="noreferrer"
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
             >
                 <ExternalLinkIcon className="size-4" />
                 <span>Discord</span>

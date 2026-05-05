@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type MouseEvent } from "react"
 import Badges from "@/components/custom/badges"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -160,6 +161,9 @@ export default function Home() {
   const [saving, setSaving] = useState(false)
   const [denyReason, setDenyReason] = useState("")
   const [denyDialogOpen, setDenyDialogOpen] = useState(false)
+  const [editTimeDialogOpen, setEditTimeDialogOpen] = useState(false)
+  const [editTimeValue, setEditTimeValue] = useState("")
+  const [editTimeError, setEditTimeError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -262,9 +266,61 @@ export default function Home() {
     setDenyDialogOpen(true)
   }
 
-  const submitDenyReason = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const openEditTimeDialog = () => {
+    setEditTimeValue(String(submission?.time ?? ""))
+    setEditTimeError(null)
+    setEditTimeDialogOpen(true)
+  }
+
+  const submitDenyReason = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     updateState("denied", denyReason)
+  }
+
+  const submitEditTime = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    if (!submission) {
+      return
+    }
+
+    const value = editTimeValue.trim()
+    if (!/^[0-9]+(\.[0-9]{1,3})?$/.test(value) || Number(value) <= 0) {
+      setEditTimeError("Enter a valid positive time with up to three decimals.")
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    setEditTimeError(null)
+
+    try {
+      const response = await fetch(`/api/submissions/${uuid}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          ...(authHeaders || {}),
+        },
+        body: JSON.stringify({ time: value }),
+      })
+
+      const json = (await response.json().catch(() => null)) as
+        | SubmissionResponse & { error?: string }
+        | null
+
+      if (!response.ok) {
+        const message = json?.error || "Unable to update submission time"
+        setEditTimeError(message)
+        return
+      }
+
+      setSubmission(json?.results?.[0] ?? submission)
+      setEditTimeDialogOpen(false)
+    } catch (err) {
+      console.error(err)
+      setEditTimeError("Unable to update submission time")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const deleteSubmission = async () => {
@@ -408,6 +464,14 @@ export default function Home() {
                       <XIcon />
                       Denied
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={openEditTimeDialog}
+                    >
+                      Edit time
+                    </Button>
                     <AlertDialog open={denyDialogOpen} onOpenChange={setDenyDialogOpen}>
                       <AlertDialogContent>
                         <AlertDialogHeader>
@@ -439,6 +503,58 @@ export default function Home() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                    {editTimeDialogOpen && (
+                      <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 px-4"
+                        role="dialog"
+                        aria-modal="true"
+                        onClick={() => setEditTimeDialogOpen(false)}
+                      >
+                        <div
+                          className="w-full max-w-lg rounded-3xl border border-border bg-background p-6 shadow-2xl"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="text-lg font-semibold">Edit submission time</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Update the recorded time for this submission.
+                              </p>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => setEditTimeDialogOpen(false)}>
+                              <XIcon />
+                            </Button>
+                          </div>
+
+                          <div className="mt-5 space-y-4">
+                            <div>
+                              <label className="mb-2 block text-sm font-medium text-muted-foreground">
+                                Time
+                              </label>
+                              <Input
+                                value={editTimeValue}
+                                onChange={(event) => setEditTimeValue(event.target.value)}
+                                placeholder="12.345"
+                                className="w-full"
+                                disabled={saving}
+                              />
+                            </div>
+                            {editTimeError && (
+                              <p className="text-sm text-destructive">{editTimeError}</p>
+                            )}
+                          </div>
+
+                          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                            <Button variant="outline" disabled={saving} onClick={() => setEditTimeDialogOpen(false)}>
+                              Cancel
+                            </Button>
+                            <Button disabled={saving} onClick={submitEditTime}>
+                              Save time
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
