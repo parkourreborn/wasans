@@ -18,7 +18,7 @@ type PersonalBestRow = {
   time: number
 }
 
-const allowedLinkHosts = ["youtube.com", "www.youtube.com", "youtu.be", "medal.tv", "www.medal.tv"]
+const allowedLinkHosts = ["medal.tv", "www.medal.tv"]
 const publicVideoBaseUrl = "https://assets.wasans.tully.sh"
 const scoreVideoContentType = "video/mp4"
 
@@ -47,6 +47,101 @@ function parseProofLink(value: unknown) {
   } catch {
     return null
   }
+}
+
+function getMedalContentApiUrl(link: string) {
+  const match = link.match(/clips\/([^?]+)/)
+  return match ? `https://medal.tv/api/content/${match[1]}/socialVideoUrl` : null
+}
+
+function isMedalLink(link: string) {
+  const host = new URL(link).hostname.toLowerCase()
+  return host === "medal.tv" || host === "www.medal.tv"
+}
+
+async function fetchMedalVideo(link: string) {
+  const contentApiUrl = getMedalContentApiUrl(link)
+
+  if (!contentApiUrl) {
+    throw new Error("Unable to read the Medal clip id")
+  }
+
+  const response = await fetch(contentApiUrl, {
+    headers: {
+      accept: "application/json, text/plain;q=0.9",
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error("Unable to resolve the Medal video URL")
+  }
+
+  const contentType = response.headers.get("content-type") || ""
+
+  if (contentType.startsWith("video/") || contentType === "application/octet-stream") {
+    return response
+  }
+
+  const body = await response.text()
+  let videoUrl: unknown = body.trim()
+
+  if (contentType.includes("application/json")) {
+    videoUrl = JSON.parse(body) as unknown
+  } else if (body.startsWith("{") || body.startsWith("[")) {
+    videoUrl = JSON.parse(body) as unknown
+  }
+
+  if (typeof videoUrl === "object" && videoUrl && "url" in videoUrl) {
+    videoUrl = (videoUrl as { url?: unknown }).url
+  } else if (typeof videoUrl === "object" && videoUrl && "socialVideoUrl" in videoUrl) {
+    videoUrl = (videoUrl as { socialVideoUrl?: unknown }).socialVideoUrl
+  }
+
+  if (typeof videoUrl !== "string") {
+    throw new Error("Medal did not return a video URL")
+  }
+
+  const parsedVideoUrl = new URL(videoUrl)
+
+  if (parsedVideoUrl.protocol !== "https:") {
+    throw new Error("Medal returned an invalid video URL")
+  }
+
+  return fetch(parsedVideoUrl.toString())
+}
+
+async function uploadVideo(
+  bucket: R2Bucket,
+  objectKey: string,
+  value: Blob | ReadableStream | ArrayBuffer,
+  contentType: string
+) {
+  await bucket.put(objectKey, value, {
+    httpMetadata: {
+      contentType,
+    },
+  })
+
+  const uploadedObject = await bucket.head(objectKey)
+
+  return Boolean(uploadedObject)
+}
+
+async function createSubmissionRow(
+  db: D1Database,
+  uuid: string,
+  player: PlayerRow,
+  trialName: (typeof trials)[number],
+  time: number,
+  now: string
+) {
+  await db.prepare(
+    `INSERT INTO submissions (
+      uuid, player_uuid, trial_name, player_name, time, date, state
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(uuid, player.uuid, trialName, player.player_name, time, now, "pending")
+    .run()
 }
 
 export async function GET() {
@@ -163,26 +258,19 @@ export async function POST(request: Request) {
       const objectKey = `scores/${uuid}.mp4`
       const proofUrl = `${publicVideoBaseUrl}/scores/${uuid}.mp4`
 
-      await env.SUBMISSION_VIDEOS.put(objectKey, file, {
-        httpMetadata: {
-          contentType: file.type || scoreVideoContentType,
-        },
-      })
+      const uploaded = await uploadVideo(
+        env.SUBMISSION_VIDEOS,
+        objectKey,
+        file,
+        file.type || scoreVideoContentType
+      )
 
-      const uploadedObject = await env.SUBMISSION_VIDEOS.head(objectKey)
-
-      if (!uploadedObject) {
+      if (!uploaded) {
         return jsonError(`Unable to verify uploaded video for submission ${index + 1}`, 500)
       }
 
       try {
-        await env.wasans.prepare(
-          `INSERT INTO submissions (
-            uuid, player_uuid, trial_name, player_name, time, date, state
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-          .bind(uuid, player.uuid, trialName, player.player_name, time, now, "pending")
-          .run()
+        await createSubmissionRow(env.wasans, uuid, player, trialName, time, now)
       } catch (err) {
         await env.SUBMISSION_VIDEOS.delete(objectKey).catch((deleteErr) => {
           console.error(deleteErr)
@@ -196,18 +284,64 @@ export async function POST(request: Request) {
     }
 
     if (!link) {
-      return jsonError(`Submission ${index + 1} needs a YouTube or Medal link, or a video file`)
+      return jsonError(`Submission ${index + 1} needs a Medal link, or a video file`)
+    }
+
+    if (isMedalLink(link)) {
+      if (!env.SUBMISSION_VIDEOS) {
+        return jsonError("Submission video bucket is not available", 500)
+      }
+
+      const uuid = crypto.randomUUID()
+      const objectKey = `scores/${uuid}.mp4`
+      const proofUrl = `${publicVideoBaseUrl}/scores/${uuid}.mp4`
+      let medalVideoResponse: Response
+
+      try {
+        medalVideoResponse = await fetchMedalVideo(link)
+      } catch (err) {
+        console.error(err)
+        return jsonError(`Unable to download Medal video for submission ${index + 1}`, 502)
+      }
+
+      if (!medalVideoResponse.ok || !medalVideoResponse.body) {
+        return jsonError(`Unable to download Medal video for submission ${index + 1}`, 502)
+      }
+
+      const medalVideoType = medalVideoResponse.headers.get("content-type") || scoreVideoContentType
+
+      if (!medalVideoType.startsWith("video/") && medalVideoType !== "application/octet-stream") {
+        return jsonError(`Medal did not return a video file for submission ${index + 1}`, 502)
+      }
+
+      const uploaded = await uploadVideo(
+        env.SUBMISSION_VIDEOS,
+        objectKey,
+        await medalVideoResponse.arrayBuffer(),
+        medalVideoType === "application/octet-stream" ? scoreVideoContentType : medalVideoType
+      )
+
+      if (!uploaded) {
+        return jsonError(`Unable to verify downloaded video for submission ${index + 1}`, 500)
+      }
+
+      try {
+        await createSubmissionRow(env.wasans, uuid, player, trialName, time, now)
+      } catch (err) {
+        await env.SUBMISSION_VIDEOS.delete(objectKey).catch((deleteErr) => {
+          console.error(deleteErr)
+        })
+        throw err
+      }
+
+      await refreshPlayerScore(env.wasans, player.uuid)
+      created.push({ uuid, trial_name: trialName, proof_url: proofUrl, object_key: objectKey })
+      continue
     }
 
     const uuid = crypto.randomUUID()
 
-    await env.wasans.prepare(
-      `INSERT INTO submissions (
-        uuid, player_uuid, trial_name, player_name, time, date, state
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(uuid, player.uuid, trialName, player.player_name, time, now, "pending")
-      .run()
+    await createSubmissionRow(env.wasans, uuid, player, trialName, time, now)
 
     await refreshPlayerScore(env.wasans, player.uuid)
     created.push({ uuid, trial_name: trialName, proof_url: link })
