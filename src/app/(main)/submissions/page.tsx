@@ -20,8 +20,10 @@ import {
 } from "@/components/ui/alert-dialog"
 import { PlusCircleIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
+import { TrialName } from "@/lib/trials"
+import calculateScore from "@/lib/calc-score"
 
 type Submission = {
   uuid: string
@@ -100,12 +102,15 @@ function formatDate(timestamp: string) {
   return `${month}-${day}-${year}`
 }
 
-function scoreForTrial(wr: number | undefined, time: number) {
-  if (!wr || !Number.isFinite(time) || time <= 0) {
-    return 0
+
+function scoreFor(wr: number | undefined, time: string | number, trial: TrialName) {
+  const parsedTime = Number(time)
+
+  if (!wr || !parsedTime || !Number.isFinite(parsedTime) || parsedTime <= 0) {
+    return "0.000"
   }
 
-  return Number(Math.min(Math.pow(wr / time, 3), 1).toFixed(3))
+  return calculateScore(wr, parsedTime, trial).toFixed(3)
 }
 
 export default function SubmissionsPage() {
@@ -286,17 +291,17 @@ export default function SubmissionsPage() {
           aria-label="Search submissions by trial name"
           className="h-10 flex-1"
         />
-        <NativeSelect
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
-          className="w-full lg:w-40"
-          aria-label="Filter submissions by status"
-        >
-          <NativeSelectOption value="all">All</NativeSelectOption>
-          <NativeSelectOption value="pending">Pending</NativeSelectOption>
-          <NativeSelectOption value="approved">Approved</NativeSelectOption>
-          <NativeSelectOption value="denied">Denied</NativeSelectOption>
-        </NativeSelect>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full lg:w-40">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="denied">Denied</SelectItem>
+          </SelectContent>
+        </Select>
         <Button
           type="button"
           className="h-10 w-full cursor-pointer sm:w-auto"
@@ -379,7 +384,7 @@ export default function SubmissionsPage() {
                         <div className="w-full flex flex-col gap-1.5 text-base">
                           {submission.state !== "denied" ? (
                             <p className="text-sm font-semibold">
-                              Score {scoreForTrial(worldRecordTimes[submission.trial_name], submission.time).toFixed(3)}
+                              Score {scoreFor(worldRecordTimes[submission.trial_name], submission.time, submission.trial_name as TrialName)}
                             </p>
                           ) : null}
                           <Link

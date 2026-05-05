@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { getAuthUser } from "@/lib/server/auth"
 import { refreshPlayerScore } from "@/lib/server/player-scores"
+import { insertAuditLog } from "@/lib/server/audit"
 import { trials } from "@/lib/trials"
 
 type IncomingSubmission = {
@@ -297,6 +298,15 @@ export async function POST(request: Request) {
 
       try {
         await createSubmissionRow(env.wasans, uuid, player, trialName, time, now)
+        await insertAuditLog(env.wasans, "submission_created", "submission", uuid, {
+          actor: { uuid: player.uuid, player_name: player.player_name },
+          details: {
+            trial_name: trialName,
+            time,
+            proof_url: proofUrl,
+            source: "upload",
+          },
+        })
       } catch (err) {
         await env.SUBMISSION_VIDEOS.delete(objectKey).catch((deleteErr) => {
           console.error(deleteErr)
@@ -352,6 +362,15 @@ export async function POST(request: Request) {
 
       try {
         await createSubmissionRow(env.wasans, uuid, player, trialName, time, now)
+        await insertAuditLog(env.wasans, "submission_created", "submission", uuid, {
+          actor: { uuid: player.uuid, player_name: player.player_name },
+          details: {
+            trial_name: trialName,
+            time,
+            proof_url: proofUrl,
+            source: "medal",
+          },
+        })
       } catch (err) {
         await env.SUBMISSION_VIDEOS.delete(objectKey).catch((deleteErr) => {
           console.error(deleteErr)
@@ -366,6 +385,15 @@ export async function POST(request: Request) {
     const uuid = crypto.randomUUID()
 
     await createSubmissionRow(env.wasans, uuid, player, trialName, time, now)
+    await insertAuditLog(env.wasans, "submission_created", "submission", uuid, {
+      actor: { uuid: player.uuid, player_name: player.player_name },
+      details: {
+        trial_name: trialName,
+        time,
+        proof_url: link,
+        source: "link",
+      },
+    })
 
     created.push({ uuid, trial_name: trialName, proof_url: link })
   }

@@ -120,3 +120,19 @@ CREATE TABLE pbs (
   FOREIGN KEY (submission_uuid) REFERENCES submissions(uuid),
   FOREIGN KEY (trial_name) REFERENCES trials(name)
 );
+
+-- Audit logs for submissions, WRs and moderation actions
+DROP TABLE IF EXISTS audit_logs;
+CREATE TABLE audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actor_uuid TEXT,
+  actor_name TEXT,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_uuid TEXT,
+  target_type TEXT,
+  target_uuid TEXT,
+  details TEXT,
+  FOREIGN KEY (actor_uuid) REFERENCES players(uuid)
+);

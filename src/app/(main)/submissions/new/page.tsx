@@ -24,8 +24,8 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import calculateScore from "@/lib/calc-score"
 
@@ -485,24 +485,26 @@ export default function NewSubmissionPage() {
                 <div className="grid gap-4 sm:grid-cols-[1fr_9rem_7rem]">
                   <div className="grid gap-2">
                     <Label htmlFor={`trial-${submission.id}`}>Trial</Label>
-                    <NativeSelect
-                      id={`trial-${submission.id}`}
-                      className="w-full"
+                    <Select
                       value={submission.trial_name}
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         updateSubmission(submission.id, {
-                          trial_name: event.target.value as TrialName,
+                          trial_name: value as TrialName,
                         })
                       }
                       disabled={submitting}
-                      required
                     >
-                      {trials.map((trial) => (
-                        <NativeSelectOption key={trial} value={trial}>
-                          {trial}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      <SelectTrigger id={`trial-${submission.id}`} className="w-full">
+                        <SelectValue placeholder="Select trial" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {trials.map((trial) => (
+                          <SelectItem key={trial} value={trial}>
+                            {trial}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor={`time-${submission.id}`}>Time</Label>
