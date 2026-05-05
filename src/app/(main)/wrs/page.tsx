@@ -25,6 +25,11 @@ type SubmissionsResponse = {
   results: Submission[]
 }
 
+type CachedWrs = {
+  results: Submission[]
+  timestamp: number
+}
+
 function formatTime(rawTime: number | string) {
   const timeStr = String(rawTime)
   const match = timeStr.match(/^0*([0-9]+)\.(\d{1,3})$/)
@@ -70,21 +75,61 @@ export default function SubmissionsPage() {
   }, [searchQuery, submissions])
 
   useEffect(() => {
+    const CACHE_KEY = "wasans_wrs_cache"
+
+    const loadCachedSubmissions = () => {
+      if (typeof window === "undefined") {
+        return null
+      }
+
+      try {
+        const raw = window.localStorage.getItem(CACHE_KEY)
+        if (!raw) {
+          return null
+        }
+
+        const parsed = JSON.parse(raw) as CachedWrs
+        return Array.isArray(parsed?.results) ? parsed.results : null
+      } catch {
+        return null
+      }
+    }
+
+    const cachedResults = loadCachedSubmissions()
+    if (cachedResults?.length) {
+      setSubmissions(cachedResults)
+      setLoading(false)
+    }
+
     const fetchSubmissions = async () => {
       try {
-        const response = await fetch(`/api/wrs`,{ cache: "force-cache"})
+        const response = await fetch(`/api/wrs`, { cache: "no-cache" })
         if (!response.ok) {
-          setError("Failed to load submissions")
+          if (!cachedResults) {
+            setError("Failed to load submissions")
+          }
           return
         }
 
         const json = (await response.json()) as SubmissionsResponse
-        setSubmissions(json.results || [])
+        const results = json.results || []
+        setSubmissions(results)
+
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(
+            CACHE_KEY,
+            JSON.stringify({ results, timestamp: Date.now() })
+          )
+        }
       } catch (err) {
-        setError("Error loading submissions")
+        if (!cachedResults) {
+          setError("Error loading submissions")
+        }
         console.error(err)
       } finally {
-        setLoading(false)
+        if (!cachedResults) {
+          setLoading(false)
+        }
       }
     }
 
