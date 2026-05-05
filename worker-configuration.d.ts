@@ -12,6 +12,8 @@ declare namespace Cloudflare {
 		IMAGES: ImagesBinding;
 		ASSETS: Fetcher;
 		WORKER_SELF_REFERENCE: Service<typeof import("./.open-next/worker").default>;
+		discordClientId: string;
+		discordClientSecret: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

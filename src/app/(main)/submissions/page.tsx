@@ -7,15 +7,7 @@ import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { PlusCircleIcon } from "lucide-react"
+import { LogInIcon, PlusCircleIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 
@@ -85,10 +77,6 @@ export default function SubmissionsPage() {
   const [wrSubmissionIds, setWrSubmissionIds] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [discordUserId, setDiscordUserId] = useState("")
-  const [newPlayerName, setNewPlayerName] = useState("")
-  const [showNewPlayerDialog, setShowNewPlayerDialog] = useState(false)
-  const [authenticating, setAuthenticating] = useState(false)
   const [authLabel, setAuthLabel] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -108,9 +96,10 @@ export default function SubmissionsPage() {
   useEffect(() => {
     const fetchSubmissions = async () => {
       try {
-        const [submissionsResponse, wrsResponse] = await Promise.all([
+        const [submissionsResponse, wrsResponse, authResponse] = await Promise.all([
           fetch(`/api/submissions`),
           fetch(`/api/wrs`),
+          fetch(`/api/auth/me`),
         ])
 
         if (!submissionsResponse.ok) {
@@ -124,6 +113,25 @@ export default function SubmissionsPage() {
         if (wrsResponse.ok) {
           const wrsJson = (await wrsResponse.json()) as WorldRecordsResponse
           setWrSubmissionIds(new Set((wrsJson.results || []).map((wr) => wr.submission_uuid)))
+        }
+
+        if (authResponse.ok) {
+          const authJson = (await authResponse.json()) as AuthResponse
+
+          if (authJson.user) {
+            window.localStorage.setItem("player_uuid", authJson.user.uuid)
+            setAuthLabel(
+              `${formatPlayerNameWithScore(authJson.user.player_name, authJson.user.score)}${
+                authJson.user.permission >= 1 ? " (admin)" : ""
+              }`
+            )
+          }
+        }
+
+        const authError = new URLSearchParams(window.location.search).get("auth_error")
+
+        if (authError) {
+          setError(authError)
         }
       } catch (err) {
         setError("Error loading submissions")
@@ -163,61 +171,6 @@ export default function SubmissionsPage() {
     )
   }
 
-  const completeLogin = (json: AuthResponse) => {
-    if (!json.user) {
-      return
-    }
-
-    window.localStorage.setItem("player_uuid", json.user.uuid)
-    setAuthLabel(
-      `${formatPlayerNameWithScore(json.user.player_name, json.user.score)}${
-        json.user.permission >= 1 ? " (admin)" : ""
-      }`
-    )
-    setShowNewPlayerDialog(false)
-    setNewPlayerName("")
-  }
-
-  const loginWithDiscordId = async (playerName?: string) => {
-    setError(null)
-    setAuthenticating(true)
-
-    try {
-      const response = await fetch("/api/auth/discord/manual", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          discord_user_id: discordUserId,
-          ...(playerName ? { player_name: playerName } : {}),
-        }),
-      })
-      const json = (await response.json().catch(() => null)) as AuthResponse | null
-
-      if (json?.needs_player_name) {
-        setShowNewPlayerDialog(true)
-        return
-      }
-
-      if (!response.ok || !json?.user) {
-        setError(json?.error || "Unable to authenticate")
-        return
-      }
-
-      completeLogin(json)
-    } catch (err) {
-      console.error(err)
-      setError("Unable to authenticate")
-    } finally {
-      setAuthenticating(false)
-    }
-  }
-
-  const createPlayerAndLogin = () => {
-    loginWithDiscordId(newPlayerName)
-  }
-
   return (
     <div className="flex h-full w-full flex-col gap-4">
       <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -240,70 +193,12 @@ export default function SubmissionsPage() {
           <NativeSelectOption value="approved">Approved</NativeSelectOption>
           <NativeSelectOption value="denied">Denied</NativeSelectOption>
         </NativeSelect>
-        <div className="flex gap-1">
-          <Input
-            value={discordUserId}
-            onChange={(event) => setDiscordUserId(event.target.value)}
-            placeholder="Discord user ID"
-            inputMode="numeric"
-            className="h-10"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => loginWithDiscordId()}
-            disabled={authenticating}
-            className="h-10"
-          >
-            {authenticating ? <Spinner className="size-4" /> : null}
-            Login
-          </Button>
-        </div>
         <Link href="/submissions/new">
           <Button variant="outline" className="h-10 w-10 cursor-pointer"><PlusCircleIcon /></Button>
         </Link>
       </div>
 
       {authLabel && <p className="text-sm text-muted-foreground">Logged in as {authLabel}</p>}
-
-      <Dialog open={showNewPlayerDialog} onOpenChange={setShowNewPlayerDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create player</DialogTitle>
-            <DialogDescription>
-              Choose the username to use for this Discord ID.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2">
-            <Input
-              value={newPlayerName}
-              onChange={(event) => setNewPlayerName(event.target.value)}
-              placeholder="Username"
-              minLength={2}
-              maxLength={32}
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowNewPlayerDialog(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={createPlayerAndLogin}
-              disabled={authenticating || newPlayerName.trim().length < 2}
-            >
-              {authenticating ? <Spinner className="size-4" /> : null}
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {filteredSubmissions.length === 0 ? (
