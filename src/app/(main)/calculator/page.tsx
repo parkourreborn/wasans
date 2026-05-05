@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TrialName, trials as trialNames } from "@/lib/trials";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   RefreshCcw,
 } from "lucide-react";
@@ -112,11 +113,13 @@ export default function Home() {
   const [userTimesError, setUserTimesError] = React.useState<string | null>(null);
   const [times, setTimes] = React.useState<Record<string, string>>(zeroTimes);
   const [pbs, setPbs] = React.useState<Record<string, string>>(zeroTimes);
+  const [selectedPlayerUuid, setSelectedPlayerUuid] = React.useState("");
+  const [players, setPlayers] = React.useState<Array<{ uuid: string; player_name: string; score: number }>>([]);
 
   React.useEffect(() => {
     const loadWorldRecords = async () => {
       try {
-        const response = await fetch("/api/wrs");
+        const response = await fetch("/api/wrs", { cache: "force-cache" });
         const json = (await response.json()) as WorldRecordsResponse;
 
         if (!response.ok) {
@@ -138,69 +141,95 @@ export default function Home() {
   }, []);
 
   React.useEffect(() => {
-    const loadUserTimes = async () => {
+    const loadPlayers = async () => {
       try {
-        const playerUuid = getPlayerUuid();
-        const authResponse = await fetch("/api/auth/me", {
-          headers: playerUuid
-            ? {
-                "x-wasans-player-uuid": playerUuid,
-              }
-            : undefined,
-        });
-        const authJson = (await authResponse.json()) as AuthResponse;
-        const userUuid = authJson.user?.uuid || playerUuid;
-
-        if (!userUuid) {
-          return;
-        }
-
-        const response = await fetch(`/api/submissions/player/${encodeURIComponent(userUuid)}`);
-        const json = (await response.json()) as SubmissionsResponse;
+        const response = await fetch("/api/players", { cache: "force-cache" })
+        const json = await response.json()
 
         if (!response.ok) {
-          throw new Error(json.error || "Unable to load your times");
+          throw new Error(json.error || "Unable to load players")
         }
 
-        const bestTimes: Record<string, number> = {};
+        const playerList = (json.results || []) as Array<{ uuid: string; player_name: string; score: number }>
+        setPlayers(playerList)
+
+        const params = new URLSearchParams(window.location.search)
+        const requestedUuid = params.get("player_uuid") || params.get("player") || ""
+
+        if (requestedUuid) {
+          setSelectedPlayerUuid(requestedUuid)
+          return
+        }
+
+        const storedUuid = getPlayerUuid()
+        if (storedUuid) {
+          setSelectedPlayerUuid(storedUuid)
+        }
+      } catch (err) {
+        console.error(err)
+      }
+    }
+
+    loadPlayers()
+  }, [])
+
+  React.useEffect(() => {
+    const loadUserTimes = async () => {
+      setLoadingUserTimes(true)
+      setUserTimesError(null)
+
+      try {
+        const playerUuid = selectedPlayerUuid || getPlayerUuid()
+
+        if (!playerUuid) {
+          return
+        }
+
+        const response = await fetch(
+          `/api/submissions/player/${encodeURIComponent(playerUuid)}?approvedOnly=true&page=1&limit=50`,
+          { cache: "no-store" }
+        )
+        const json = (await response.json()) as SubmissionsResponse
+
+        if (!response.ok) {
+          throw new Error(json.error || "Unable to load approved times")
+        }
+
+        const bestTimes: Record<string, number> = {}
 
         for (const submission of json.results || []) {
           if (submission.state !== "approved") {
-            continue;
+            continue
           }
 
-          const trial = trialKey(submission.trial_name);
-          const time = Number(submission.time);
-          const currentBest = bestTimes[trial];
+          const trial = trialKey(submission.trial_name)
+          const time = Number(submission.time)
+          const currentBest = bestTimes[trial]
 
           if (Number.isFinite(time) && time > 0 && (!currentBest || time < currentBest)) {
-            bestTimes[trial] = time;
+            bestTimes[trial] = time
           }
         }
 
-        setPbs({
+        const formatted = {
           ...zeroTimes,
           ...Object.fromEntries(
             Object.entries(bestTimes).map(([trial, time]) => [trial, time.toFixed(3)])
           ),
-        });
+        }
 
-        setTimes({
-          ...zeroTimes,
-          ...Object.fromEntries(
-            Object.entries(bestTimes).map(([trial, time]) => [trial, time.toFixed(3)])
-          ),
-        });
+        setPbs(formatted)
+        setTimes(formatted)
       } catch (err) {
-        console.error(err);
-        setUserTimesError(err instanceof Error ? err.message : "Unable to load your times");
+        console.error(err)
+        setUserTimesError(err instanceof Error ? err.message : "Unable to load approved times")
       } finally {
-        setLoadingUserTimes(false);
+        setLoadingUserTimes(false)
       }
-    };
+    }
 
-    loadUserTimes();
-  }, []);
+    loadUserTimes()
+  }, [selectedPlayerUuid])
 
   const rows = React.useMemo(
     () =>
@@ -265,6 +294,21 @@ export default function Home() {
                         ? "Loading your approved times."
                         : <>Score is calculated as <span className="font-semibold">(WR / your time)&sup3;</span>, then averaged.</>}
               </p>
+              <div className="mt-3 max-w-xs">
+                <NativeSelect
+                  value={selectedPlayerUuid}
+                  onChange={(event) => setSelectedPlayerUuid(event.target.value)}
+                  className="h-10 w-full"
+                  aria-label="Select a player to view scores"
+                >
+                  <NativeSelectOption value="">Your player or select one</NativeSelectOption>
+                  {players.map((player) => (
+                    <NativeSelectOption key={player.uuid} value={player.uuid}>
+                      {player.player_name} ({player.score.toFixed(3)})
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
             </div>
             <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-right">
               <div className="w-full h-full text-center">

@@ -1,5 +1,9 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
+const cacheHeaders = {
+  "cache-control": "max-age=10, stale-while-revalidate=30",
+}
+
 export async function GET(_: Request, { params }: { params: Promise<{ uuid: string }> }) {
   const { env } = await getCloudflareContext({ async: true })
   const { uuid } = await params;
@@ -11,10 +15,16 @@ export async function GET(_: Request, { params }: { params: Promise<{ uuid: stri
     })
   }
 
-  const { results } = await env.wasans.prepare(`SELECT * FROM players WHERE uuid = ?`)
+  const player = await env.wasans.prepare(`SELECT * FROM players WHERE uuid = ?`)
     .bind(uuid)
-    .run()
+    .first()
 
-  return Response.json({ results })
+  return new Response(JSON.stringify({ player }), {
+    status: 200,
+    headers: {
+      ...cacheHeaders,
+      "content-type": "application/json",
+    },
+  })
 
 }

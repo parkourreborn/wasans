@@ -355,9 +355,13 @@ export default function Home() {
               <div className="flex min-w-0 flex-col items-center gap-2 text-center">
                 <h2 className="text-2xl font-bold lg:text-3xl">{trial_name} {time}</h2>
                 <div className="flex flex-wrap items-center justify-center gap-3">
-                  <p className="lg:text-lg text-muted-foreground">
+                  <Link
+                    href={`/players/${submission.player_uuid}`}
+                    target="_blank"
+                    className="lg:text-lg text-muted-foreground underline underline-offset-4"
+                  >
                     {formatPlayerNameWithScore(player_name, submission.player_score)}
-                  </p>
+                  </Link>
                   <Separator orientation="vertical" className="hidden h-5 sm:block" />
                   <p className="text-muted-foreground">{formattedDate}</p>
                 </div>

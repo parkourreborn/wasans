@@ -144,7 +144,11 @@ async function createSubmissionRow(
     .run()
 }
 
-export async function GET() {
+const cacheHeaders = {
+  "cache-control": "max-age=10, stale-while-revalidate=30",
+}
+
+export async function GET(request: Request) {
   const { env } = await getCloudflareContext({ async: true })
 
   if (!env?.wasans) {
@@ -154,14 +158,33 @@ export async function GET() {
     })
   }
 
-  const { results } = await env.wasans.prepare(
+  const url = new URL(request.url)
+  const page = Math.max(1, Number(url.searchParams.get("page") || "1"))
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || "50")))
+  const offset = (page - 1) * limit
+  const status = url.searchParams.get("state")
+  const whereClause = status && ["approved", "denied", "pending"].includes(status) ? "WHERE submissions.state = ?" : ""
+
+  const statement = env.wasans.prepare(
     `SELECT submissions.*, players.score as player_score
      FROM submissions
      LEFT JOIN players ON players.uuid = submissions.player_uuid
-     ORDER BY submissions.date DESC`
-  ).all()
+     ${whereClause}
+     ORDER BY submissions.date DESC
+     LIMIT ? OFFSET ?`
+  )
 
-  return Response.json({ results })
+  const results = whereClause
+    ? (await statement.bind(status, limit, offset).all())
+    : (await statement.bind(limit, offset).all())
+
+  return new Response(JSON.stringify({ results: results.results || [] }), {
+    status: 200,
+    headers: {
+      ...cacheHeaders,
+      "content-type": "application/json",
+    },
+  })
 }
 
 export async function POST(request: Request) {
@@ -278,7 +301,6 @@ export async function POST(request: Request) {
         throw err
       }
 
-      await refreshPlayerScore(env.wasans, player.uuid)
       created.push({ uuid, trial_name: trialName, proof_url: proofUrl, object_key: objectKey })
       continue
     }
@@ -334,7 +356,6 @@ export async function POST(request: Request) {
         throw err
       }
 
-      await refreshPlayerScore(env.wasans, player.uuid)
       created.push({ uuid, trial_name: trialName, proof_url: proofUrl, object_key: objectKey })
       continue
     }
@@ -343,7 +364,6 @@ export async function POST(request: Request) {
 
     await createSubmissionRow(env.wasans, uuid, player, trialName, time, now)
 
-    await refreshPlayerScore(env.wasans, player.uuid)
     created.push({ uuid, trial_name: trialName, proof_url: link })
   }
 

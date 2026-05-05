@@ -145,6 +145,28 @@ export function AppSidebar() {
 
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild>
+                            <Link href="/leaderboard">
+                                <div className="flex items-center gap-2">
+                                    <TrophyIcon />
+                                    <span>Leaderboard</span>
+                                </div>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/compare">
+                                <div className="flex items-center gap-2">
+                                    <CalculatorIcon />
+                                    <span>Compare</span>
+                                </div>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
                             <Link href="/submissions">
                                 <div className="flex items-center gap-2">
                                     <TimerIcon />
