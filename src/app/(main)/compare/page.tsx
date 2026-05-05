@@ -78,6 +78,11 @@ type PlayerTrialTime = {
   submissionUuid: string
 }
 
+type ListResponse<T> = {
+  results?: T[]
+  error?: string
+}
+
 export default function ComparePage() {
   const [players, setPlayers] = React.useState<PlayerItem[]>([])
   const [worldRecords, setWorldRecords] = React.useState<WorldRecordValue[]>([])
@@ -95,7 +100,7 @@ export default function ComparePage() {
     const loadPlayers = async () => {
       try {
         const response = await fetch("/api/players", { cache: "force-cache" })
-        const json = await response.json()
+        const json = (await response.json()) as ListResponse<PlayerItem>
         if (!response.ok) {
           throw new Error(json.error || "Unable to load players")
         }
@@ -110,7 +115,7 @@ export default function ComparePage() {
     const loadWorldRecords = async () => {
       try {
         const response = await fetch("/api/wrs", { cache: "force-cache" })
-        const json = await response.json()
+        const json = (await response.json()) as ListResponse<WorldRecordValue>
         if (!response.ok) {
           throw new Error(json.error || "Unable to load WRs")
         }
@@ -138,7 +143,7 @@ export default function ComparePage() {
           fetch(`/api/submissions/player/${encodeURIComponent(uuid)}?approvedOnly=true&page=1&limit=50`, {
             cache: "no-store",
           }).then(async (response) => {
-            const json = await response.json()
+            const json = (await response.json()) as ListResponse<SubmissionValue>
             if (!response.ok) {
               throw new Error(json.error || "Unable to load player submissions")
             }

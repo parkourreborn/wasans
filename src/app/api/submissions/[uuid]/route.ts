@@ -39,6 +39,12 @@ type SubmissionRow = {
   trial_name: string
 }
 
+type SubmissionWithScoreRow = SubmissionRow & {
+  player_name: string
+  time: number | string
+  player_score: number | string
+}
+
 function jsonError(message: string, status = 400) {
   return Response.json({ error: message }, { status })
 }
@@ -124,11 +130,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
      WHERE submissions.uuid = ?`
   )
     .bind(uuid)
-    .all()
+    .all<SubmissionWithScoreRow>()
 
   const updatedSubmission = results?.[0]
 
-  if (state === "approved" && updatedSubmission?.player_score > 0.3) {
+  if (state === "approved" && Number(updatedSubmission?.player_score) > 0.3) {
     await queueApprovedHighScoreRuns([
       {
         submission_uuid: updatedSubmission.uuid,

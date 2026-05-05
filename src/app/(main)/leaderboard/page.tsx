@@ -41,7 +41,7 @@ type TrialRow = {
 export default function LeaderboardPage() {
   const [mode, setMode] = React.useState("overall")
   const [trialName, setTrialName] = React.useState("")
-  const [rows, setRows] = React.useState<OverallRow[] | TrialRow[]>([])
+  const [rows, setRows] = React.useState<(OverallRow | TrialRow)[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -53,7 +53,10 @@ export default function LeaderboardPage() {
       try {
         const query = mode === "trial" && trialName ? `?trialName=${encodeURIComponent(trialName)}` : ""
         const response = await fetch(`/api/leaderboard${query}`, { cache: "no-store" })
-        const json = await response.json()
+        const json = (await response.json()) as {
+          results?: (OverallRow | TrialRow)[]
+          error?: string
+        }
         if (!response.ok) {
           throw new Error(json.error || "Unable to load leaderboard")
         }
@@ -145,7 +148,7 @@ export default function LeaderboardPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {mode === "trial" ? Number((row as TrialRow).score).toFixed(3) : formatDateJoined(row.date_joined)}
+                      {mode === "trial" ? Number((row as TrialRow).score).toFixed(3) : formatDateJoined((row as OverallRow).date_joined)}
                     </TableCell>
                   </TableRow>
                 ))}

@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const trialName = url.searchParams.get("trialName")?.trim() || null
 
-  if (trialName && !trialList.includes(trialName)) {
+  if (trialName && !trialList.includes(trialName as (typeof trialList)[number])) {
     return new Response(JSON.stringify({ error: "Invalid trial" }), {
       status: 400,
       headers: { "content-type": "application/json" },
