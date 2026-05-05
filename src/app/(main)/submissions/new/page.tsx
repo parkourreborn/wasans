@@ -506,7 +506,7 @@ export default function NewSubmissionPage() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="grid gap-2">
-                    <Label htmlFor={`proof-url-${submission.id}`}>YouTube or Medal link</Label>
+                    <Label htmlFor={`proof-url-${submission.id}`}>Medal link</Label>
                     <Input
                       id={`proof-url-${submission.id}`}
                       type="url"
