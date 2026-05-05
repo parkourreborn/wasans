@@ -105,3 +105,18 @@ CREATE TABLE wrs (
   FOREIGN KEY (player_uuid) REFERENCES players(uuid),
   FOREIGN KEY (trial_name) REFERENCES trials(name)
 );
+
+-- Personal bests
+DROP TABLE IF EXISTS pbs;
+CREATE TABLE pbs (
+  player_uuid TEXT NOT NULL,
+  trial_name TEXT NOT NULL,
+  submission_uuid TEXT NOT NULL,
+  player_name TEXT NOT NULL,
+  time REAL NOT NULL,
+  date TEXT NOT NULL,
+  PRIMARY KEY (player_uuid, trial_name),
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid),
+  FOREIGN KEY (submission_uuid) REFERENCES submissions(uuid),
+  FOREIGN KEY (trial_name) REFERENCES trials(name)
+);

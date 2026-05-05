@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
@@ -8,7 +9,7 @@ import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { LogInIcon, PlusCircleIcon } from "lucide-react"
+import { PlusCircleIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 
@@ -48,6 +49,20 @@ type AuthResponse = {
 
 const submissionUuidListKey = "submission_uuids"
 
+function mergeSubmissions(current: Submission[], next: Submission[]) {
+  const seen = new Set<string>()
+  const merged: Submission[] = []
+
+  for (const submission of [...current, ...next]) {
+    if (!seen.has(submission.uuid)) {
+      seen.add(submission.uuid)
+      merged.push(submission)
+    }
+  }
+
+  return merged
+}
+
 function formatTime(rawTime: number | string) {
   const timeStr = String(rawTime)
   const match = timeStr.match(/^0*([0-9]+)\.(\d{1,3})$/)
@@ -74,13 +89,18 @@ function formatDate(timestamp: string) {
 }
 
 export default function SubmissionsPage() {
+  const router = useRouter()
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [wrSubmissionIds, setWrSubmissionIds] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [authLabel, setAuthLabel] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
 
   const filteredSubmissions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -95,21 +115,40 @@ export default function SubmissionsPage() {
   }, [searchQuery, statusFilter, submissions])
 
   useEffect(() => {
-    const fetchSubmissions = async () => {
+    const fetchPage = async (pageToLoad: number) => {
+      setLoadingMore(pageToLoad > 1)
+      setError(null)
+
       try {
-        const [submissionsResponse, wrsResponse, authResponse] = await Promise.all([
-          fetch(`/api/submissions`),
-          fetch(`/api/wrs`, {"cache": "force-cache"}),
-          fetch(`/api/auth/me`),
-        ])
+        const submissionsResponse = await fetch(
+          `/api/submissions?page=${pageToLoad}&limit=50`,
+          { cache: "no-store" }
+        )
 
         if (!submissionsResponse.ok) {
           setError("Failed to load submissions")
           return
         }
-        
+
         const submissionsJson = (await submissionsResponse.json()) as SubmissionsResponse
-        setSubmissions(submissionsJson.results || [])
+        setSubmissions((current) => mergeSubmissions(current, submissionsJson.results || []))
+        setHasMore((submissionsJson.results?.length || 0) >= 50)
+        setPage(pageToLoad)
+      } catch (err) {
+        setError("Error loading submissions")
+        console.error(err)
+      } finally {
+        setLoading(false)
+        setLoadingMore(false)
+      }
+    }
+
+    const fetchMeta = async () => {
+      try {
+        const [wrsResponse, authResponse] = await Promise.all([
+          fetch(`/api/wrs`, { cache: "force-cache" }),
+          fetch(`/api/auth/me`),
+        ])
 
         if (wrsResponse.ok) {
           const wrsJson = (await wrsResponse.json()) as WorldRecordsResponse
@@ -135,14 +174,12 @@ export default function SubmissionsPage() {
           setError(authError)
         }
       } catch (err) {
-        setError("Error loading submissions")
         console.error(err)
-      } finally {
-        setLoading(false)
       }
     }
 
-    fetchSubmissions()
+    fetchPage(1)
+    fetchMeta()
   }, [])
 
   useEffect(() => {
@@ -155,6 +192,41 @@ export default function SubmissionsPage() {
       JSON.stringify(filteredSubmissions.map((submission) => submission.uuid))
     )
   }, [filteredSubmissions, loading])
+
+  useEffect(() => {
+    if (!loadMoreRef.current || loading || loadingMore || !hasMore) {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setLoadingMore(true)
+          fetch(`/api/submissions?page=${page + 1}&limit=50`, { cache: "no-store" })
+            .then(async (response) => {
+              if (!response.ok) {
+                throw new Error("Failed to load more submissions")
+              }
+              const json = (await response.json()) as SubmissionsResponse
+              setSubmissions((current) => mergeSubmissions(current, json.results || []))
+              setHasMore((json.results?.length || 0) >= 50)
+              setPage((current) => current + 1)
+            })
+            .catch((err) => {
+              console.error(err)
+              setError("Unable to load more submissions")
+            })
+            .finally(() => {
+              setLoadingMore(false)
+            })
+        }
+      },
+      { rootMargin: "200px" }
+    )
+
+    observer.observe(loadMoreRef.current)
+    return () => observer.disconnect()
+  }, [loading, loadingMore, hasMore, page])
 
   if (loading) {
     return (
@@ -212,54 +284,78 @@ export default function SubmissionsPage() {
             </p>
           </div>
         ) : (
-          <div className="submissions-grid">
-            {filteredSubmissions.map((submission) => (
-              <Link
-                key={submission.uuid}
-                href={`/submissions/${submission.uuid}`}
-                className="submission-grid-item"
-              >
-                <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer overflow-hidden">
-                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                    <div className="flex min-w-0 flex-1 items-center justify-center">
-                      <ScoreVideoPreview submissionUuid={submission.uuid} />
-                    </div>
-
-                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                      <div className="w-full flex items-center justify-between gap-2">
-                        <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                          {submission.trial_name} {formatTime(submission.time)}
-                        </h3>
+          <>
+            <div className="submissions-grid">
+              {filteredSubmissions.map((submission) => (
+                <div
+                  key={submission.uuid}
+                  className="submission-grid-item cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/submissions/${submission.uuid}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      router.push(`/submissions/${submission.uuid}`)
+                    }
+                  }}
+                >
+                  <Card className="h-full hover:shadow-lg transition-shadow overflow-hidden">
+                    <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                      <div className="flex min-w-0 flex-1 items-center justify-center">
+                        <ScoreVideoPreview submissionUuid={submission.uuid} />
                       </div>
 
-                      <div className="w-full flex flex-col gap-1.5 text-base">
-                        <p className="text-muted-foreground truncate">
-                          {formatPlayerNameWithScore(
-                            submission.player_name,
-                            submission.player_score
-                          )}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(submission.date)}
-                        </p>
-                      </div>
+                      <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                        <div className="w-full flex items-center justify-between gap-2">
+                          <h3 className="text-xl font-bold leading-tight xl:text-2xl">
+                            {submission.trial_name} {formatTime(submission.time)}
+                          </h3>
+                        </div>
 
-                      <Badges
-                        badges={[
-                          submission.state === "approved"
-                            ? "approved"
-                            : submission.state === "denied"
-                              ? "denied"
-                              : "pending",
-                          wrSubmissionIds.has(submission.uuid) ? "wr" : "",
-                        ]}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+                        <div className="w-full flex flex-col gap-1.5 text-base">
+                          <Link
+                            href={`/players/${submission.player_uuid}`}
+                            target="_blank"
+                            className="text-muted-foreground truncate underline underline-offset-4"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {formatPlayerNameWithScore(
+                              submission.player_name,
+                              submission.player_score
+                            )}
+                          </Link>
+                          <p className="text-sm text-muted-foreground">
+                            {formatDate(submission.date)}
+                          </p>
+                        </div>
+
+                        <Badges
+                          badges={[
+                            submission.state === "approved"
+                              ? "approved"
+                              : submission.state === "denied"
+                                ? "denied"
+                                : "pending",
+                            wrSubmissionIds.has(submission.uuid) ? "wr" : "",
+                          ]}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ))}
+            </div>
+            <div ref={loadMoreRef} className="flex h-16 items-center justify-center">
+              {loadingMore ? (
+                <Spinner className="size-8 text-muted-foreground" />
+              ) : hasMore ? (
+                <p className="text-sm text-muted-foreground">Scroll to load more submissions</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">No more submissions</p>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

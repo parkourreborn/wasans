@@ -88,7 +88,7 @@ async function getWorldRecords() {
     return cachedWorldRecords
   }
 
-  worldRecordsRequest ??= fetch("/api/wrs")
+  worldRecordsRequest ??= fetch("/api/wrs", { cache: "force-cache" })
     .then(async (response) => {
       const json = (await response.json()) as ListResponse<WorldRecordValue>
 

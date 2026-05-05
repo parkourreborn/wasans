@@ -1,7 +1,13 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { canModerate, getAuthUser } from "@/lib/server/auth"
 import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
+import { refreshPlayerPb } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
+import {
+  queueApprovedHighScoreRuns,
+  queueWorldRecordRun,
+  updateDiscordUsernameOnScoreChange,
+} from "@/lib/server/notifications"
 
 export async function GET(_: Request, { params }: { params: Promise<{ uuid: string }> }) {
   const { env } = await getCloudflareContext({ async: true })
@@ -106,8 +112,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     .bind(state, denyReason, uuid)
     .run()
 
+  await refreshPlayerPb(env.wasans, submission.player_uuid, submission.trial_name)
   await refreshWorldRecords(env.wasans, submission.trial_name)
-  await refreshAllPlayerScores(env.wasans)
+  await refreshPlayerScore(env.wasans, submission.player_uuid)
+  await updateDiscordUsernameOnScoreChange(submission.player_uuid)
 
   const { results } = await env.wasans.prepare(
     `SELECT submissions.*, players.score as player_score
@@ -116,7 +124,42 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
      WHERE submissions.uuid = ?`
   )
     .bind(uuid)
-    .run()
+    .all()
+
+  const updatedSubmission = results?.[0]
+
+  if (state === "approved" && updatedSubmission?.player_score > 0.3) {
+    await queueApprovedHighScoreRuns([
+      {
+        submission_uuid: updatedSubmission.uuid,
+        player_uuid: updatedSubmission.player_uuid,
+        player_name: updatedSubmission.player_name,
+        trial_name: updatedSubmission.trial_name,
+        time: Number(updatedSubmission.time),
+        player_score: Number(updatedSubmission.player_score),
+      },
+    ])
+
+    const wrRow = await env.wasans.prepare(
+      `SELECT submission_uuid, player_uuid, player_name, trial_name, time, date
+       FROM wrs
+       WHERE trial_name = ?`
+    )
+      .bind(submission.trial_name)
+      .first<{
+        submission_uuid: string
+        player_uuid: string
+        player_name: string
+        trial_name: string
+        time: number
+        date: string
+      }>()
+
+    if (wrRow?.submission_uuid === uuid) {
+      await queueWorldRecordRun(wrRow)
+      await refreshAllPlayerScores(env.wasans)
+    }
+  }
 
   return Response.json({ results })
 }

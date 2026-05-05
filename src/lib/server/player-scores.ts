@@ -21,13 +21,12 @@ type PlayerRow = {
 }
 
 export async function refreshPlayerScore(db: D1Database, playerUuid: string) {
-  const [{ results: trialRows }, { results: bestRows }, { results: wrRows }] = await Promise.all([
+  const [{ results: trialRows }, { results: pbsRows }, { results: wrRows }] = await Promise.all([
     db.prepare(`SELECT name FROM trials`).all<TrialRow>(),
     db.prepare(
-      `SELECT trial_name, MIN(time) as time
-       FROM submissions
-       WHERE player_uuid = ? AND state = 'approved'
-       GROUP BY trial_name`
+      `SELECT trial_name, time
+       FROM pbs
+       WHERE player_uuid = ?`
     )
       .bind(playerUuid)
       .all<BestSubmissionRow>(),
@@ -35,6 +34,21 @@ export async function refreshPlayerScore(db: D1Database, playerUuid: string) {
   ])
 
   const trialCount = trialRows.length
+  let bestRows: BestSubmissionRow[] = pbsRows || []
+
+  if (!bestRows.length) {
+    const { results: submissionBestRows } = await db.prepare(
+      `SELECT trial_name, MIN(time) as time
+       FROM submissions
+       WHERE player_uuid = ?
+         AND state = 'approved'
+       GROUP BY trial_name`
+    )
+      .bind(playerUuid)
+      .all<BestSubmissionRow>()
+
+    bestRows = submissionBestRows || []
+  }
 
   if (trialCount === 0) {
     await db.prepare(`UPDATE players SET score = ? WHERE uuid = ?`).bind(0, playerUuid).run()

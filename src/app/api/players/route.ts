@@ -1,5 +1,9 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
+const cacheHeaders = {
+  "cache-control": "max-age=10, stale-while-revalidate=30",
+}
+
 export async function GET() {
   const { env } = await getCloudflareContext({ async: true })
 
@@ -11,8 +15,14 @@ export async function GET() {
   }
 
   const { results } = await env.wasans.prepare(
-    `SELECT * FROM players`
+    `SELECT * FROM players ORDER BY score DESC, player_name ASC`
   ).all()
 
-  return Response.json({ results })
+  return new Response(JSON.stringify({ results }), {
+    status: 200,
+    headers: {
+      ...cacheHeaders,
+      "content-type": "application/json",
+    },
+  })
 }

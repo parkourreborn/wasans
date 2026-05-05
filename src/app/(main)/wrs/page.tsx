@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
@@ -50,6 +51,7 @@ function formatDate(timestamp: string) {
 }
 
 export default function SubmissionsPage() {
+  const router = useRouter()
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
@@ -132,10 +134,18 @@ export default function SubmissionsPage() {
         ) : (
           <div className="submissions-grid">
             {filteredSubmissions.map((submission) => (
-              <Link
-                key={submission.trial_name}
-                href={`/submissions/${submission.submission_uuid}`}
-                className="submission-grid-item"
+              <div
+                key={submission.submission_uuid}
+                className="submission-grid-item cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => router.push(`/submissions/${submission.submission_uuid}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    router.push(`/submissions/${submission.submission_uuid}`)
+                  }
+                }}
               >
                 <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer overflow-hidden">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
@@ -151,12 +161,17 @@ export default function SubmissionsPage() {
                       </div>
 
                       <div className="w-full flex flex-col gap-1.5 text-base">
-                        <p className="text-muted-foreground truncate">
+                        <Link
+                          href={`/players/${submission.player_uuid}`}
+                          target="_blank"
+                          className="text-muted-foreground truncate underline underline-offset-4"
+                          onClick={(event) => event.stopPropagation()}
+                        >
                           {formatPlayerNameWithScore(
                             submission.player_name,
                             submission.player_score
                           )}
-                        </p>
+                        </Link>
                         <p className="text-sm text-muted-foreground">
                           {formatDate(submission.date)}
                         </p>
@@ -166,7 +181,7 @@ export default function SubmissionsPage() {
                     </div>
                   </CardContent>
                 </Card>
-              </Link>
+              </div>
             ))}
           </div>
         )}
