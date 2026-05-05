@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import Badges from "@/components/custom/badges"
+import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -139,13 +140,7 @@ export default function SubmissionsPage() {
                 <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer overflow-hidden">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
                     <div className="flex min-w-0 flex-1 items-center justify-center">
-                      <div className="aspect-video max-h-full w-full bg-muted rounded-lg overflow-hidden">
-                        <video
-                          src={`https://assets.wasans.tully.sh/scores/${submission.submission_uuid}.mp4`}
-                          className="w-full h-full object-cover"
-                          controls={false}
-                        />
-                      </div>
+                      <ScoreVideoPreview submissionUuid={submission.submission_uuid} />
                     </div>
 
                     <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
