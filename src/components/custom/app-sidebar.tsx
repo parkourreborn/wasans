@@ -220,7 +220,6 @@ export function AppSidebar() {
             )}
             <Link
                 href={discordInviteUrl}
-                target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >

@@ -273,7 +273,6 @@ export default function ComparePage() {
                         {row.playerA.submissionUuid ? (
                           <Link
                             href={`/submissions/${encodeURIComponent(row.playerA.submissionUuid)}`}
-                            target="_blank"
                             className="text-sky-600 underline underline-offset-4"
                           >
                             {row.playerA.time}
@@ -289,7 +288,6 @@ export default function ComparePage() {
                         {row.playerB.submissionUuid ? (
                           <Link
                             href={`/submissions/${encodeURIComponent(row.playerB.submissionUuid)}`}
-                            target="_blank"
                             className="text-sky-600 underline underline-offset-4"
                           >
                             {row.playerB.time}

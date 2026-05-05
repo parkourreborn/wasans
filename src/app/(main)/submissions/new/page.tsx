@@ -407,19 +407,21 @@ export default function NewSubmissionPage() {
       onSubmit={handleSubmit}
       className="mx-auto flex w-full max-w-4xl flex-col gap-4 pb-8"
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">New submission</h1>
-          <p className="text-sm text-muted-foreground">Pending review</p>
+      <div className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm py-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">New submission</h1>
+            <p className="text-sm text-muted-foreground">Pending review</p>
+          </div>
+          <Button
+            type="submit"
+            disabled={!canSubmit || submitting}
+            className="h-10 w-full sm:w-auto cursor-pointer"
+          >
+            {submitting ? <Spinner className="size-4" /> : <UploadIcon />}
+            Submit
+          </Button>
         </div>
-        <Button
-          type="submit"
-          disabled={!canSubmit || submitting}
-          className="h-10 w-full sm:w-auto cursor-pointer"
-        >
-          {submitting ? <Spinner className="size-4" /> : <UploadIcon />}
-          Submit
-        </Button>
       </div>
 
       {loadingContext && (

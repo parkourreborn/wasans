@@ -1,0 +1,1 @@
+the back button and sidebar button arent sticky, and they cover the sidebar, make sure they are always to the right of the sidebar
