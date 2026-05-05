@@ -50,7 +50,7 @@ export async function refreshPlayerScore(db: D1Database, playerUuid: string) {
       continue
     }
 
-    total += Math.min(Math.pow(wr / time, 3), 1)
+    total += Math.min(Math.pow(wr / time, 2), 1)
   }
 
   const score = Number((total / trialCount).toFixed(3))
