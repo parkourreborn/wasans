@@ -70,7 +70,7 @@ export default function SubmissionsPage() {
   useEffect(() => {
     const fetchSubmissions = async () => {
       try {
-        const response = await fetch(`/api/wrs`)
+        const response = await fetch(`/api/wrs`,{ cache: "force-cache"})
         if (!response.ok) {
           setError("Failed to load submissions")
           return

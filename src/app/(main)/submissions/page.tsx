@@ -99,7 +99,7 @@ export default function SubmissionsPage() {
       try {
         const [submissionsResponse, wrsResponse, authResponse] = await Promise.all([
           fetch(`/api/submissions`),
-          fetch(`/api/wrs`),
+          fetch(`/api/wrs`, {"cache": "force-cache"}),
           fetch(`/api/auth/me`),
         ])
 
