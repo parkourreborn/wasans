@@ -315,7 +315,7 @@ export default function Home() {
             </div>
             <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-right">
               <div className="w-full h-full text-center">
-                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Average score</p>
+                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Your score</p>
                 <p className="text-3xl font-semibold">{averageScore.toFixed(3)}</p>
               </div>
             </div>
@@ -332,7 +332,7 @@ export default function Home() {
                   <TableHead className="rounded-tl-xl px-3 py-2">District</TableHead>
                   <TableHead className="px-3 py-2">Trial</TableHead>
                   <TableHead className="px-3 py-2">WR</TableHead>
-                  <TableHead className="px-3 py-2">Your time</TableHead>
+                  <TableHead className="px-3 py-2">Time</TableHead>
                   <TableHead className="rounded-tr-xl px-3 py-2">Score</TableHead>
                 </TableRow>
               </TableHeader>
