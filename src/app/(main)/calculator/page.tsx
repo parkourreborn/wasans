@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { trials as trialNames } from "@/lib/trials";
+import { TrialName, trials as trialNames } from "@/lib/trials";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import calculateScore from "@/lib/calc-score";
 
 type Trial = {
   district: string;
@@ -58,9 +59,9 @@ const districtStyles: Record<string, string> = {
   STACK: "bg-fuchsia-600 text-white",
 };
 
-const scoreFor = (wr: number, your_time: number) => {
+const scoreFor = (wr: number, your_time: number, trial: TrialName) => {
   if (your_time < wr) return 0;
-  return Number((0.3 + 0.7 * Math.pow(wr / your_time, 3)).toFixed(3));
+  return Number(calculateScore(wr, your_time, trial).toFixed(3));
 };
 
 type WorldRecordValue = {
@@ -222,7 +223,7 @@ export default function Home() {
           district: data.district,
           wr,
           your_time_value,
-          score: isValidTime ? scoreFor(wr, your_time) : 0,
+          score: isValidTime ? scoreFor(wr, your_time, trialName) : 0,
         };
       }),
     [times, worldRecords]

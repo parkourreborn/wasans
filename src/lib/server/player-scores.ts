@@ -1,16 +1,18 @@
 import "server-only"
+import calculateScore from "../calc-score"
+import { TrialName } from "../trials"
 
 type TrialRow = {
   name: string
 }
 
 type BestSubmissionRow = {
-  trial_name: string
+  trial_name: TrialName
   time: number
 }
 
 type WorldRecordRow = {
-  trial_name: string
+  trial_name: TrialName
   time: number
 }
 
@@ -50,7 +52,7 @@ export async function refreshPlayerScore(db: D1Database, playerUuid: string) {
       continue
     }
 
-    total += Math.min(0.3 + 0.7 * Math.pow(wr / time, 3), 1)
+    total += calculateScore(wr, time, best.trial_name)
   }
 
   const score = Number((total / trialCount).toFixed(3))

@@ -25,4 +25,31 @@ export const trials = [
   "Wisp",
 ] as const
 
+export const plats = {
+  "Crystal": 10.5,
+  "Genesis": 12.5,
+  "Glass": 12.5,
+  "Riser": 10.75,
+  "Solar": 18,
+  "Vestibule": 10.5,
+  "Celsius": 12,
+  "Circulation": 14,
+  "Flow": 16.5,
+  "Martyr": 12.5,
+  "Neon Bold": 25,
+  "Sawdust": 16.5,
+  "Ascension": 12,
+  "Faith": 15,
+  "Gale": 8.25,
+  "Grip": 17,
+  "Thread": 14,
+  "Umbrel": 23,
+  "Depot": 19.5,
+  "Flame": 13.5,
+  "Ironsing": 17.5,
+  "Monoxide": 14.5,
+  "Rust Belt": 18.5,
+  "Wisp": 13,
+}
+
 export type TrialName = (typeof trials)[number]
