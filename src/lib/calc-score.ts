@@ -4,7 +4,7 @@ export default function calculateScore(wr: number, time: number, trial: TrialNam
     if (time <= plats[trial]) {
         return Math.max(
             Math.min(
-                0.3 + 0.7 * Math.pow(wr / time, 3),
+                wr / plats[trial] +  (1 - wr / plats[trial] ) * Math.pow(wr / time, 3),
             1),
         0.3);
     }
