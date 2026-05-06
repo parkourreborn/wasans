@@ -1,5 +1,5 @@
 import "server-only"
-import { getCloudflareContext } from "@opennextjs/cloudflare"
+import { getCloudflareContext } from "@opennextjs/cloudflare" 
 
 export type ApprovedHighScoreRun = {
   submission_uuid: string

@@ -399,9 +399,5 @@ export async function POST(request: Request) {
     created.push({ uuid, trial_name: trialName, proof_url: link })
   }
 
-  await refreshPlayerPbs(env.wasans, player.uuid)
-  await refreshPlayerScore(env.wasans, player.uuid)
-
-
   return Response.json({ results: created }, { status: 201 })
 }
