@@ -121,26 +121,25 @@ function formatTime(value: number) {
   return value.toFixed(3).replace(/\.?0+$/, "")
 }
 
-function uploadSubmission(
-  submission: SubmissionDraft,
+function uploadSubmissions(
+  submissions: SubmissionDraft[],
   onProgress: (progress: number, status: UploadState["status"]) => void
 ) {
   return new Promise<ListResponse<unknown>>((resolve, reject) => {
-    const formData = new FormData()
-    formData.append(
-      "submissions",
-      JSON.stringify([
-        {
-          trial_name: submission.trial_name,
-          time: submission.time,
-          proof_url: submission.proof_url.trim(),
-        },
-      ])
-    )
+    const payload = submissions.map((submission) => ({
+      trial_name: submission.trial_name,
+      time: submission.time,
+      proof_url: submission.proof_url.trim(),
+    }))
 
-    if (submission.proof_file) {
-      formData.append("proof_file_0", submission.proof_file)
-    }
+    const formData = new FormData()
+    formData.append("submissions", JSON.stringify(payload))
+
+    submissions.forEach((submission, index) => {
+      if (submission.proof_file) {
+        formData.append(`proof_file_${index}`, submission.proof_file)
+      }
+    })
 
     const request = new XMLHttpRequest()
 
@@ -184,7 +183,7 @@ function uploadSubmission(
       reject(new Error("Upload was cancelled"))
     }
 
-    onProgress(submission.proof_file ? 0 : 90, submission.proof_file ? "uploading" : "processing")
+    onProgress(submissions.some((submission) => submission.proof_file) ? 0 : 90, "uploading")
     request.open("POST", "/api/submissions")
     request.send(formData)
   })
@@ -342,37 +341,32 @@ export default function NewSubmissionPage() {
       Object.fromEntries(
         submissions.map((submission) => [
           submission.id,
-          { progress: 0, status: "idle" as const },
+          { progress: 0, status: "uploading" as const, message: "Preparing upload" },
         ])
       )
     )
 
-    let activeSubmissionId: string | null = null
-
     try {
-      for (let index = 0; index < submissions.length; index += 1) {
-        const submission = submissions[index]
-        activeSubmissionId = submission.id
-
-        updateUploadState(submission.id, {
-          progress: 0,
-          status: "uploading",
-          message: `Uploading submission ${index + 1}`,
-        })
-
-        await uploadSubmission(submission, (progress, status) => {
-          updateUploadState(submission.id, {
-            progress,
-            status,
-            message:
-              status === "processing"
-                ? "Processing submission"
-                : status === "done"
-                  ? "Uploaded"
-                  : `Uploading ${progress}%`,
-          })
-        })
-      }
+      await uploadSubmissions(submissions, (progress, status) => {
+        setUploadStates((current) =>
+          Object.fromEntries(
+            Object.entries(current).map(([id, state]) => [
+              id,
+              {
+                ...state,
+                progress,
+                status,
+                message:
+                  status === "processing"
+                    ? "Processing submissions"
+                    : status === "done"
+                    ? "Uploaded"
+                    : `Uploading ${progress}%`,
+              },
+            ])
+          )
+        )
+      })
 
       setMessage("Submitted")
       router.push("/submissions")
@@ -382,12 +376,19 @@ export default function NewSubmissionPage() {
       const message = err instanceof Error ? err.message : "Unable to create submissions"
       setError(message)
 
-      if (activeSubmissionId) {
-        updateUploadState(activeSubmissionId, {
-          status: "error",
-          message,
-        })
-      }
+      setUploadStates((current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([id, state]) => [
+            id,
+            {
+              ...state,
+              progress: 100,
+              status: "error",
+              message,
+            },
+          ])
+        )
+      )
     } finally {
       setSubmitting(false)
     }

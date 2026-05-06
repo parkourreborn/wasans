@@ -18,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PlusCircleIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -120,6 +121,10 @@ export default function SubmissionsPage() {
   const [worldRecordTimes, setWorldRecordTimes] = useState<Record<string, number>>({})
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [activeTab, setActiveTab] = useState("submissions")
+  const [players, setPlayers] = useState<Array<{ uuid: string; player_name: string; score: number }>>([])
+  const [playersLoading, setPlayersLoading] = useState(false)
+  const [playersError, setPlayersError] = useState<string | null>(null)
   const [authLabel, setAuthLabel] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [signInDialogOpen, setSignInDialogOpen] = useState(false)
@@ -136,11 +141,24 @@ export default function SubmissionsPage() {
     return submissions.filter((submission) => {
       const matchesStatus = statusFilter === "all" || submission.state === statusFilter
       const matchesSearch =
-        !normalizedQuery || submission.trial_name.toLowerCase().includes(normalizedQuery)
+        !normalizedQuery ||
+        submission.trial_name.toLowerCase().includes(normalizedQuery) ||
+        submission.player_name.toLowerCase().includes(normalizedQuery)
 
       return matchesStatus && matchesSearch
     })
   }, [searchQuery, statusFilter, submissions])
+
+  const filteredPlayers = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+
+    return players.filter((player) => {
+      return (
+        !normalizedQuery ||
+        player.player_name.toLowerCase().includes(normalizedQuery)
+      )
+    })
+  }, [searchQuery, players])
 
   useEffect(() => {
     const fetchPage = async (pageToLoad: number) => {
@@ -219,6 +237,35 @@ export default function SubmissionsPage() {
   }, [])
 
   useEffect(() => {
+    if (activeTab !== "players" || players.length > 0 || playersLoading) {
+      return
+    }
+
+    const fetchPlayers = async () => {
+      setPlayersLoading(true)
+      setPlayersError(null)
+
+      try {
+        const response = await fetch(`/api/players`, { cache: "no-store" })
+
+        if (!response.ok) {
+          throw new Error("Failed to load players")
+        }
+
+        const data = await response.json() as { results: Array<{ uuid: string; player_name: string; score: number }> }
+        setPlayers(data.results || [])
+      } catch (err) {
+        console.error(err)
+        setPlayersError("Unable to load players")
+      } finally {
+        setPlayersLoading(false)
+      }
+    }
+
+    fetchPlayers()
+  }, [activeTab, players.length, playersLoading])
+
+  useEffect(() => {
     if (loading) {
       return
     }
@@ -282,70 +329,136 @@ export default function SubmissionsPage() {
 
   return (
     <div className="flex h-full w-full flex-col gap-4">
-      <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <Input
-          type="search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Search by trial name"
-          aria-label="Search submissions by trial name"
-          className="h-10 flex-1"
-        />
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full lg:w-40">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="denied">Denied</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button
-          type="button"
-          className="h-10 w-full cursor-pointer sm:w-auto"
-          onClick={() => {
-            if (isAuthenticated) {
-              router.push("/submissions/new")
-            } else {
-              setSignInDialogOpen(true)
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="w-full max-w-md gap-2">
+            <TabsTrigger value="submissions">Submissions</TabsTrigger>
+            <TabsTrigger value="players">Players</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={
+              activeTab === "players"
+                ? "Search players by username"
+                : "Search submissions by trial or player name"
             }
-          }}
-        >
-          <PlusCircleIcon />
-          New submission
-        </Button>
-        <AlertDialog
-          open={signInDialogOpen}
-          onOpenChange={setSignInDialogOpen}
-        >
-          <AlertDialogContent size="sm">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Sign in with Discord</AlertDialogTitle>
-              <AlertDialogDescription>
-                You need to log in before creating a new submission.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction asChild>
-                <a
-                  href="/api/auth/discord/start"
-                  className="inline-flex w-full items-center justify-center"
-                >
-                  Login with Discord
-                </a>
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+            aria-label={
+              activeTab === "players"
+                ? "Search players by username"
+                : "Search submissions by trial or player name"
+            }
+            className="h-10 flex-1"
+          />
+
+          {activeTab === "submissions" ? (
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full lg:w-40">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="denied">Denied</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null}
+
+          <Button
+            type="button"
+            className="h-10 w-full cursor-pointer sm:w-auto"
+            onClick={() => {
+              if (isAuthenticated) {
+                router.push("/submissions/new")
+              } else {
+                setSignInDialogOpen(true)
+              }
+            }}
+          >
+            <PlusCircleIcon />
+            New submission
+          </Button>
+
+          <AlertDialog
+            open={signInDialogOpen}
+            onOpenChange={setSignInDialogOpen}
+          >
+            <AlertDialogContent size="sm">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Sign in with Discord</AlertDialogTitle>
+                <AlertDialogDescription>
+                  You need to log in before creating a new submission.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction asChild>
+                  <a
+                    href="/api/auth/discord/start"
+                    className="inline-flex w-full items-center justify-center"
+                  >
+                    Login with Discord
+                  </a>
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
 
       {authLabel && <p className="text-sm text-muted-foreground">Logged in as {authLabel}</p>}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {filteredSubmissions.length === 0 ? (
+        {activeTab === "players" ? (
+          playersLoading ? (
+            <div className="flex h-full w-full items-center justify-center">
+              <Spinner className="size-8 text-muted-foreground" />
+            </div>
+          ) : playersError ? (
+            <div className="flex h-full w-full items-center justify-center">
+              <p className="text-destructive">{playersError}</p>
+            </div>
+          ) : filteredPlayers.length === 0 ? (
+            <div className="flex h-full w-full items-center justify-center">
+              <p className="text-muted-foreground">
+                {players.length === 0 ? "No players available" : "No matching players"}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredPlayers.map((player) => (
+                <Card key={player.uuid} className="overflow-hidden hover:shadow-lg transition-shadow">
+                  <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/players/${player.uuid}`}
+                        className="text-lg font-semibold underline underline-offset-4"
+                      >
+                        {player.player_name}
+                      </Link>
+                      <p className="text-sm text-muted-foreground">
+                        Score {player.score.toFixed(3)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-10 w-full sm:w-auto"
+                      onClick={() => router.push(`/players/${player.uuid}`)}
+                    >
+                      View profile
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )
+        ) : filteredSubmissions.length === 0 ? (
           <div className="flex h-full w-full items-center justify-center">
             <p className="text-muted-foreground">
               {submissions.length === 0 ? "No submissions yet" : "No matching submissions"}

@@ -5,6 +5,7 @@ import { refreshPlayerPb, refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 import { insertAuditLog } from "@/lib/server/audit"
 import {
+  deleteBotThread,
   postApprovedRun,
 } from "@/lib/server/notifications"
 
@@ -39,6 +40,7 @@ type SubmissionRow = {
   state: string
   time: number
   deny_reason: string | null
+  thread_id: string | null
 }
 
 type SubmissionWithScoreRow = SubmissionRow & {
@@ -117,7 +119,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   }
 
   const submission = await env.wasans.prepare(
-    `SELECT uuid, player_uuid, trial_name, state, time, deny_reason
+    `SELECT uuid, player_uuid, trial_name, state, time, deny_reason, thread_id
      FROM submissions
      WHERE uuid = ?`
   )
@@ -127,6 +129,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   if (!submission) {
     return jsonError("Submission was not found", 404)
   }
+
+  const previousState = normalizeState(submission.state) || submission.state
 
   const updates = [] as string[]
   const bindings = [] as Array<string | number | null>
@@ -157,8 +161,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   }
   let auditAction: string = "submission_updated"
 
-  if (state && state !== submission.state) {
-    auditDetails.old_state = submission.state
+  if (state && state !== previousState) {
+    auditDetails.old_state = previousState
     auditDetails.new_state = state
     if (state === "approved") {
       auditAction = "submission_approved"
@@ -171,7 +175,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   if (time !== null && time !== submission.time) {
     auditDetails.old_time = submission.time
     auditDetails.new_time = time
-    if (!state || state === submission.state) {
+    if (!state || state === previousState) {
       auditAction = "submission_updated"
     }
   }
@@ -181,7 +185,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     details: auditDetails,
   })
 
-  // Get old player score and old PB time before updates
+  const shouldRemoveThread = previousState === "approved" && state !== "approved" && submission.thread_id
+  if (shouldRemoveThread) {
+    await deleteBotThread(submission.thread_id as string).catch(() => null)
+    await env.wasans.prepare(`UPDATE submissions SET thread_id = NULL WHERE uuid = ?`).bind(uuid).run()
+  }
+
   const oldPlayer = await env.wasans.prepare(
     `SELECT score, player_id FROM players WHERE players.uuid = ?`
   )
@@ -225,27 +234,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
       date: string
     }>()
 
-  if (wrRow?.submission_uuid === uuid || (state === "approved" && state !== submission.state && Number(updatedSubmission?.player_score) > 0.3)) {
-  
-      await postApprovedRun(
-        {
-          submission_uuid: updatedSubmission.uuid,
-          player_uuid: updatedSubmission.player_uuid,
-          player_name: updatedSubmission.player_name,
-          trial_name: updatedSubmission.trial_name,
-          time: Number(updatedSubmission.time),
-          player_score: Number(updatedSubmission.player_score),
-          oldPlayerScore: oldPlayer?.score,
-          oldTime: oldPb?.time,
-          discordUserId: String(oldPlayer?.player_id),
-          is_wr: wrRow?.submission_uuid === uuid
-        },
-      )
-      
-      if (wrRow?.submission_uuid === uuid) {
-        await refreshAllPlayerScores(env.wasans)
-      }
+  if (wrRow?.submission_uuid === uuid || (state === "approved" && state !== previousState && Number(updatedSubmission?.player_score) > 0.3)) {
+    const { threadId } = await postApprovedRun({
+      submission_uuid: updatedSubmission.uuid,
+      player_uuid: updatedSubmission.player_uuid,
+      player_name: updatedSubmission.player_name,
+      trial_name: updatedSubmission.trial_name,
+      time: Number(updatedSubmission.time),
+      player_score: Number(updatedSubmission.player_score),
+      oldPlayerScore: oldPlayer?.score,
+      oldTime: oldPb?.time,
+      discordUserId: String(oldPlayer?.player_id),
+      is_wr: wrRow?.submission_uuid === uuid,
+    })
 
+    if (threadId) {
+      await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
+    }
+
+    if (wrRow?.submission_uuid === uuid) {
+      await refreshAllPlayerScores(env.wasans)
+    }
   }
 
   return Response.json({ results })
@@ -266,7 +275,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
   }
 
   const submission = await env.wasans.prepare(
-    `SELECT uuid, player_uuid, trial_name FROM submissions WHERE uuid = ?`
+    `SELECT uuid, player_uuid, trial_name, thread_id FROM submissions WHERE uuid = ?`
   )
     .bind(uuid)
     .first<SubmissionRow>()
@@ -285,6 +294,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
       trial_name: submission.trial_name,
     },
   })
+
+  if (submission.thread_id) {
+    await deleteBotThread(submission.thread_id).catch(() => null)
+  }
 
   await env.wasans.prepare(`DELETE FROM wrs WHERE submission_uuid = ?`)
     .bind(uuid)
