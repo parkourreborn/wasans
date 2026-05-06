@@ -82,6 +82,8 @@ CREATE TABLE submissions (
   date TEXT NOT NULL,
   moderator_note TEXT,
 
+  moderator_username TEXT,
+
   thread_id TEXT DEFAULT NULL,
 
   state TEXT NOT NULL DEFAULT 'pending'
