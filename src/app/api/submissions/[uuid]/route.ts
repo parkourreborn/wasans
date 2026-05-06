@@ -210,22 +210,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     .all<SubmissionWithScoreRow>()
 
   const updatedSubmission = results?.[0]
+  const wrRow = await env.wasans.prepare(
+    `SELECT submission_uuid, player_uuid, player_name, trial_name, time, date
+     FROM wrs
+     WHERE trial_name = ?`
+  )
+    .bind(submission.trial_name)
+    .first<{
+      submission_uuid: string
+      player_uuid: string
+      player_name: string
+      trial_name: string
+      time: number
+      date: string
+    }>()
 
-  if (state === "approved" && state !== submission.state && Number(updatedSubmission?.player_score) > 0.3) {
-    const wrRow = await env.wasans.prepare(
-      `SELECT submission_uuid, player_uuid, player_name, trial_name, time, date
-       FROM wrs
-       WHERE trial_name = ?`
-    )
-      .bind(submission.trial_name)
-      .first<{
-        submission_uuid: string
-        player_uuid: string
-        player_name: string
-        trial_name: string
-        time: number
-        date: string
-      }>()
+  if (wrRow?.submission_uuid === uuid || (state === "approved" && state !== submission.state && Number(updatedSubmission?.player_score) > 0.3)) {
   
       await postApprovedRun(
         {
