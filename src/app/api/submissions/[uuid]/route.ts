@@ -39,7 +39,7 @@ type SubmissionRow = {
   trial_name: string
   state: string
   time: number
-  deny_reason: string | null
+  moderator_note: string | null
   thread_id: string | null
 }
 
@@ -64,18 +64,18 @@ function normalizeState(value: unknown) {
   return null
 }
 
-function normalizeDenyReason(value: unknown) {
+function normalizeModeratorNote(value: unknown) {
   if (typeof value !== "string") {
     return null
   }
 
-  const denyReason = value.trim().replace(/\s+/g, " ")
+  const moderatorNote = value.trim().replace(/\s+/g, " ")
 
-  if (denyReason.length === 0 || denyReason.length > 500) {
+  if (moderatorNote.length === 0 || moderatorNote.length > 500) {
     return null
   }
 
-  return denyReason
+  return moderatorNote
 }
 
 async function scheduleSubmissionPostProcessing(
@@ -191,11 +191,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
 
   const body = await request.json().catch(() => null) as {
     state?: unknown
-    deny_reason?: unknown
+    moderator_note?: unknown
     time?: unknown
   } | null
   const state = normalizeState(body?.state)
-  const denyReason = state === "denied" ? normalizeDenyReason(body?.deny_reason) : null
+  const moderatorNote = normalizeModeratorNote(body?.moderator_note)
   const rawTime = body?.time
   const time = typeof rawTime === "string" && /^[0-9]+(\.[0-9]{1,3})?$/.test(rawTime.trim())
     ? Number(rawTime.trim())
@@ -203,12 +203,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     ? rawTime
     : null
 
-  if (!state && time === null) {
-    return jsonError("State or time must be provided")
-  }
-
-  if (state && state === "denied" && !denyReason) {
-    return jsonError("Deny reason is required and must be 500 characters or fewer")
+  if (!state && time === null && moderatorNote === null) {
+    return jsonError("State, time, or moderator note must be provided")
   }
 
   if (time !== null && time <= 0) {
@@ -216,7 +212,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   }
 
   const submission = await env.wasans.prepare(
-    `SELECT uuid, player_uuid, trial_name, state, time, deny_reason, thread_id
+    `SELECT uuid, player_uuid, trial_name, state, time, moderator_note, thread_id
      FROM submissions
      WHERE uuid = ?`
   )
@@ -235,13 +231,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   if (state) {
     updates.push("state = ?")
     bindings.push(state)
-    if (state === "denied") {
-      updates.push("deny_reason = ?")
-      bindings.push(denyReason)
-    } else {
-      updates.push("deny_reason = ?")
-      bindings.push(null)
-    }
+  }
+
+  if (moderatorNote !== null) {
+    updates.push("moderator_note = ?")
+    bindings.push(moderatorNote)
   }
 
   if (time !== null) {
@@ -265,8 +259,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
       auditAction = "submission_approved"
     } else if (state === "denied") {
       auditAction = "submission_denied"
-      auditDetails.deny_reason = denyReason
     }
+  }
+
+  if (moderatorNote !== null) {
+    auditDetails.moderator_note = moderatorNote
   }
 
   if (time !== null && time !== submission.time) {

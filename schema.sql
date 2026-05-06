@@ -80,7 +80,7 @@ CREATE TABLE submissions (
 
   time REAL NOT NULL,
   date TEXT NOT NULL,
-  deny_reason TEXT,
+  moderator_note TEXT,
 
   thread_id TEXT DEFAULT NULL,
 

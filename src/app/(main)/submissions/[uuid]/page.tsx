@@ -40,7 +40,7 @@ type SubmissionValue = {
   time: number | string
   date: string
   state: string
-  deny_reason?: string | null
+  moderator_note?: string | null
 }
 
 type SubmissionResponse = {
@@ -143,7 +143,8 @@ export default function Home() {
   const [submission, setSubmission] = useState<SubmissionValue | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [denyReason, setDenyReason] = useState("")
+  const [moderatorNote, setModeratorNote] = useState("")
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false)
   const [denyDialogOpen, setDenyDialogOpen] = useState(false)
   const [editTimeDialogOpen, setEditTimeDialogOpen] = useState(false)
   const [editTimeValue, setEditTimeValue] = useState("")
@@ -209,7 +210,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           state,
-          ...(state === "denied" ? { deny_reason: reason } : {}),
+          ...(state === "denied" && reason ? { moderator_note: reason } : {}),
         }),
       })
       const json = (await response.json().catch(() => null)) as SubmissionResponse & { error?: string } | null
@@ -222,7 +223,7 @@ export default function Home() {
       setSubmission(json?.results?.[0] ?? null)
       if (state === "denied") {
         setDenyDialogOpen(false)
-        setDenyReason("")
+        setModeratorNote("")
       }
     } catch (err) {
       console.error(err)
@@ -232,9 +233,47 @@ export default function Home() {
     }
   }
 
+  const updateModeratorNote = async (note: string) => {
+    setSaving(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/submissions/${uuid}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          ...(authHeaders || {}),
+        },
+        body: JSON.stringify({
+          moderator_note: note,
+        }),
+      })
+      const json = (await response.json().catch(() => null)) as SubmissionResponse & { error?: string } | null
+
+      if (!response.ok) {
+        setError(json?.error || "Unable to update submission")
+        return
+      }
+
+      setSubmission(json?.results?.[0] ?? null)
+      setNoteDialogOpen(false)
+      setModeratorNote("")
+    } catch (err) {
+      console.error(err)
+      setError("Unable to update submission")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const openDenyDialog = () => {
-    setDenyReason(submission?.deny_reason || "")
+    setModeratorNote(submission?.moderator_note || "")
     setDenyDialogOpen(true)
+  }
+
+  const openNoteDialog = () => {
+    setModeratorNote(submission?.moderator_note || "")
+    setNoteDialogOpen(true)
   }
 
   const openEditTimeDialog = () => {
@@ -245,7 +284,12 @@ export default function Home() {
 
   const submitDenyReason = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
-    updateState("denied", denyReason)
+    updateState("denied", moderatorNote)
+  }
+
+  const submitModeratorNote = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    updateModeratorNote(moderatorNote)
   }
 
   const submitEditTime = async (event: MouseEvent<HTMLButtonElement>) => {
@@ -353,7 +397,7 @@ export default function Home() {
   }
 
   const { player_name, trial_name, date, time: rawTimeValue, state } = submission
-  const storedDenyReason = submission.deny_reason?.trim()
+  const storedModeratorNote = submission.moderator_note?.trim()
   const rawTimeString = String(rawTimeValue)
   const time = formatTime(rawTimeString)
   const formattedDate = formatDate(date)
@@ -394,9 +438,9 @@ export default function Home() {
                 <div className="flex justify-center">
                   <Badges badges={badges} />
                 </div>
-                {state === "denied" && storedDenyReason && (
-                  <p className="max-w-2xl text-sm text-destructive">
-                    Denied: {storedDenyReason}
+                {storedModeratorNote && (
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Moderator Note: {storedModeratorNote}
                   </p>
                 )}
               </div>
@@ -439,6 +483,14 @@ export default function Home() {
                       type="button"
                       variant="outline"
                       disabled={saving}
+                      onClick={openNoteDialog}
+                    >
+                      Add note
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={saving}
                       onClick={openEditTimeDialog}
                     >
                       Edit time
@@ -448,28 +500,58 @@ export default function Home() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Deny submission?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Add the reason this submission is being denied.
+                            Add a note explaining why this submission is being denied.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <Textarea
-                          value={denyReason}
-                          onChange={(event) => setDenyReason(event.target.value)}
-                          placeholder="Reason"
+                          value={moderatorNote}
+                          onChange={(event) => setModeratorNote(event.target.value)}
+                          placeholder="Reason for denial"
                           maxLength={500}
                           className="min-h-28"
                           disabled={saving}
                         />
                         <div className="text-right text-xs text-muted-foreground">
-                          {denyReason.trim().length}/500
+                          {moderatorNote.trim().length}/500
                         </div>
                         <AlertDialogFooter>
                           <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
                           <AlertDialogAction
                             variant="destructive"
-                            disabled={saving || denyReason.trim().length === 0}
+                            disabled={saving || moderatorNote.trim().length === 0}
                             onClick={submitDenyReason}
                           >
                             Deny
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                    <AlertDialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Add moderator note</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Add or update a note for this submission.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <Textarea
+                          value={moderatorNote}
+                          onChange={(event) => setModeratorNote(event.target.value)}
+                          placeholder="Moderator note"
+                          maxLength={500}
+                          className="min-h-28"
+                          disabled={saving}
+                        />
+                        <div className="text-right text-xs text-muted-foreground">
+                          {moderatorNote.trim().length}/500
+                        </div>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            disabled={saving}
+                            onClick={submitModeratorNote}
+                          >
+                            Save note
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
