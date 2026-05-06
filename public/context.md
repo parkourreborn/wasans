@@ -40,7 +40,7 @@ The SQL schema is defined in `schema.sql`. Key tables are:
 - `trials`
   - defines a fixed set of trial names used in submissions
 - `submissions`
-  - records runs with `uuid`, `player_uuid`, `trial_name`, `player_name`, `time`, `date`, `deny_reason`, and approval `state`
+  - records runs with `uuid`, `player_uuid`, `trial_name`, `player_name`, `time`, `date`, `moderator_note`, and approval `state`
 - `wrs`
   - caches current world record submission per trial for fast lookup
 - `pbs`
