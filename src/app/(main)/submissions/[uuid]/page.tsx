@@ -41,6 +41,7 @@ type SubmissionValue = {
   date: string
   state: string
   moderator_note?: string | null
+  moderator_username?: string | null
 }
 
 type SubmissionResponse = {
@@ -396,7 +397,7 @@ export default function Home() {
     )
   }
 
-  const { player_name, trial_name, date, time: rawTimeValue, state } = submission
+  const { player_name, trial_name, date, time: rawTimeValue, state, moderator_username } = submission
   const storedModeratorNote = submission.moderator_note?.trim()
   const rawTimeString = String(rawTimeValue)
   const time = formatTime(rawTimeString)
@@ -434,6 +435,12 @@ export default function Home() {
                   </Link>
                   <Separator orientation="vertical" className="hidden h-5 sm:block" />
                   <p className="text-muted-foreground">{formattedDate}</p>
+                  {moderator_username && (
+                    <>
+                      <Separator orientation="vertical" className="hidden h-5 sm:block" />
+                      <p className="text-muted-foreground">Moderated by {moderator_username}</p>
+                    </>
+                  )}
                 </div>
                 <div className="flex justify-center">
                   <Badges badges={badges} />

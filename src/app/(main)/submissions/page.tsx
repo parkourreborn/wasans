@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,6 +35,8 @@ type Submission = {
   time: number
   date: string
   state: string
+  moderator_note?: string | null
+  moderator_username?: string | null
 }
 
 type WorldRecord = {
@@ -483,8 +485,9 @@ export default function SubmissionsPage() {
                 >
                   <Card className="h-full hover:shadow-lg transition-shadow overflow-hidden">
                     <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                      <div className="flex min-w-0 flex-1 items-center justify-center">
+                      <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
                         <ScoreVideoPreview submissionUuid={submission.uuid} />
+                        
                       </div>
 
                       <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
@@ -515,18 +518,33 @@ export default function SubmissionsPage() {
                           </p>
                         </div>
 
-                        <Badges
-                          badges={[
-                            submission.state === "approved"
-                              ? "approved"
-                              : submission.state === "denied"
-                                ? "denied"
-                                : "pending",
-                            wrSubmissionIds.has(submission.uuid) ? "wr" : "",
-                          ]}
-                        />
+                        <div className="flex items-end justify-between">
+                          <Badges
+                            badges={[
+                              submission.state === "approved"
+                                ? "approved"
+                                : submission.state === "denied"
+                                  ? "denied"
+                                  : "pending",
+                              wrSubmissionIds.has(submission.uuid) ? "wr" : "",
+                            ]}
+                          />
+                          
+                        </div>
                       </div>
                     </CardContent>
+                    <CardFooter>
+                      <div className="w-full flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground max-w-full break-words text-center">
+                          Moderator Note: {submission.moderator_note}
+                        </p>
+                      {submission.moderator_username && (
+                        <p className="text-xs text-muted-foreground">
+                          Mod: {submission.moderator_username}
+                        </p>
+                      )}
+                      </div>
+                    </CardFooter>
                   </Card>
                 </div>
               ))}

@@ -40,6 +40,7 @@ type SubmissionRow = {
   state: string
   time: number
   moderator_note: string | null
+  moderator_username: string | null
   thread_id: string | null
 }
 
@@ -243,9 +244,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     bindings.push(time)
   }
 
-  await env.wasans.prepare(`UPDATE submissions SET ${updates.join(", ")} WHERE uuid = ?`)
-    .bind(...bindings, uuid)
-    .run()
+  // Always update moderator_username when a moderator makes changes
+  if (updates.length > 0 && user) {
+    updates.push("moderator_username = ?")
+    bindings.push(user.player_name)
+  }
+
+  if (updates.length > 0) {
+    await env.wasans.prepare(`UPDATE submissions SET ${updates.join(", ")} WHERE uuid = ?`)
+      .bind(...bindings, uuid)
+      .run()
+  }
 
   const auditDetails: Record<string, unknown> = {
     trial_name: submission.trial_name,
