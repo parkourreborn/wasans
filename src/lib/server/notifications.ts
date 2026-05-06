@@ -56,10 +56,18 @@ async function sendBotApiRequest(
     body: JSON.stringify(body),
   })
 
-  const json = await response.json().catch(() => ({})) as BotApiResponse
+  const text = await response.text().catch(() => "")
+  let json: BotApiResponse = {}
+
+  try {
+    json = JSON.parse(text || "{}") as BotApiResponse
+  } catch {
+    // ignore invalid JSON and preserve raw text
+  }
 
   if (!response.ok) {
-    throw new Error(json.error || `Bot API request failed: ${endpoint}`)
+    const errorMessage = json.error || text || `Bot API request failed: ${endpoint}`
+    throw new Error(`${errorMessage} (status: ${response.status})`)
   }
 
   return json
@@ -120,7 +128,7 @@ export async function postApprovedRun(run: ApprovedHighScoreRun) {
       `https://wasans.tully.sh/submissions/${run.submission_uuid}`,
     ]
       .filter(Boolean)
-      .join("\n\n")
+      .join("\n")
 
     const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
     const threadContent = announcementMessage
@@ -154,11 +162,15 @@ export async function updateDiscordUsernameOnScoreChange(playerUuid: string) {
   const score = row.score
   const playerName = row.player_name
 
-  sendBotApiRequest("/set-nick",{
-    guild_id: GUILD_ID,
-    user_id: playerId,
-    nick: `${playerName} (${score.toFixed(3)})`
-  })
+  try {
+    await sendBotApiRequest("/set-nick", {
+      guild_id: GUILD_ID,
+      user_id: playerId,
+      nick: `${playerName} (${score.toFixed(3)})`,
+    })
+  } catch (error) {
+    console.error("Failed to update Discord username on score change:", error)
+  }
   // // TODO: update the Discord username cache when a player's score changes.
   // console.debug("updateDiscordUsernameOnScoreChange", { playerUuid, playerId, score })
 }

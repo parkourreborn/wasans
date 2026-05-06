@@ -78,8 +78,105 @@ function normalizeDenyReason(value: unknown) {
   return denyReason
 }
 
+async function scheduleSubmissionPostProcessing(
+  ctx: ExecutionContext,
+  env: any,
+  submission: SubmissionRow,
+  state: string | null,
+  previousState: string,
+  user: any,
+  oldPlayer: { score: number; player_id: number } | null,
+  oldPb: { time: number } | null,
+  uuid: string
+) {
+  ctx.waitUntil((async () => {
+    try {
+      await refreshPlayerPbs(env.wasans, submission.player_uuid)
+      await refreshWorldRecords(env.wasans, submission.trial_name, user)
+      await refreshPlayerScore(env.wasans, submission.player_uuid)
+
+      const db = env.wasans as any
+      const { results } = await db.prepare(
+        `SELECT submissions.*, players.score as player_score
+         FROM submissions
+         LEFT JOIN players ON players.uuid = submissions.player_uuid
+         WHERE submissions.uuid = ?`
+      )
+        .bind(uuid)
+        .all()
+
+      const updatedSubmission = results?.[0] as SubmissionWithScoreRow | undefined
+      if (!updatedSubmission) {
+        return
+      }
+
+      const wrRow = await db.prepare(
+        `SELECT submission_uuid, player_uuid, player_name, trial_name, time, date
+         FROM wrs
+         WHERE trial_name = ?`
+      )
+        .bind(submission.trial_name)
+        .first()
+
+      const shouldCreateThread =
+        wrRow?.submission_uuid === uuid ||
+        (state === "approved" && state !== previousState && Number(updatedSubmission?.player_score) > 0.3)
+
+      if (!shouldCreateThread) {
+        return
+      }
+
+      const { threadId } = await postApprovedRun({
+        submission_uuid: updatedSubmission.uuid,
+        player_uuid: updatedSubmission.player_uuid,
+        player_name: updatedSubmission.player_name,
+        trial_name: updatedSubmission.trial_name,
+        time: Number(updatedSubmission.time),
+        player_score: Number(updatedSubmission.player_score),
+        oldPlayerScore: oldPlayer?.score,
+        oldTime: oldPb?.time,
+        discordUserId: String(oldPlayer?.player_id),
+        is_wr: wrRow?.submission_uuid === uuid,
+      })
+
+      if (threadId) {
+        await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
+      }
+
+      if (wrRow?.submission_uuid === uuid) {
+        await refreshAllPlayerScores(env.wasans)
+      }
+    } catch (error) {
+      console.error("Background submission post-processing failed:", error)
+    }
+  })())
+}
+
+async function scheduleSubmissionDeletePostProcessing(
+  ctx: ExecutionContext,
+  env: any,
+  submission: SubmissionRow,
+  isWr: boolean,
+  wrTrialName: string | null,
+  user: any
+) {
+  ctx.waitUntil((async () => {
+    try {
+      await refreshPlayerPbs(env.wasans, submission.player_uuid)
+      if (isWr && wrTrialName) {
+        await refreshWorldRecords(env.wasans, wrTrialName, user)
+        await refreshAllPlayerScores(env.wasans)
+      } else {
+        await refreshPlayerScore(env.wasans, submission.player_uuid)
+      }
+    } catch (error) {
+      console.error("Background submission delete post-processing failed:", error)
+    }
+  })())
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ uuid: string }> }) {
-  const { env } = await getCloudflareContext({ async: true })
+  const { env, ctx } = await getCloudflareContext({ async: true })
   const { uuid } = await params
 
   if (!env?.wasans) {
@@ -187,7 +284,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
 
   const shouldRemoveThread = previousState === "approved" && state !== "approved" && submission.thread_id
   if (shouldRemoveThread) {
-    await deleteBotThread(submission.thread_id as string).catch(() => null)
+    const threadId = submission.thread_id as string
+    ctx.waitUntil((async () => {
+      await deleteBotThread(threadId).catch(() => null)
+    })())
     await env.wasans.prepare(`UPDATE submissions SET thread_id = NULL WHERE uuid = ?`).bind(uuid).run()
   }
 
@@ -203,11 +303,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     .bind(submission.player_uuid, submission.trial_name)
     .first<{ time: number }>()
 
-
-    // MARK: To Refactor
-  await refreshPlayerPbs(env.wasans, submission.player_uuid)
-  await refreshWorldRecords(env.wasans, submission.trial_name, user)
-  await refreshPlayerScore(env.wasans, submission.player_uuid)
+  scheduleSubmissionPostProcessing(ctx, env, submission, state, previousState, user, oldPlayer, oldPb, uuid)
 
   const { results } = await env.wasans.prepare(
     `SELECT submissions.*, players.score as player_score
@@ -218,50 +314,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     .bind(uuid)
     .all<SubmissionWithScoreRow>()
 
-  const updatedSubmission = results?.[0]
-  const wrRow = await env.wasans.prepare(
-    `SELECT submission_uuid, player_uuid, player_name, trial_name, time, date
-     FROM wrs
-     WHERE trial_name = ?`
-  )
-    .bind(submission.trial_name)
-    .first<{
-      submission_uuid: string
-      player_uuid: string
-      player_name: string
-      trial_name: string
-      time: number
-      date: string
-    }>()
-
-  if (wrRow?.submission_uuid === uuid || (state === "approved" && state !== previousState && Number(updatedSubmission?.player_score) > 0.3)) {
-    const { threadId } = await postApprovedRun({
-      submission_uuid: updatedSubmission.uuid,
-      player_uuid: updatedSubmission.player_uuid,
-      player_name: updatedSubmission.player_name,
-      trial_name: updatedSubmission.trial_name,
-      time: Number(updatedSubmission.time),
-      player_score: Number(updatedSubmission.player_score),
-      oldPlayerScore: oldPlayer?.score,
-      oldTime: oldPb?.time,
-      discordUserId: String(oldPlayer?.player_id),
-      is_wr: wrRow?.submission_uuid === uuid,
-    })
-
-    if (threadId) {
-      await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
-    }
-
-    if (wrRow?.submission_uuid === uuid) {
-      await refreshAllPlayerScores(env.wasans)
-    }
-  }
-
   return Response.json({ results })
 }
 
+type SubmissionDeleteRow = SubmissionRow & {
+  wr_trial: string | null
+}
+
 export async function DELETE(request: Request, { params }: { params: Promise<{ uuid: string }> }) {
-  const { env } = await getCloudflareContext({ async: true })
+  const { env, ctx } = await getCloudflareContext({ async: true })
   const { uuid } = await params
 
   if (!env?.wasans) {
@@ -275,10 +336,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
   }
 
   const submission = await env.wasans.prepare(
-    `SELECT uuid, player_uuid, trial_name, thread_id FROM submissions WHERE uuid = ?`
+    `SELECT s.uuid, s.player_uuid, s.trial_name, s.thread_id, w.trial_name AS wr_trial
+     FROM submissions s
+     LEFT JOIN wrs w ON w.submission_uuid = s.uuid
+     WHERE s.uuid = ?`
   )
     .bind(uuid)
-    .first<SubmissionRow>()
+    .first<SubmissionDeleteRow>()
 
   if (!submission) {
     return jsonError("Submission was not found", 404)
@@ -296,22 +360,26 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
   })
 
   if (submission.thread_id) {
-    await deleteBotThread(submission.thread_id).catch(() => null)
+    ctx.waitUntil((async () => {
+      await deleteBotThread(submission.thread_id as string).catch(() => null)
+    })())
   }
 
-  await env.wasans.prepare(`DELETE FROM wrs WHERE submission_uuid = ?`)
-    .bind(uuid)
-    .run()
-  await env.wasans.prepare(`DELETE FROM submissions WHERE uuid = ?`)
-    .bind(uuid)
-    .run()
+  const session = env.wasans.withSession('first-primary')
+  await session.batch([
+    session.prepare(`DELETE FROM wrs WHERE submission_uuid = ?`).bind(uuid),
+    session.prepare(`DELETE FROM pbs WHERE submission_uuid = ?`).bind(uuid),
+    session.prepare(`DELETE FROM submissions WHERE uuid = ?`).bind(uuid),
+  ])
 
   if (env.SUBMISSION_VIDEOS) {
-    await env.SUBMISSION_VIDEOS.delete(`scores/${uuid}.mp4`)
+    ctx.waitUntil(env.SUBMISSION_VIDEOS.delete(`scores/${uuid}.mp4`))
   }
 
-  await refreshWorldRecords(env.wasans, submission.trial_name, user)
-  await refreshAllPlayerScores(env.wasans)
+  const isWr = submission.wr_trial !== null
+  const wrTrialName = submission.wr_trial
+
+  scheduleSubmissionDeletePostProcessing(ctx, env, submission, isWr, wrTrialName, user)
 
   return Response.json({ ok: true })
 }

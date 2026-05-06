@@ -60,6 +60,30 @@ function formatPlayerTimes(submissions: Array<{ uuid: string; trial_name: string
   }
 }
 
+function timeIndicatorClass(time: number, otherTime: number) {
+  if (!Number.isFinite(time) || time <= 0) {
+    return "text-muted-foreground"
+  }
+
+  if (!Number.isFinite(otherTime) || otherTime <= 0) {
+    return "text-foreground"
+  }
+
+  if (time === otherTime) {
+    return "text-muted-foreground"
+  }
+
+  return time < otherTime ? "text-emerald-600 font-semibold" : "text-destructive"
+}
+
+function timeIndicatorDotClass(time: number, otherTime: number) {
+  if (!Number.isFinite(time) || time <= 0 || !Number.isFinite(otherTime) || otherTime <= 0 || time === otherTime) {
+    return "bg-muted"
+  }
+
+  return time < otherTime ? "bg-emerald-600" : "bg-destructive"
+}
+
 type PlayerItem = {
   uuid: string
   player_name: string
@@ -273,12 +297,28 @@ export default function ComparePage() {
                         {row.playerA.submissionUuid ? (
                           <Link
                             href={`/submissions/${encodeURIComponent(row.playerA.submissionUuid)}`}
-                            className="text-sky-600 underline underline-offset-4"
+                            className={`inline-flex items-center gap-2 ${timeIndicatorClass(
+                              Number(row.playerA.time),
+                              Number(row.playerB.time)
+                            )} underline underline-offset-4`}
                           >
+                            <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
+                              Number(row.playerA.time),
+                              Number(row.playerB.time)
+                            )}`} />
                             {row.playerA.time}
                           </Link>
                         ) : (
-                          <p>{row.playerA.time}</p>
+                          <p className={`inline-flex items-center gap-2 ${timeIndicatorClass(
+                            Number(row.playerA.time),
+                            Number(row.playerB.time)
+                          )}`}>
+                            <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
+                              Number(row.playerA.time),
+                              Number(row.playerB.time)
+                            )}`} />
+                            {row.playerA.time}
+                          </p>
                         )}
                         <p className="text-sm text-muted-foreground">Score {row.playerA.score.toFixed(3)}</p>
                       </div>
@@ -288,12 +328,28 @@ export default function ComparePage() {
                         {row.playerB.submissionUuid ? (
                           <Link
                             href={`/submissions/${encodeURIComponent(row.playerB.submissionUuid)}`}
-                            className="text-sky-600 underline underline-offset-4"
+                            className={`inline-flex items-center gap-2 ${timeIndicatorClass(
+                              Number(row.playerB.time),
+                              Number(row.playerA.time)
+                            )} underline underline-offset-4`}
                           >
+                            <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
+                              Number(row.playerB.time),
+                              Number(row.playerA.time)
+                            )}`} />
                             {row.playerB.time}
                           </Link>
                         ) : (
-                          <p>{row.playerB.time}</p>
+                          <p className={`inline-flex items-center gap-2 ${timeIndicatorClass(
+                            Number(row.playerB.time),
+                            Number(row.playerA.time)
+                          )}`}>
+                            <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
+                              Number(row.playerB.time),
+                              Number(row.playerA.time)
+                            )}`} />
+                            {row.playerB.time}
+                          </p>
                         )}
                         <p className="text-sm text-muted-foreground">Score {row.playerB.score.toFixed(3)}</p>
                       </div>
