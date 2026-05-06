@@ -34,8 +34,8 @@ type BotApiError = {
 }
 
 async function getBotApiKey(): Promise<string> {
-  // const { env } = await getCloudflareContext({ async: true })
-  const botApiKey = "NuL0NJkMn2FejwAty8aFK1qghK3qkVUQMMMmUEPAd5ajrbAe0dM5cfm274zttYQw"
+  
+  const botApiKey = process.env.botApiKey
   if (!botApiKey) {
     throw new Error("botApiKey environment variable is not configured")
   }
