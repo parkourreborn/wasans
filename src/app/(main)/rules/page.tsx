@@ -5,6 +5,7 @@ const runRules = [
   "Autoparkour and autotransition are not allowed and automatically invalidate a run.",
   "The proof must show the start of the time trial, including the click sound moment, and the endpoint being reached.",
   "The timer, player username, and game version must be visible enough for moderators to verify the run.",
+  "After completing a run, you must either show the bottom of your console with Shift + F9 or exit the trial and show the final time",
   "PC players must show FPS with Shift + F5 for the full run. Console players are exempt because they cannot unlock FPS.",
   "If you are permanently banned from the game, you are not eligible to submit member runs. This follows the main game rules.",
   "Alternative accounts are allowed unless you are banned from the game, because that counts as ban evasion.",
