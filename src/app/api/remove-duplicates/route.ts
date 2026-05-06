@@ -16,7 +16,7 @@ function jsonError(message: string, status = 400) {
   return Response.json({ error: message }, { status })
 }
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   const { env } = await getCloudflareContext({ async: true })
 
   if (!env?.wasans) {
