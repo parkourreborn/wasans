@@ -153,7 +153,7 @@ export function AppSidebar() {
                             <Link href="/submissions">
                                 <div className="flex items-center gap-2">
                                     <TimerIcon />
-                                    <span>Submissions</span>
+                                    <span>Search</span>
                                 </div>
                             </Link>
                         </SidebarMenuButton>

@@ -13,19 +13,16 @@ export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
   useEffect(() => {
     const container = containerRef.current
 
-    if (!container || shouldLoad) {
+    if (!container) {
       return
     }
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
-          setShouldLoad(true)
-          observer.disconnect()
-        }
+        setShouldLoad(entry.isIntersecting)
       },
       {
-        rootMargin: "600px",
+        rootMargin: "200px",
       }
     )
 
@@ -34,7 +31,7 @@ export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
     return () => {
       observer.disconnect()
     }
-  }, [shouldLoad])
+  }, [])
 
   return (
     <div ref={containerRef} className="aspect-video max-h-full w-full overflow-hidden rounded-lg bg-muted">

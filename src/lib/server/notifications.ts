@@ -25,16 +25,10 @@ export type WorldRecordRun = {
 
 // Discord bot API configuration
 const GUILD_ID = "1257994787512913961"
-const ANNOUNCEMENT_CHANNEL_ID = "1258680561929814066"
 const THREAD_CHANNEL_ID = "1351374148881874944"
 const BOT_API_BASE = "https://bot.wasans.tully.sh"
 
-type BotApiError = {
-  error: string
-}
-
 async function getBotApiKey(): Promise<string> {
-  
   const botApiKey = process.env.botApiKey
   if (!botApiKey) {
     throw new Error("botApiKey environment variable is not configured")
@@ -42,10 +36,16 @@ async function getBotApiKey(): Promise<string> {
   return botApiKey
 }
 
+type BotApiResponse = {
+  error?: string
+  thread_id?: string
+  id?: string
+}
+
 async function sendBotApiRequest(
   endpoint: string,
   body: Record<string, unknown>
-): Promise<Response> {
+): Promise<BotApiResponse> {
   const apiKey = await getBotApiKey()
   const response = await fetch(`${BOT_API_BASE}${endpoint}`, {
     method: "POST",
@@ -55,21 +55,14 @@ async function sendBotApiRequest(
     },
     body: JSON.stringify(body),
   })
-  return response
-}
 
-async function sendBotMessage(content: string, channelId: string): Promise<boolean> {
-  try {
-    const response = await sendBotApiRequest("/send-message", {
-      channel_id: channelId,
-      content,
-      guild_id: GUILD_ID,
-    })
-    return response.ok
-  } catch (error) {
-    console.error("Failed to send bot message:", error)
-    return false
+  const json = await response.json().catch(() => ({})) as BotApiResponse
+
+  if (!response.ok) {
+    throw new Error(json.error || `Bot API request failed: ${endpoint}`)
   }
+
+  return json
 }
 
 async function createBotThread(
@@ -77,66 +70,71 @@ async function createBotThread(
   title: string,
   content: string,
   tags: string[]
-): Promise<boolean> {
+): Promise<string | null> {
   try {
-    const response = await sendBotApiRequest("/create-thread", {
+    const json = await sendBotApiRequest("/create-thread", {
       channel_id: channelId,
       title,
       content,
       guild_id: GUILD_ID,
-      tags
+      tags,
     })
-    return response.ok
+
+    return typeof json.thread_id === "string"
+      ? json.thread_id
+      : typeof json.id === "string"
+      ? json.id
+      : null
   } catch (error) {
     console.error("Failed to create bot thread:", error)
+    return null
+  }
+}
+
+export async function deleteBotThread(threadId: string): Promise<boolean> {
+  try {
+    await sendBotApiRequest("/delete-thread", {
+      thread_id: threadId,
+      channel_id: THREAD_CHANNEL_ID
+    })
+    return true
+  } catch (error) {
+    console.error("Failed to delete bot thread:", error)
     return false
   }
 }
 
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = seconds % 60
-  
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs.toFixed(3)).padStart(6, "0")}`
-  }
-  return `${minutes}:${String(secs.toFixed(3)).padStart(6, "0")}`
-}
-
 export async function postApprovedRun(run: ApprovedHighScoreRun) {
-
   try {
-    const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime : "N/A"
-    const newTimeFormatted = run.time
+    const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime.toFixed(3) : "N/A"
+    const newTimeFormatted = run.time.toFixed(3)
     const oldScoreFormatted = run.oldPlayerScore !== undefined ? run.oldPlayerScore.toFixed(3) : "N/A"
     const newScoreFormatted = run.player_score.toFixed(3)
     const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
 
-    // Send announcement message
+    const announcementMessage = [
+      run.is_wr ? "<@&1335389577883418736>" : null,
+      `**${run.trial_name} ${newTimeFormatted} | ${userMention}**`,
+      `${oldTimeFormatted} -> ${newTimeFormatted}`,
+      `*${oldScoreFormatted}* -> *${newScoreFormatted}*`,
+      `https://wasans.tully.sh/submissions/${run.submission_uuid}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n")
 
-    const announcementMessage = (run.is_wr ? "<@&1335389577883418736>\n" : "") +`
-**${run.trial_name} ${newTimeFormatted} | ${userMention}**
-
-${run.trial_name} ${oldTimeFormatted} -> ${newTimeFormatted}
-*${oldScoreFormatted}* -> *${newScoreFormatted}*
-
-https://wasans.tully.sh/submissions/${run.submission_uuid}
-`.trim()
-
-    await sendBotMessage(announcementMessage, ANNOUNCEMENT_CHANNEL_ID)
-
-    // // Create thread
     const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
-    const threadContent = `https://wasans.tully.sh/submissions/${run.submission_uuid}`
+    const threadContent = announcementMessage
 
-    const tags = ["1351581039499284521"];
+    const tags = ["1351581039499284521"]
     if (run.is_wr) {
       tags.push("1351581114841436230")
     }
-    await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent, tags)
+
+    const threadId = await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent, tags)
+    return { threadId }
   } catch (error) {
     console.error("Error queuing approved high score run:", error)
+    return { threadId: null }
   }
 }
 
