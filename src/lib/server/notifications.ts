@@ -105,8 +105,8 @@ function formatTime(seconds: number): string {
 export async function postApprovedRun(run: ApprovedHighScoreRun) {
 
   try {
-    const oldTimeFormatted = run.oldTime !== undefined ? formatTime(run.oldTime) : "N/A"
-    const newTimeFormatted = formatTime(run.time)
+    const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime : "N/A"
+    const newTimeFormatted = run.time
     const oldScoreFormatted = run.oldPlayerScore !== undefined ? run.oldPlayerScore.toFixed(3) : "N/A"
     const newScoreFormatted = run.player_score.toFixed(3)
     const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
