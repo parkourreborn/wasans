@@ -1,6 +1,7 @@
 import "server-only"
 import calculateScore from "../calc-score"
 import { TrialName } from "../trials"
+import { updateDiscordUsernameOnScoreChange } from "./notifications"
 
 type TrialRow = {
   name: string
@@ -72,6 +73,10 @@ export async function refreshPlayerScore(db: D1Database, playerUuid: string) {
   const score = Number((total / trialCount).toFixed(3))
   await db.prepare(`UPDATE players SET score = ? WHERE uuid = ?`).bind(score, playerUuid).run()
 
+  console.log(total, trialCount)
+
+  await updateDiscordUsernameOnScoreChange(playerUuid)
+  
   return score
 }
 
