@@ -3,6 +3,7 @@ import { getAuthUser } from "@/lib/server/auth"
 import { refreshPlayerScore } from "@/lib/server/player-scores"
 import { insertAuditLog } from "@/lib/server/audit"
 import { trials } from "@/lib/trials"
+import { refreshPlayerPb, refreshPlayerPbs } from "@/lib/server/pbs"
 
 type IncomingSubmission = {
   trial_name?: unknown
@@ -397,6 +398,10 @@ export async function POST(request: Request) {
 
     created.push({ uuid, trial_name: trialName, proof_url: link })
   }
+
+  await refreshPlayerPbs(env.wasans, player.uuid)
+  await refreshPlayerScore(env.wasans, player.uuid)
+
 
   return Response.json({ results: created }, { status: 201 })
 }

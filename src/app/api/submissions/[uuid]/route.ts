@@ -1,13 +1,11 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { canModerate, getAuthUser } from "@/lib/server/auth"
 import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
-import { refreshPlayerPb } from "@/lib/server/pbs"
+import { refreshPlayerPb, refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 import { insertAuditLog } from "@/lib/server/audit"
 import {
-  queueApprovedHighScoreRuns,
-  queueWorldRecordRun,
-  updateDiscordUsernameOnScoreChange,
+  postApprovedRun,
 } from "@/lib/server/notifications"
 
 export async function GET(_: Request, { params }: { params: Promise<{ uuid: string }> }) {
@@ -183,10 +181,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     details: auditDetails,
   })
 
-  await refreshPlayerPb(env.wasans, submission.player_uuid, submission.trial_name)
+  // Get old player score and old PB time before updates
+  const oldPlayer = await env.wasans.prepare(
+    `SELECT score, player_id FROM players WHERE players.uuid = ?`
+  )
+    .bind(submission.player_uuid)
+    .first<{ score: number, player_id: number }>()
+
+  const oldPb = await env.wasans.prepare(
+    `SELECT time FROM pbs WHERE player_uuid = ? AND trial_name = ?`
+  )
+    .bind(submission.player_uuid, submission.trial_name)
+    .first<{ time: number }>()
+
+  await refreshPlayerPbs(env.wasans, submission.player_uuid)
   await refreshWorldRecords(env.wasans, submission.trial_name, user)
   await refreshPlayerScore(env.wasans, submission.player_uuid)
-  await updateDiscordUsernameOnScoreChange(submission.player_uuid)
 
   const { results } = await env.wasans.prepare(
     `SELECT submissions.*, players.score as player_score
@@ -199,18 +209,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
 
   const updatedSubmission = results?.[0]
 
-  if (state === "approved" && Number(updatedSubmission?.player_score) > 0.3) {
-    await queueApprovedHighScoreRuns([
-      {
-        submission_uuid: updatedSubmission.uuid,
-        player_uuid: updatedSubmission.player_uuid,
-        player_name: updatedSubmission.player_name,
-        trial_name: updatedSubmission.trial_name,
-        time: Number(updatedSubmission.time),
-        player_score: Number(updatedSubmission.player_score),
-      },
-    ])
-
+  if (state === "approved" && state !== submission.state && Number(updatedSubmission?.player_score) > 0.3) {
     const wrRow = await env.wasans.prepare(
       `SELECT submission_uuid, player_uuid, player_name, trial_name, time, date
        FROM wrs
@@ -225,11 +224,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
         time: number
         date: string
       }>()
+  
+      await postApprovedRun(
+        {
+          submission_uuid: updatedSubmission.uuid,
+          player_uuid: updatedSubmission.player_uuid,
+          player_name: updatedSubmission.player_name,
+          trial_name: updatedSubmission.trial_name,
+          time: Number(updatedSubmission.time),
+          player_score: Number(updatedSubmission.player_score),
+          oldPlayerScore: oldPlayer?.score,
+          oldTime: oldPb?.time,
+          discordUserId: String(oldPlayer?.player_id),
+          is_wr: wrRow?.submission_uuid === uuid
+        },
+      )
+      
+      if (wrRow?.submission_uuid === uuid) {
+        await refreshAllPlayerScores(env.wasans)
+      }
 
-    if (wrRow?.submission_uuid === uuid) {
-      await queueWorldRecordRun(wrRow)
-      await refreshAllPlayerScores(env.wasans)
-    }
   }
 
   return Response.json({ results })
@@ -282,7 +296,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
   }
 
   await refreshWorldRecords(env.wasans, submission.trial_name, user)
-  await refreshPlayerScore(env.wasans, submission.player_uuid)
   await refreshAllPlayerScores(env.wasans)
 
   return Response.json({ ok: true })
