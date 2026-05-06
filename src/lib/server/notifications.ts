@@ -125,10 +125,10 @@ https://wasans.tully.sh/submissions/${run.submission_uuid}
     await sendBotMessage(announcementMessage, ANNOUNCEMENT_CHANNEL_ID)
 
     // // Create thread
-    // const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
-    // const threadContent = `https://wasans.tully.sh/submissions/${run.submission_uuid}`
+    const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
+    const threadContent = `https://wasans.tully.sh/submissions/${run.submission_uuid}`
 
-    // await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent)
+    await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent)
   } catch (error) {
     console.error("Error queuing approved high score run:", error)
   }
