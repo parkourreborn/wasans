@@ -75,7 +75,8 @@ async function sendBotMessage(content: string, channelId: string): Promise<boole
 async function createBotThread(
   channelId: string,
   title: string,
-  content: string
+  content: string,
+  tags: string[]
 ): Promise<boolean> {
   try {
     const response = await sendBotApiRequest("/create-thread", {
@@ -83,6 +84,7 @@ async function createBotThread(
       title,
       content,
       guild_id: GUILD_ID,
+      tags
     })
     return response.ok
   } catch (error) {
@@ -128,7 +130,11 @@ https://wasans.tully.sh/submissions/${run.submission_uuid}
     const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
     const threadContent = `https://wasans.tully.sh/submissions/${run.submission_uuid}`
 
-    await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent)
+    const tags = ["1351581039499284521"];
+    if (run.is_wr) {
+      tags.push("1351581114841436230")
+    }
+    await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent, tags)
   } catch (error) {
     console.error("Error queuing approved high score run:", error)
   }
