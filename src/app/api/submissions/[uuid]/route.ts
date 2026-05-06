@@ -194,6 +194,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     .bind(submission.player_uuid, submission.trial_name)
     .first<{ time: number }>()
 
+
+    // MARK: To Refactor
   await refreshPlayerPbs(env.wasans, submission.player_uuid)
   await refreshWorldRecords(env.wasans, submission.trial_name, user)
   await refreshPlayerScore(env.wasans, submission.player_uuid)
