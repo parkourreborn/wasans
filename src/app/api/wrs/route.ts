@@ -15,27 +15,49 @@ export async function GET() {
     })
   }
 
-  const countRow = await env.wasans
-    .prepare(`SELECT COUNT(1) AS count FROM wrs`)
-    .first<{ count: number }>()
+  try {
+    // Query the wrs table directly - it should be populated by the submission approval process
+    const { results } = await env.wasans.prepare(
+      `SELECT wrs.*, players.score AS player_score
+       FROM wrs
+       LEFT JOIN players ON players.uuid = wrs.player_uuid
+       ORDER BY wrs.trial_name`
+    ).all()
 
-  const count = Number(countRow?.count ?? 0)
-  if (count === 0) {
-    await refreshWorldRecords(env.wasans)
+    // If wrs table is empty, refresh it (this should be rare after initial setup)
+    if (!results || results.length === 0) {
+      try {
+        await refreshWorldRecords(env.wasans)
+        const retryResults = await env.wasans.prepare(
+          `SELECT wrs.*, players.score AS player_score
+           FROM wrs
+           LEFT JOIN players ON players.uuid = wrs.player_uuid
+           ORDER BY wrs.trial_name`
+        ).all()
+        return new Response(JSON.stringify({ results: retryResults.results || [] }), {
+          status: 200,
+          headers: {
+            ...cacheHeaders,
+            "content-type": "application/json",
+          },
+        })
+      } catch (error) {
+        console.error("Failed to refresh world records:", error)
+      }
+    }
+
+    return new Response(JSON.stringify({ results }), {
+      status: 200,
+      headers: {
+        ...cacheHeaders,
+        "content-type": "application/json",
+      },
+    })
+  } catch (error) {
+    console.error("Error fetching WRs:", error)
+    return new Response(JSON.stringify({ error: "Failed to fetch world records" }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    })
   }
-
-  const { results } = await env.wasans.prepare(
-    `SELECT wrs.*, players.score AS player_score
-     FROM wrs
-     LEFT JOIN players ON players.uuid = wrs.player_uuid
-     ORDER BY wrs.trial_name`
-  ).all()
-
-  return new Response(JSON.stringify({ results }), {
-    status: 200,
-    headers: {
-      ...cacheHeaders,
-      "content-type": "application/json",
-    },
-  })
 }
