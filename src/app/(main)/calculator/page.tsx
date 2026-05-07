@@ -188,27 +188,21 @@ export default function Home() {
         }
 
         const response = await fetch(
-          `/api/submissions/player/${encodeURIComponent(playerUuid)}?approvedOnly=true&page=1&limit=50`,
+          `/api/pbs/player/${encodeURIComponent(playerUuid)}`,
           { cache: "no-store" }
         )
-        const json = (await response.json()) as SubmissionsResponse
+        const json = (await response.json()) as { results?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }> }
 
         if (!response.ok) {
-          throw new Error(json.error || "Unable to load approved times")
+          throw new Error("Unable to load personal bests")
         }
 
         const bestTimes: Record<string, number> = {}
 
-        for (const submission of json.results || []) {
-          if (submission.state !== "approved") {
-            continue
-          }
-
-          const trial = trialKey(submission.trial_name)
-          const time = Number(submission.time)
-          const currentBest = bestTimes[trial]
-
-          if (Number.isFinite(time) && time > 0 && (!currentBest || time < currentBest)) {
+        for (const pb of json.results || []) {
+          const trial = trialKey(pb.trial_name)
+          const time = Number(pb.time)
+          if (Number.isFinite(time) && time > 0) {
             bestTimes[trial] = time
           }
         }
@@ -224,7 +218,7 @@ export default function Home() {
         setTimes(formatted)
       } catch (err) {
         console.error(err)
-        setUserTimesError(err instanceof Error ? err.message : "Unable to load approved times")
+        setUserTimesError(err instanceof Error ? err.message : "Unable to load personal bests")
       } finally {
         setLoadingUserTimes(false)
       }

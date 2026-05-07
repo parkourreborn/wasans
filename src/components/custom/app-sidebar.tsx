@@ -10,6 +10,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -24,6 +25,7 @@ import {
   MedalIcon,
   TimerIcon,
   TrophyIcon,
+  UserSearchIcon
 } from "lucide-react"
 import Link from "next/link"
 
@@ -115,12 +117,49 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
+                    <SidebarSeparator />
+
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/calculator">
+                                <div className="flex items-center gap-2">
+                                    <CalculatorIcon />
+                                    <span>Calculator</span>
+                                </div>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/compare">
+                                <div className="flex items-center gap-2">
+                                    <ArrowRightLeftIcon />
+                                    <span>Compare</span>
+                                </div>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarSeparator />
+
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild>
                             <Link href="/wrs">
                                 <div className="flex items-center gap-2">
                                     <MedalIcon />
                                     <span>WRs</span>
+                                </div>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/submissions">
+                                <div className="flex items-center gap-2">
+                                    <TimerIcon />
+                                    <span>Submissions</span>
                                 </div>
                             </Link>
                         </SidebarMenuButton>
@@ -139,49 +178,30 @@ export function AppSidebar() {
 
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild>
-                            <Link href="/compare">
+                            <Link href="/players">
                                 <div className="flex items-center gap-2">
-                                    <ArrowRightLeftIcon />
-                                    <span>Compare</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/submissions">
-                                <div className="flex items-center gap-2">
-                                    <TimerIcon />
-                                    <span>Search</span>
+                                    <UserSearchIcon />
+                                    <span>Player Search</span>
                                 </div>
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
                     {(user?.permission ?? 0) >= 1 && (
-                      <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <Link href="/logs">
-                            <div className="flex items-center gap-2">
-                              <FileTextIcon />
-                              <span>Logs</span>
-                            </div>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    )}
-
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/calculator">
-                                <div className="flex items-center gap-2">
-                                    <CalculatorIcon />
-                                    <span>Calculator</span>
-                                </div>
+                      <>
+                        <SidebarSeparator />
+                        <SidebarMenuItem>
+                          <SidebarMenuButton asChild>
+                            <Link href="/logs">
+                              <div className="flex items-center gap-2">
+                                <FileTextIcon />
+                                <span>Logs</span>
+                              </div>
                             </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      </>
+                    )}
 
                 </SidebarMenu>
 

@@ -1,11 +1,12 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 const cacheHeaders = {
-  "cache-control": "max-age=300, stale-while-revalidate=600",
+  "cache-control": "max-age=10, stale-while-revalidate=30",
 }
 
-export async function GET() {
+export async function GET(request: Request, { params }: { params: Promise<{ uuid: string }> }) {
   const { env } = await getCloudflareContext({ async: true })
+  const { uuid } = await params;
 
   if (!env?.wasans) {
     return new Response(JSON.stringify({ error: "DB binding not available" }), {
@@ -15,8 +16,13 @@ export async function GET() {
   }
 
   const { results } = await env.wasans.prepare(
-    `SELECT * FROM players ORDER BY score DESC, player_name ASC`
-  ).all()
+    `SELECT trial_name, time, submission_uuid, date
+     FROM pbs
+     WHERE player_uuid = ?
+     ORDER BY trial_name`
+  )
+    .bind(uuid)
+    .all()
 
   return new Response(JSON.stringify({ results }), {
     status: 200,

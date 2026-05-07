@@ -166,7 +166,22 @@ export async function GET(request: Request) {
   const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || "50")))
   const offset = (page - 1) * limit
   const status = url.searchParams.get("state")
-  const whereClause = status && ["approved", "denied", "pending"].includes(status) ? "WHERE submissions.state = ?" : ""
+  const playerUuid = url.searchParams.get("player_uuid")
+
+  const whereConditions = []
+  const bindValues = []
+
+  if (status && ["approved", "denied", "pending"].includes(status)) {
+    whereConditions.push("submissions.state = ?")
+    bindValues.push(status)
+  }
+
+  if (playerUuid) {
+    whereConditions.push("submissions.player_uuid = ?")
+    bindValues.push(playerUuid)
+  }
+
+  const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : ""
 
   const statement = env.wasans.prepare(
     `SELECT submissions.*, players.score as player_score
@@ -177,9 +192,7 @@ export async function GET(request: Request) {
      LIMIT ? OFFSET ?`
   )
 
-  const results = whereClause
-    ? (await statement.bind(status, limit, offset).all())
-    : (await statement.bind(limit, offset).all())
+  const results = await statement.bind(...bindValues, limit, offset).all()
 
   return new Response(JSON.stringify({ results: results.results || [] }), {
     status: 200,

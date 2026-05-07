@@ -39,14 +39,6 @@ type PlayerInfo = {
   rank: number
 }
 
-type SubmissionValue = {
-  uuid: string
-  trial_name: string
-  time: number | string
-  state: string,
-  date: string
-}
-
 type WorldRecordValue = {
   trial_name: string
   time: number | string
@@ -55,7 +47,14 @@ type WorldRecordValue = {
 export default function PlayerProfilePage() {
   const { uuid } = useParams()
   const [player, setPlayer] = React.useState<PlayerInfo | null>(null)
-  const [submissions, setSubmissions] = React.useState<SubmissionValue[]>([])
+  const [personalBestTimes, setPersonalBestTimes] = React.useState<Record<string, { time: string; submissionUuid: string; date: string }>>(() => {
+    // Initialize with default values for all trials
+    const defaults: Record<string, { time: string; submissionUuid: string; date: string }> = {}
+    trialNames.forEach(trial => {
+      defaults[trial.toUpperCase()] = { time: "0.000", submissionUuid: "", date: "" }
+    })
+    return defaults
+  })
   const [worldRecords, setWorldRecords] = React.useState<WorldRecordValue[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -70,11 +69,9 @@ export default function PlayerProfilePage() {
       setError(null)
 
       try {
-        const [playerResponse, submissionsResponse, wrResponse] = await Promise.all([
+        const [playerResponse, pbsResponse, wrResponse] = await Promise.all([
           fetch(`/api/players/${encodeURIComponent(uuid)}`, { cache: "force-cache" }),
-          fetch(`/api/submissions/player/${encodeURIComponent(uuid)}?approvedOnly=true&page=1&limit=50`, {
-            cache: "no-store",
-          }),
+          fetch(`/api/pbs/player/${encodeURIComponent(uuid)}`, { cache: "no-store" }),
           fetch(`/api/wrs`, { cache: "force-cache" }),
         ])
 
@@ -82,8 +79,8 @@ export default function PlayerProfilePage() {
           player?: PlayerInfo | null
           error?: string
         }
-        const submissionsJson = (await submissionsResponse.json()) as {
-          results?: SubmissionValue[]
+        const pbsJson = (await pbsResponse.json()) as {
+          results?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }>
           error?: string
         }
         const wrJson = (await wrResponse.json()) as {
@@ -95,8 +92,8 @@ export default function PlayerProfilePage() {
           throw new Error(playerJson.error || "Unable to load player")
         }
 
-        if (!submissionsResponse.ok) {
-          throw new Error(submissionsJson.error || "Unable to load submission history")
+        if (!pbsResponse.ok) {
+          throw new Error(pbsJson.error || "Unable to load personal bests")
         }
 
         if (!wrResponse.ok) {
@@ -104,12 +101,34 @@ export default function PlayerProfilePage() {
         }
 
         setPlayer(playerJson.player || null)
-        setSubmissions(submissionsJson.results || [])
         setWorldRecords(wrJson.results || [])
 
-        setPlayer(playerJson.player || null)
-        setSubmissions(submissionsJson.results || [])
-        setWorldRecords(wrJson.results || [])
+        // Convert PB data to the format expected by the rest of the code
+        const pbTimes: Record<string, { time: string; submissionUuid: string; date: string }> = {}
+        for (const pb of pbsJson.results || []) {
+          const trial = pb.trial_name.toUpperCase()
+          pbTimes[trial] = {
+            time: Number(pb.time).toFixed(3),
+            submissionUuid: pb.submission_uuid,
+            date: pb.date,
+          }
+        }
+
+        // Fill in missing trials with default values
+        const personalBestTimes = Object.fromEntries(
+          trialNames.map((trial) => {
+            const trialUpper = trial.toUpperCase()
+            const bestResult = pbTimes[trialUpper]
+            return [
+              trialUpper,
+              bestResult
+                ? bestResult
+                : { time: "0.000", submissionUuid: "", date: "" },
+            ]
+          })
+        )
+
+        setPersonalBestTimes(personalBestTimes)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load profile")
       } finally {
@@ -120,41 +139,11 @@ export default function PlayerProfilePage() {
     loadProfile()
   }, [uuid])
 
-  const personalBestTimes = React.useMemo(() => {
-    const best: Record<string, { time: number; submissionUuid: string; date: string }> = {}
-    for (const submission of submissions) {
-      const time = Number(submission.time)
-      if (!submission.trial_name || submission.state !== "approved" || !Number.isFinite(time) || time <= 0) {
-        continue
-      }
-      const trial = submission.trial_name.toUpperCase()
-      if (!best[trial] || time < best[trial].time) {
-        best[trial] = { time, submissionUuid: submission.uuid, date: submission.date }
-      }
-    }
-
-    return Object.fromEntries(
-      trialNames.map((trial) => {
-        const bestResult = best[trial.toUpperCase()]
-        return [
-          trial.toUpperCase(),
-          bestResult
-            ? {
-                time: bestResult.time.toFixed(3),
-                submissionUuid: bestResult.submissionUuid,
-                date: bestResult.date,
-              }
-            : { time: "0.000", submissionUuid: "", date: "" },
-        ]
-      })
-    )
-  }, [submissions])
-
   const rows = React.useMemo(
     () =>
       trialNames.map((trialName) => {
         const trial = trialName.toUpperCase()
-        const bestResult = personalBestTimes[trial]
+        const bestResult = personalBestTimes[trial] || { time: "0.000", submissionUuid: "", date: "" }
         const timeStr = bestResult.time
         const time = Number(timeStr)
         const wr = Number(
@@ -174,6 +163,11 @@ export default function PlayerProfilePage() {
       }),
     [personalBestTimes, worldRecords]
   )
+
+  const calculatedScore = React.useMemo(() => {
+    if (!rows.length) return 0
+    return Number((rows.reduce((sum, row) => sum + row.score, 0) / rows.length).toFixed(3))
+  }, [rows])
 
   if (loading) {
     return (
@@ -213,7 +207,7 @@ export default function PlayerProfilePage() {
           </div>
           <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-center">
             <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Wasans score</p>
-            <p className="text-4xl font-semibold">{formatPlayerScore(player.score)}</p>
+            <p className="text-4xl font-semibold">{formatPlayerScore(calculatedScore)}</p>
           </div>
         </div>
       </div>

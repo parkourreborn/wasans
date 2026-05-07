@@ -2,40 +2,20 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 const scoreSteps = [
-  "Each trial gets a score using (WR / your time)^3.",
-  "A score of 1.000 on one trial means you match the current WR for that trial.",
+  "Each trial gets a score from 0 - 1, where 0 is bronze and 1 is wr.",
   "Your Wasans score is the average of all trial scores.",
   "Because the calculator uses the site's WR table, scores move automatically when approved WRs change.",
 ]
 
 const roles = [
-  ["wasans", "Lore role."],
-  ["chr and headrog", "Administrator."],
-  ["slave", "Emergency administrator when admins and staff are offline."],
-  ["security", "Staff members."],
-  ["score moderator", "Moderates score submissions."],
-  ["macro", "Bot role."],
   ["router", "Above 0.900 Wasans score."],
-  ["elite", "Above 0.750 Wasans score."],
-  ["master I", "Above 0.600 Wasans score."],
-  ["master II", "Above 0.450 Wasans score."],
-  ["master III", "Above 0.300 Wasans score."],
-  ["wasans member", "Granted by reaching at least 0.300 Wasans score."],
-  ["contributor", "Special thanks for major project help."],
-  ["route envisioner", "Content creator role, usually for creators with 500+ subscribers."],
-  ["booster", "Server booster perks."],
-  ["anzuce", "Permission to talk in anzucement, originally level 20."],
-  ["image perm", "Permission to send images and embeds in yapperal, originally level 10."],
+  ["elite", "Above 0.800 Wasans score."],
+  ["master I", "Above 0.700 Wasans score."],
+  ["master II", "Above 0.600 Wasans score."],
+  ["master III", "Above 0.500 Wasans score."],
+  ["diamond", "Above 0.400 Wasans score."],
+  ["platinum", "Above 0.300 Wasans score."],
   ["unranked", "Normal members."],
-]
-
-const pings = [
-  ["announcement ping", "Receives half-important announcement pings."],
-  ["wr ping", "Receives world-record update notifications."],
-  ["content ping", "Receives route-envisioner upload notifications."],
-  ["giveaway ping", "Receives giveaway notifications."],
-  ["poll ping", "Receives poll notifications."],
-  ["minecraft smh ping", "Receives Minecraft SMP updates."],
 ]
 
 const faq = [
@@ -117,7 +97,7 @@ export default function InformationPage() {
         </div>
       </InfoCard>
 
-      <InfoCard title="Discord Roles">
+      <InfoCard title="Score Roles (Discord)">
         <div className="grid gap-2 md:grid-cols-2">
           {roles.map(([role, description]) => (
             <div key={role} className="rounded-md border border-border p-3">
@@ -127,19 +107,6 @@ export default function InformationPage() {
           ))}
         </div>
       </InfoCard>
-
-      <InfoCard title="Optional Ping Roles">
-        <div className="grid gap-2 md:grid-cols-2">
-          {pings.map(([role, description]) => (
-            <div key={role} className="rounded-md border border-border p-3">
-              <p className="font-semibold">@{role}</p>
-              <p className="text-sm text-muted-foreground">{description}</p>
-            </div>
-          ))}
-        </div>
-      </InfoCard>
-
-      
 
     </div>
   )
