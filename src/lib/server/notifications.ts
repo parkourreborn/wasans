@@ -11,6 +11,7 @@ export type ApprovedHighScoreRun = {
   oldTime?: number
   oldPlayerScore?: number
   discordUserId?: string,
+  averageScoreDelta?: number
   is_wr: boolean
 }
 
@@ -21,6 +22,88 @@ export type WorldRecordRun = {
   trial_name: string
   time: number
   date: string
+}
+
+
+const roleRanks = {
+  0.0: "1257994886070800465", // unranked
+  0.3: "1501720851748229294",
+  0.4: "1501721259543629924", // wrong
+  0.5: "1373849841494523984",
+  0.6: "1373849485003980820",
+  0.7: "1305891664413593651",
+  0.8: "1493644824237052075",
+  0.9: "1257994883059290245"
+}
+
+const sortedRankRoles = Object.entries(roleRanks)
+  .map(([score, roleId]) => ({ score: Number(score), roleId }))
+  .sort((a, b) => a.score - b.score)
+
+const roleNames: Record<string, string> = {
+  "1257994886070800465": "unranked",
+  "1501720851748229294": "platinum",
+  "1501721259543629924": "diamond",
+  "1373849841494523984": "master III",
+  "1373849485003980820": "master II",
+  "1305891664413593651": "master I",
+  "1493644824237052075": "elite",
+  "1257994883059290245": "router",
+}
+
+function getRoleForScore(score: number) {
+  if (!Number.isFinite(score)) {
+    return null
+  }
+
+  let matchedRole: string | null = null
+
+  for (const rank of sortedRankRoles) {
+    if (score >= rank.score) {
+      matchedRole = rank.roleId
+    } else {
+      break
+    }
+  }
+
+  return matchedRole
+}
+
+async function manageDiscordRole(userId: string, roleId: string, action: "add" | "remove") {
+  try {
+    await sendBotApiRequest("/manage-role", {
+      guild_id: GUILD_ID,
+      user_id: userId,
+      role_id: roleId,
+      action,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (action === "remove" && message.includes("role not found")) {
+      return
+    }
+    throw error
+  }
+}
+
+function getRoleIndex(roleId: string) {
+  return sortedRankRoles.findIndex((rank) => rank.roleId === roleId)
+}
+
+async function sendPromotionMessage(userId: string, oldRoleId: string, newRoleId: string) {
+  const oldIndex = getRoleIndex(oldRoleId)
+  const newIndex = getRoleIndex(newRoleId)
+  const isPromotion = newIndex > oldIndex
+  const action = isPromotion ? "promoted" : "demoted"
+  const oldRoleName = roleNames[oldRoleId] ?? oldRoleId
+  const newRoleName = roleNames[newRoleId] ?? newRoleId
+
+
+  await sendBotApiRequest("/send-message", {
+    guild_id: GUILD_ID,
+    channel_id: "1258680561929814066",
+    content: `${isPromotion ? "🎉 ": "😭 "}<@${userId}> has been ${action} from ${oldRoleName} to ${newRoleName}!`,
+  })
 }
 
 // Discord bot API configuration
@@ -120,11 +203,18 @@ export async function postApprovedRun(run: ApprovedHighScoreRun) {
     const newScoreFormatted = run.player_score.toFixed(3)
     const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
 
+    const scoreDeltaLine =
+      run.averageScoreDelta !== undefined
+      ?
+        `Average score decrease: ${run.averageScoreDelta.toFixed(3)}`
+        : null
+
     const announcementMessage = [
       run.is_wr ? "<@&1335389577883418736>" : null,
       `**${run.trial_name} ${newTimeFormatted} | ${userMention}**`,
       `${oldTimeFormatted} -> ${newTimeFormatted}`,
       `*${oldScoreFormatted}* -> *${newScoreFormatted}*`,
+      scoreDeltaLine,
       `https://wasans.tully.sh/submissions/${run.submission_uuid}`,
     ]
       .filter(Boolean)
@@ -147,7 +237,7 @@ export async function postApprovedRun(run: ApprovedHighScoreRun) {
 }
 
 
-export async function updateDiscordUsernameOnScoreChange(playerUuid: string) {
+export async function updateDiscordUsernameOnScoreChange(playerUuid: string, oldScore = 0) {
   const { env } = await getCloudflareContext({ async: true })
   const row = await env.wasans.prepare(
     `SELECT player_id, score, player_name FROM players WHERE uuid = ?`)
@@ -161,6 +251,40 @@ export async function updateDiscordUsernameOnScoreChange(playerUuid: string) {
   const playerId = row.player_id
   const score = row.score
   const playerName = row.player_name
+  const oldRoleId = getRoleForScore(oldScore)
+  const newRoleId = getRoleForScore(score)
+
+  try {
+    if (newRoleId) {
+      for (const rank of sortedRankRoles) {
+        if (rank.roleId === newRoleId) {
+          continue
+        }
+
+        try {
+          await manageDiscordRole(playerId, rank.roleId, "remove")
+        } catch (error) {
+          console.error("Failed to remove old Discord rank role:", { playerId, roleId: rank.roleId, error })
+        }
+      }
+
+      try {
+        await manageDiscordRole(playerId, newRoleId, "add")
+      } catch (error) {
+        console.error("Failed to add Discord rank role:", { playerId, roleId: newRoleId, error })
+      }
+    }
+  } catch (error) {
+    console.error("Failed to update Discord rank roles on score change:", error)
+  }
+
+  if (oldRoleId && newRoleId && oldRoleId !== newRoleId) {
+    try {
+      await sendPromotionMessage(playerId, oldRoleId, newRoleId)
+    } catch (error) {
+      console.error("Failed to announce role promotion:", error)
+    }
+  }
 
   try {
     await sendBotApiRequest("/set-nick", {
@@ -171,6 +295,4 @@ export async function updateDiscordUsernameOnScoreChange(playerUuid: string) {
   } catch (error) {
     console.error("Failed to update Discord username on score change:", error)
   }
-  // // TODO: update the Discord username cache when a player's score changes.
-  // console.debug("updateDiscordUsernameOnScoreChange", { playerUuid, playerId, score })
 }
