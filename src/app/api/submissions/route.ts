@@ -24,6 +24,7 @@ type PersonalBestRow = {
 const allowedLinkHosts = ["medal.tv", "www.medal.tv"]
 const publicVideoBaseUrl = "https://assets.wasans.tully.sh"
 const scoreVideoContentType = "video/mp4"
+const scorePreviewContentType = "image/jpeg"
 
 function jsonError(message: string, status = 400) {
   return Response.json({ error: message }, { status })
@@ -169,7 +170,7 @@ export async function GET(request: Request) {
   const playerUuid = url.searchParams.get("player_uuid")
 
   const whereConditions = []
-  const bindValues = []
+  const bindValues: (string | number)[] = []
 
   if (status && ["approved", "denied", "pending"].includes(status)) {
     whereConditions.push("submissions.state = ?")
@@ -183,24 +184,32 @@ export async function GET(request: Request) {
 
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : ""
 
-  const statement = env.wasans.prepare(
-    `SELECT submissions.*, players.score as player_score
-     FROM submissions
-     LEFT JOIN players ON players.uuid = submissions.player_uuid
-     ${whereClause}
-     ORDER BY submissions.date DESC
-     LIMIT ? OFFSET ?`
-  )
+  try {
+    const statement = env.wasans.prepare(
+      `SELECT submissions.*, players.score as player_score
+       FROM submissions
+       LEFT JOIN players ON players.uuid = submissions.player_uuid
+       ${whereClause}
+       ORDER BY submissions.date DESC
+       LIMIT ? OFFSET ?`
+    )
 
-  const results = await statement.bind(...bindValues, limit, offset).all()
+    const results = await statement.bind(...bindValues, limit, offset).all()
 
-  return new Response(JSON.stringify({ results: results.results || [] }), {
-    status: 200,
-    headers: {
-      ...cacheHeaders,
-      "content-type": "application/json",
-    },
-  })
+    return new Response(JSON.stringify({ results: results.results || [] }), {
+      status: 200,
+      headers: {
+        ...cacheHeaders,
+        "content-type": "application/json",
+      },
+    })
+  } catch (error) {
+    console.error("Error fetching submissions:", error)
+    return new Response(JSON.stringify({ error: "Failed to fetch submissions" }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    })
+  }
 }
 
 export async function POST(request: Request) {
@@ -299,15 +308,33 @@ export async function POST(request: Request) {
       const objectKey = `scores/${uuid}.mp4`
       const proofUrl = `${publicVideoBaseUrl}/scores/${uuid}.mp4`
 
+      // Video is already H.265 encoded on the client
       const uploaded = await uploadVideo(
         env.SUBMISSION_VIDEOS,
         objectKey,
         file,
-        file.type || scoreVideoContentType
+        scoreVideoContentType
       )
 
       if (!uploaded) {
+        await env.SUBMISSION_VIDEOS.delete(objectKey).catch(() => {})
         return jsonError(`Unable to verify uploaded video for submission ${index + 1}`, 500)
+      }
+
+      // Upload preview if provided
+      const preview = formData.get(`preview_file_${index}`)
+      if (preview instanceof File && preview.size > 0) {
+        const previewKey = `scores/${uuid}-preview.jpg`
+        const uploadedPreview = await uploadVideo(
+          env.SUBMISSION_VIDEOS,
+          previewKey,
+          preview,
+          scorePreviewContentType
+        )
+
+        if (!uploadedPreview) {
+          await env.SUBMISSION_VIDEOS.delete(previewKey).catch(() => {})
+        }
       }
 
       try {
@@ -363,14 +390,18 @@ export async function POST(request: Request) {
         return jsonError(`Medal did not return a video file for submission ${index + 1}`, 502)
       }
 
+      // Note: Medal videos are stored as-is. To re-encode them to H.265, 
+      // you would need to implement FFmpeg WASM processing on the client side
+      // by fetching the Medal video, converting it, then uploading the result.
       const uploaded = await uploadVideo(
         env.SUBMISSION_VIDEOS,
         objectKey,
         await medalVideoResponse.arrayBuffer(),
-        medalVideoType === "application/octet-stream" ? scoreVideoContentType : medalVideoType
+        medalVideoType.startsWith("video/") ? medalVideoType : scoreVideoContentType
       )
 
       if (!uploaded) {
+        await env.SUBMISSION_VIDEOS.delete(objectKey).catch(() => {})
         return jsonError(`Unable to verify downloaded video for submission ${index + 1}`, 500)
       }
 
