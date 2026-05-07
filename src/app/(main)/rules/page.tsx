@@ -1,15 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 const runRules = [
-  "Glitches are not allowed.",
-  "Autoparkour and autotransition are not allowed and automatically invalidate a run.",
-  "The proof must show the start of the time trial, including the click sound moment, and the endpoint being reached.",
-  "The timer, player username, and game version must be visible enough for moderators to verify the run.",
-  "After completing a run, you must either show the bottom of your console with Shift + F9 or exit the trial and show the final time",
-  "PC players must show FPS with Shift + F5 for the full run. Console players are exempt because they cannot unlock FPS.",
-  "If you are permanently banned from the game, you are not eligible to submit member runs. This follows the main game rules.",
-  "Alternative accounts are allowed unless you are banned from the game, because that counts as ban evasion.",
-  "World-record runs should be submitted within a reasonable time after they are recorded. Normal life delays are fine; gatekeeping or hiding a run for a long time is not.",
+  "Any glitches are prohibited. Banned glitches include: teleportation glitches, double vaulting, coil slide on a slope, impossible moves, and velocity-overriding moves (drophop).",
+  "Using autoparkour and autotransition is prohibited and automatically invalidates the run.",
+  "The clip must include the entire run, along with the actual time after exiting the trial.",
+  "The clip must clearly show: the timer, player's username, and the game build number at the bottom of the screen.",
+  "PC players MUST show FPS via Shift + F5 during the entire run. Runs without the FPS indicator will be rejected. (Applies to runs recorded after 03/01/2026; console users are exempt. Runs without FPS are only accepted for build 224 or earlier.)",
+  "If you are permanently banned from the game, you are ineligible to submit runs. This is done to comply with the main game rule.",
+  "Alternative accounts are allowed ONLY if you are not ban evading.",
+  "World-record runs must be submitted within an acceptable time after being recorded. Normal life delays (vacation, sleep) are acceptable. Gatekeeping or intentionally delaying submission is not acceptable.",
 ]
 
 const submissionRules = [
@@ -27,6 +26,25 @@ const applicationRules = [
   "Prepare proof for every run used in the application.",
   "Submit each score through the site so moderators can approve the runs directly.",
   "After your relevant runs are approved, staff can use the resulting score to decide the role or member application.",
+]
+
+const faqItems = [
+  {
+    question: "What is considered as a 'glitch'?",
+    answer: "Currently banned glitches include: any form of teleportation glitches, double vaulting (only doable via autoparkour; banned regardless), coil slide on a slope (extremely buggy and causes random speed boosts), moves not deemed to be technically possible (such as 'wasans boost'), and afterboost overriding current velocity (drophop).",
+  },
+  {
+    question: "My video quality is low. Is this fine?",
+    answer: "If the necessary details are not visible properly, your run may be rejected under the score moderator's decision. You take responsibility for your video bitrate settings.",
+  },
+  {
+    question: "What do I do if I couldn't beat my previous personal best?",
+    answer: "If your personal best wasn't beaten, you won't see the final time on screen. Open the developer console (F9) and search for 'hudzell's great pain reduced your time by (time)'. Subtract this value from your timer time to get your actual time. Both the timer time and hudzell pain must be clearly visible in your clip for the score moderator to confirm.",
+  },
+  {
+    question: "There's too much rules to read. What are the essentials?",
+    answer: "Show your FPS, show your final time after finish, and have proper video quality.",
+  },
 ]
 
 function RuleSection({
@@ -78,6 +96,17 @@ export default function RulesPage() {
             <li key={rule}>{rule}</li>
           ))}
         </ul>
+      </RuleSection>
+
+      <RuleSection title="Frequently Asked Questions">
+        <div className="space-y-4">
+          {faqItems.map((item) => (
+            <div key={item.question}>
+              <h3 className="font-semibold mb-1">{item.question}</h3>
+              <p className="text-sm text-muted-foreground">{item.answer}</p>
+            </div>
+          ))}
+        </div>
       </RuleSection>
     </div>
   )

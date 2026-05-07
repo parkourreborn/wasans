@@ -1,12 +1,17 @@
-import { plats, TrialName } from "./trials";
+import { bronze, plats, TrialName } from "./trials";
 
 export default function calculateScore(wr: number, time: number, trial: TrialName) {
     if (Math.pow((wr / time), 3) > 1) {
         return 1;
     }
 
+
+    if (time > bronze[trial]) {
+        return 0;
+    }
+
     if (time > plats[trial]) {
-        return 0.3 * (plats[trial] / time);
+        return 0.3 * ((bronze[trial] - time) / (bronze[trial] - plats[trial]));
     }
 
     return (
@@ -17,8 +22,7 @@ export default function calculateScore(wr: number, time: number, trial: TrialNam
 }
 
 /*
-=iferror(IF((wr/time)^3>1,"no", <-- prevent time input being lower than w
-IF(time>platinum, <-- check if slower than platinum
-0.3*(platinum/time), <-- 0.3 maximum non-exponential calculation for times below plat
-0.3 + 0.7*(((wr/time)^3 - (wr/platinum)^3) / (1-(wr/platinum )^3)))), 0) <-- dumbshit ohhhhhhhhhhhhhhhhhhh
+IF(time>bronze, 0, 
+IF(time>platinum, 0.3*((bronze-time)/(bronze-platinum)), 
+0.3+0.7*(((wr/time)^3-(wr/platinum)^3)/(1-(wr/platinum)^3))))), 0) 
 */

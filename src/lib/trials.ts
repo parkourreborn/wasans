@@ -52,4 +52,31 @@ export const plats = {
   "Wisp": 13,
 }
 
+export const bronze = {
+  "Crystal": 25,
+  "Genesis": 70,
+  "Glass": 30,
+  "Riser": 25,
+  "Solar": 40,
+  "Vestibule": 24,
+  "Celsius": 25,
+  "Circulation": 35,
+  "Flow": 32,
+  "Martyr": 35,
+  "Neon Bold": 40,
+  "Sawdust": 40,
+  "Ascension": 25,
+  "Faith": 30,
+  "Gale": 15,
+  "Grip": 35,
+  "Thread": 25,
+  "Umbrel": 35,
+  "Depot": 50,
+  "Flame": 30,
+  "Ironsing": 29,
+  "Monoxide": 27,
+  "Rust Belt": 35,
+  "Wisp": 22,
+}
+
 export type TrialName = (typeof trials)[number]
