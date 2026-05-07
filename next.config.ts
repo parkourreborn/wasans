@@ -3,9 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
-  // experimental: {
-  //   proxyClientMaxBodySize: "100mb"
-  // },
+  experimental: {
+    proxyClientMaxBodySize: "200mb",
+  },
   devIndicators: false
 };
 

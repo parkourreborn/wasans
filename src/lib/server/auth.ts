@@ -52,9 +52,18 @@ export async function getAuthUser(request: Request, db: D1Database) {
   }
 
   return db.prepare(
-    `SELECT uuid, player_id, player_name, score, permission
+    `SELECT players.uuid,
+            COALESCE(oauth_accounts.provider_account_id, players.player_id) AS player_id,
+            players.player_name,
+            players.score,
+            players.permission
      FROM players
-     WHERE uuid = ?`
+     LEFT JOIN oauth_accounts
+       ON oauth_accounts.player_uuid = players.uuid
+       AND oauth_accounts.provider = 'discord'
+     WHERE players.uuid = ?
+     ORDER BY oauth_accounts.updated_at DESC
+     LIMIT 1`
   )
     .bind(playerUuid)
     .first<AuthUser>()

@@ -21,9 +21,16 @@ type PlayerRow = {
   uuid: string
 }
 
-export async function refreshPlayerScore(db: D1Database, playerUuid: string) {
-  const [{ results: trialRows }, { results: pbsRows }, { results: wrRows }] = await Promise.all([
-    db.prepare(`SELECT name FROM trials`).all<TrialRow>(),
+type RefreshPlayerScoreOptions = {
+  skipDiscordUpdate?: boolean
+}
+
+export async function refreshPlayerScore(
+  db: D1Database,
+  playerUuid: string,
+  options: RefreshPlayerScoreOptions = {}
+) {
+  const [{ results: pbsRows }, { results: wrRows }, trialCountRow] = await Promise.all([
     db.prepare(
       `SELECT trial_name, time
        FROM pbs
@@ -32,9 +39,10 @@ export async function refreshPlayerScore(db: D1Database, playerUuid: string) {
       .bind(playerUuid)
       .all<BestSubmissionRow>(),
     db.prepare(`SELECT trial_name, time FROM wrs`).all<WorldRecordRow>(),
+    db.prepare(`SELECT COUNT(*) AS count FROM trials`).first<{ count: number }>(),
   ])
 
-  const trialCount = trialRows.length
+  const trialCount = Number(trialCountRow?.count ?? 0)
   let bestRows: BestSubmissionRow[] = pbsRows || []
 
   if (!bestRows.length) {
@@ -70,13 +78,15 @@ export async function refreshPlayerScore(db: D1Database, playerUuid: string) {
     total += calculateScore(wr, time, best.trial_name)
   }
 
+  const oldScoreRow = await db.prepare(`SELECT score FROM players WHERE uuid = ?`).bind(playerUuid).first<{ score: number }>()
+  const oldScore = oldScoreRow?.score ?? 0
   const score = Number((total / trialCount).toFixed(3))
   await db.prepare(`UPDATE players SET score = ? WHERE uuid = ?`).bind(score, playerUuid).run()
 
-  console.log(total, trialCount)
+  if (!options.skipDiscordUpdate) {
+    await updateDiscordUsernameOnScoreChange(playerUuid, oldScore)
+  }
 
-  await updateDiscordUsernameOnScoreChange(playerUuid)
-  
   return score
 }
 
@@ -84,6 +94,20 @@ export async function refreshAllPlayerScores(db: D1Database) {
   const { results } = await db.prepare(`SELECT uuid FROM players`).all<PlayerRow>()
 
   for (const player of results) {
-    await refreshPlayerScore(db, player.uuid)
+    await refreshPlayerScore(db, player.uuid, { skipDiscordUpdate: true })
+  }
+}
+
+export async function refreshScoresForTrial(db: D1Database, trialName: string) {
+  const { results } = await db.prepare(
+    `SELECT DISTINCT player_uuid
+     FROM pbs
+     WHERE trial_name = ?`
+  )
+    .bind(trialName)
+    .all<{ player_uuid: string }>()
+
+  for (const row of results) {
+    await refreshPlayerScore(db, row.player_uuid, { skipDiscordUpdate: true })
   }
 }

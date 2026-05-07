@@ -1,6 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { canModerate, getAuthUser } from "@/lib/server/auth"
-import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
+import { refreshAllPlayerScores, refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
 import { refreshPlayerPb, refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 import { insertAuditLog } from "@/lib/server/audit"
@@ -79,6 +79,46 @@ function normalizeModeratorNote(value: unknown) {
   return moderatorNote
 }
 
+async function calculateAverageScoreDeltaForWrChange(
+  db: D1Database,
+  trialName: string,
+  oldWr: number | null,
+  newWr: number
+) {
+  const playerCountRow = await db.prepare(`SELECT COUNT(*) AS count FROM players`).first<{ count: number }>()
+  const playerCount = Number(playerCountRow?.count ?? 0)
+
+  if (!playerCount) {
+    return 0
+  }
+
+  const deltaRow = await db.prepare(
+    `SELECT SUM(
+       ((? / time) * (? / time) * (? / time))
+       - CASE WHEN ? > 0 THEN ((? / time) * (? / time) * (? / time)) ELSE 0 END
+     ) AS total_delta
+     FROM pbs
+     WHERE trial_name = ?`
+  )
+    .bind(
+      newWr,
+      newWr,
+      newWr,
+      oldWr ?? 0,
+      oldWr ?? 0,
+      oldWr ?? 0,
+      oldWr ?? 0,
+      trialName
+    )
+    .first<{ total_delta: number | null }>()
+
+  const totalDelta = Number(deltaRow?.total_delta ?? 0)
+  const trialCountRow = await db.prepare(`SELECT COUNT(*) AS count FROM trials`).first<{ count: number }>()
+  const trialCount = Number(trialCountRow?.count ?? 1)
+
+  return Number((totalDelta / playerCount / trialCount).toFixed(3))
+}
+
 async function scheduleSubmissionPostProcessing(
   ctx: ExecutionContext,
   env: any,
@@ -92,11 +132,19 @@ async function scheduleSubmissionPostProcessing(
 ) {
   ctx.waitUntil((async () => {
     try {
+      const db = env.wasans as D1Database
+      const previousWrRow = await db.prepare(
+        `SELECT submission_uuid, player_uuid, player_name, time, date
+         FROM wrs
+         WHERE trial_name = ?`
+      )
+        .bind(submission.trial_name)
+        .first<{ submission_uuid: string; player_uuid: string; player_name: string; time: number; date: string } | null>()
+
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       await refreshWorldRecords(env.wasans, submission.trial_name, user)
       await refreshPlayerScore(env.wasans, submission.player_uuid)
 
-      const db = env.wasans as any
       const { results } = await db.prepare(
         `SELECT submissions.*, players.score as player_score
          FROM submissions
@@ -117,7 +165,7 @@ async function scheduleSubmissionPostProcessing(
          WHERE trial_name = ?`
       )
         .bind(submission.trial_name)
-        .first()
+        .first<{ submission_uuid: string; player_uuid: string; player_name: string; trial_name: string; time: number; date: string } | null>()
 
       const shouldCreateThread =
         wrRow?.submission_uuid === uuid ||
@@ -125,6 +173,12 @@ async function scheduleSubmissionPostProcessing(
 
       if (!shouldCreateThread) {
         return
+      }
+
+      let averageScoreDelta: number | undefined
+      if (wrRow?.submission_uuid === uuid) {
+        const oldWr = previousWrRow?.time ?? null
+        averageScoreDelta = await calculateAverageScoreDeltaForWrChange(env.wasans, submission.trial_name, oldWr, wrRow.time)
       }
 
       const { threadId } = await postApprovedRun({
@@ -137,15 +191,16 @@ async function scheduleSubmissionPostProcessing(
         oldPlayerScore: oldPlayer?.score,
         oldTime: oldPb?.time,
         discordUserId: String(oldPlayer?.player_id),
+        averageScoreDelta,
         is_wr: wrRow?.submission_uuid === uuid,
       })
 
-      if (threadId) {
-        await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
+      if (wrRow?.submission_uuid === uuid) {
+        await refreshScoresForTrial(env.wasans, submission.trial_name)
       }
 
-      if (wrRow?.submission_uuid === uuid) {
-        await refreshAllPlayerScores(env.wasans)
+      if (threadId) {
+        await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
       }
     } catch (error) {
       console.error("Background submission post-processing failed:", error)
@@ -166,7 +221,7 @@ async function scheduleSubmissionDeletePostProcessing(
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       if (isWr && wrTrialName) {
         await refreshWorldRecords(env.wasans, wrTrialName, user)
-        await refreshAllPlayerScores(env.wasans)
+        await refreshScoresForTrial(env.wasans, wrTrialName)
       } else {
         await refreshPlayerScore(env.wasans, submission.player_uuid)
       }
