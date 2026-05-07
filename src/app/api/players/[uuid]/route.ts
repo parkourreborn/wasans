@@ -1,4 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
+import { refreshPlayerScore } from "@/lib/server/player-scores"
+import { refreshPlayerPbs } from "@/lib/server/pbs"
 
 const cacheHeaders = {
   "cache-control": "max-age=10, stale-while-revalidate=30",
@@ -27,6 +29,25 @@ export async function GET(_: Request, { params }: { params: Promise<{ uuid: stri
         "content-type": "application/json",
       },
     })
+  }
+
+  // Check if the stored score is outdated and refresh if needed
+  const currentScore = await refreshPlayerScore(env.wasans, uuid, { skipDiscordUpdate: true })
+  const storedScore = Number(player.score)
+  
+  // If scores don't match (allowing for small floating point differences), the stored score was wrong
+  if (Math.abs(currentScore - storedScore) > 0.001) {
+    // Score was outdated, refresh PB cache first, then recalculate
+    await refreshPlayerPbs(env.wasans, uuid)
+    const refreshedScore = await refreshPlayerScore(env.wasans, uuid, { skipDiscordUpdate: true })
+    
+    // Refetch the player with updated score
+    const updatedPlayer = await env.wasans.prepare(`SELECT * FROM players WHERE uuid = ?`)
+      .bind(uuid)
+      .first()
+    if (updatedPlayer) {
+      player.score = updatedPlayer.score
+    }
   }
 
   const rankResult = await env.wasans.prepare(

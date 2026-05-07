@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
@@ -18,8 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PlusCircleIcon } from "lucide-react"
+import { PlusCircleIcon, X } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
@@ -116,17 +115,15 @@ function scoreFor(wr: number | undefined, time: string | number, trial: TrialNam
   return calculateScore(wr, parsedTime, trial).toFixed(3)
 }
 
-export default function SubmissionsPage() {
+function SubmissionsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [wrSubmissionIds, setWrSubmissionIds] = useState<Set<string>>(new Set())
   const [worldRecordTimes, setWorldRecordTimes] = useState<Record<string, number>>({})
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [activeTab, setActiveTab] = useState("submissions")
-  const [players, setPlayers] = useState<Array<{ uuid: string; player_name: string; score: number }>>([])
-  const [playersLoading, setPlayersLoading] = useState(false)
-  const [playersError, setPlayersError] = useState<string | null>(null)
+  const [playerFilter, setPlayerFilter] = useState("")
   const [authLabel, setAuthLabel] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [signInDialogOpen, setSignInDialogOpen] = useState(false)
@@ -135,32 +132,31 @@ export default function SubmissionsPage() {
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
-  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const [filteredPlayerName, setFilteredPlayerName] = useState<string | null>(null)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    // Initialize player filter from URL params
+    const playerUuid = searchParams.get("player_uuid")
+    if (playerUuid) {
+      setPlayerFilter(playerUuid)
+    }
+  }, [searchParams])
 
   const filteredSubmissions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
     return submissions.filter((submission) => {
       const matchesStatus = statusFilter === "all" || submission.state === statusFilter
+      const matchesPlayer = !playerFilter || submission.player_uuid === playerFilter
       const matchesSearch =
         !normalizedQuery ||
         submission.trial_name.toLowerCase().includes(normalizedQuery) ||
         submission.player_name.toLowerCase().includes(normalizedQuery)
 
-      return matchesStatus && matchesSearch
+      return matchesStatus && matchesPlayer && matchesSearch
     })
-  }, [searchQuery, statusFilter, submissions])
-
-  const filteredPlayers = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase()
-
-    return players.filter((player) => {
-      return (
-        !normalizedQuery ||
-        player.player_name.toLowerCase().includes(normalizedQuery)
-      )
-    })
-  }, [searchQuery, players])
+  }, [searchQuery, statusFilter, playerFilter, submissions])
 
   useEffect(() => {
     const fetchPage = async (pageToLoad: number) => {
@@ -168,8 +164,16 @@ export default function SubmissionsPage() {
       setError(null)
 
       try {
+        const params = new URLSearchParams({
+          page: pageToLoad.toString(),
+          limit: "50"
+        })
+        if (playerFilter) {
+          params.set("player_uuid", playerFilter)
+        }
+
         const submissionsResponse = await fetch(
-          `/api/submissions?page=${pageToLoad}&limit=50`,
+          `/api/submissions?${params.toString()}`,
           { cache: "no-store" }
         )
 
@@ -236,36 +240,28 @@ export default function SubmissionsPage() {
 
     fetchPage(1)
     fetchMeta()
-  }, [])
+  }, [playerFilter])
 
   useEffect(() => {
-    if (activeTab !== "players" || players.length > 0 || playersLoading) {
+    if (!playerFilter) {
+      setFilteredPlayerName(null)
       return
     }
 
-    const fetchPlayers = async () => {
-      setPlayersLoading(true)
-      setPlayersError(null)
-
+    const fetchPlayerName = async () => {
       try {
-        const response = await fetch(`/api/players`, { cache: "no-store" })
-
-        if (!response.ok) {
-          throw new Error("Failed to load players")
+        const response = await fetch(`/api/players/${playerFilter}`)
+        if (response.ok) {
+          const data = await response.json() as { player: { player_name: string } | null }
+          setFilteredPlayerName(data.player?.player_name || null)
         }
-
-        const data = await response.json() as { results: Array<{ uuid: string; player_name: string; score: number }> }
-        setPlayers(data.results || [])
       } catch (err) {
-        console.error(err)
-        setPlayersError("Unable to load players")
-      } finally {
-        setPlayersLoading(false)
+        console.error("Failed to fetch player name:", err)
       }
     }
 
-    fetchPlayers()
-  }, [activeTab, players.length, playersLoading])
+    fetchPlayerName()
+  }, [playerFilter])
 
   useEffect(() => {
     if (loading) {
@@ -287,7 +283,15 @@ export default function SubmissionsPage() {
       (entries) => {
         if (entries[0]?.isIntersecting) {
           setLoadingMore(true)
-          fetch(`/api/submissions?page=${page + 1}&limit=50`, { cache: "no-store" })
+          const params = new URLSearchParams({
+            page: (page + 1).toString(),
+            limit: "50"
+          })
+          if (playerFilter) {
+            params.set("player_uuid", playerFilter)
+          }
+
+          fetch(`/api/submissions?${params.toString()}`, { cache: "no-store" })
             .then(async (response) => {
               if (!response.ok) {
                 throw new Error("Failed to load more submissions")
@@ -311,7 +315,7 @@ export default function SubmissionsPage() {
 
     observer.observe(loadMoreRef.current)
     return () => observer.disconnect()
-  }, [loading, loadingMore, hasMore, page])
+  }, [loading, loadingMore, hasMore, page, playerFilter])
 
   if (loading) {
     return (
@@ -332,44 +336,44 @@ export default function SubmissionsPage() {
   return (
     <div className="flex h-full w-full flex-col gap-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full max-w-md gap-2">
-            <TabsTrigger value="submissions">Submissions</TabsTrigger>
-            <TabsTrigger value="players">Players</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold">Submissions</h1>
+          {filteredPlayerName && (
+            <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-1 text-sm">
+              <span>Filtering by: {filteredPlayerName}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPlayerFilter("")}
+                className="h-4 w-4 p-0"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+        </div>
 
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <Input
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={
-              activeTab === "players"
-                ? "Search players by username"
-                : "Search submissions by trial or player name"
-            }
-            aria-label={
-              activeTab === "players"
-                ? "Search players by username"
-                : "Search submissions by trial or player name"
-            }
+            placeholder="Search submissions by trial or player name"
+            aria-label="Search submissions by trial or player name"
             className="h-10 flex-1"
           />
 
-          {activeTab === "submissions" ? (
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full lg:w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="denied">Denied</SelectItem>
-              </SelectContent>
-            </Select>
-          ) : null}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full lg:w-40">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="denied">Denied</SelectItem>
+            </SelectContent>
+          </Select>
 
           <Button
             type="button"
@@ -416,54 +420,10 @@ export default function SubmissionsPage() {
       {authLabel && <p className="text-sm text-muted-foreground">Logged in as {authLabel}</p>}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {activeTab === "players" ? (
-          playersLoading ? (
-            <div className="flex h-full w-full items-center justify-center">
-              <Spinner className="size-8 text-muted-foreground" />
-            </div>
-          ) : playersError ? (
-            <div className="flex h-full w-full items-center justify-center">
-              <p className="text-destructive">{playersError}</p>
-            </div>
-          ) : filteredPlayers.length === 0 ? (
-            <div className="flex h-full w-full items-center justify-center">
-              <p className="text-muted-foreground">
-                {players.length === 0 ? "No players available" : "No matching players"}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredPlayers.map((player) => (
-                <Card key={player.uuid} className="overflow-hidden hover:shadow-lg transition-shadow">
-                  <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <Link
-                        href={`/players/${player.uuid}`}
-                        className="text-lg font-semibold underline underline-offset-4"
-                      >
-                        {player.player_name}
-                      </Link>
-                      <p className="text-sm text-muted-foreground">
-                        Score {player.score.toFixed(3)}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="h-10 w-full sm:w-auto"
-                      onClick={() => router.push(`/players/${player.uuid}`)}
-                    >
-                      View profile
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )
-        ) : filteredSubmissions.length === 0 ? (
+        {filteredSubmissions.length === 0 ? (
           <div className="flex h-full w-full items-center justify-center">
             <p className="text-muted-foreground">
-              {submissions.length === 0 ? "No submissions yet" : "No matching submissions"}
+              {submissions.length === 0 ? "No submissions available" : "No matching submissions"}
             </p>
           </div>
         ) : (
@@ -564,3 +524,13 @@ export default function SubmissionsPage() {
     </div>
   )
 }
+
+function SubmissionsPageWrapper() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SubmissionsPage />
+    </Suspense>
+  )
+}
+
+export default SubmissionsPageWrapper

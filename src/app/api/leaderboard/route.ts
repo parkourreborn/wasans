@@ -1,5 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { trials as trialList } from "@/lib/trials"
+import { refreshAllPlayerScores } from "@/lib/server/player-scores"
 
 type LeaderboardPlayer = {
   player_uuid: string
@@ -88,5 +89,23 @@ export async function GET(request: Request) {
       ...cacheHeaders,
       "content-type": "application/json",
     },
+  })
+}
+
+export async function POST() {
+  const { env } = await getCloudflareContext({ async: true })
+  if (!env?.wasans) {
+    return new Response(JSON.stringify({ error: "DB binding not available" }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    })
+  }
+
+  // Refresh all player scores
+  await refreshAllPlayerScores(env.wasans)
+
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
   })
 }
