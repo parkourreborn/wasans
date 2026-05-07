@@ -19,7 +19,28 @@ export async function GET(_: Request, { params }: { params: Promise<{ uuid: stri
     .bind(uuid)
     .first()
 
-  return new Response(JSON.stringify({ player }), {
+  if (!player) {
+    return new Response(JSON.stringify({ player: null }), {
+      status: 200,
+      headers: {
+        ...cacheHeaders,
+        "content-type": "application/json",
+      },
+    })
+  }
+
+  const rankResult = await env.wasans.prepare(
+    `SELECT COUNT(*) + 1 as rank FROM players WHERE score > ?`
+  )
+    .bind(player.score)
+    .first<{ rank: number }>()
+
+  const playerWithRank = {
+    ...player,
+    rank: rankResult?.rank || 1,
+  }
+
+  return new Response(JSON.stringify({ player: playerWithRank }), {
     status: 200,
     headers: {
       ...cacheHeaders,
