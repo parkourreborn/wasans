@@ -36,6 +36,7 @@ type PlayerInfo = {
   player_name: string
   score: number
   date_joined: string
+  rank: number
 }
 
 type SubmissionValue = {
@@ -205,9 +206,15 @@ export default function PlayerProfilePage() {
           <h1 className="text-3xl font-bold">{player.player_name}</h1>
           <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>
         </div>
-        <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-right">
-          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Player score</p>
-          <p className="text-3xl font-semibold">{formatPlayerScore(player.score)}</p>
+        <div className="flex gap-4">
+          <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-center">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Overall Rank</p>
+            <p className="text-4xl font-bold text-primary">#{player.rank}</p>
+          </div>
+          <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-center">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Wasans score</p>
+            <p className="text-4xl font-semibold">{formatPlayerScore(player.score)}</p>
+          </div>
         </div>
       </div>
 
