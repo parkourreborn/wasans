@@ -205,14 +205,6 @@ export async function postApprovedRun(run: ApprovedHighScoreRun) {
     const newScoreFormatted = run.player_score.toFixed(3)
     const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
 
-
-    await sendBotApiRequest("/manage-role", {
-      guild_id: GUILD_ID,
-      user_id: run.discordUserId,
-      role_id: wasansMemberRoleId,
-      action: "add",
-    }).catch((error) => {});
-
     const scoreDeltaLine =
       run.averageScoreDelta !== undefined
       ?
