@@ -206,7 +206,7 @@ export async function postApprovedRun(run: ApprovedHighScoreRun) {
     const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
 
 
-    sendBotApiRequest("/manage-role", {
+    await sendBotApiRequest("/manage-role", {
       guild_id: GUILD_ID,
       user_id: run.discordUserId,
       role_id: wasansMemberRoleId,
