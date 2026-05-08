@@ -25,6 +25,8 @@ export type WorldRecordRun = {
 }
 
 
+const wasansMemberRoleId = "1315480739311124593";
+
 const roleRanks = {
   0.0: "1257994886070800465", // unranked
   0.3: "1501720864872206568",
@@ -202,6 +204,14 @@ export async function postApprovedRun(run: ApprovedHighScoreRun) {
     const oldScoreFormatted = run.oldPlayerScore !== undefined ? run.oldPlayerScore.toFixed(3) : "N/A"
     const newScoreFormatted = run.player_score.toFixed(3)
     const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
+
+
+    sendBotApiRequest("/manage-role", {
+      guild_id: GUILD_ID,
+      user_id: run.discordUserId,
+      role_id: wasansMemberRoleId,
+      action: "add",
+    }).catch((error) => {});
 
     const scoreDeltaLine =
       run.averageScoreDelta !== undefined
