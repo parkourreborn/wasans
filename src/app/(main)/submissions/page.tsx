@@ -18,11 +18,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { PlusCircleIcon, X } from "lucide-react"
+import { PlusCircleIcon, X, UploadIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Progress } from "@/components/ui/progress"
 import Link from "next/link"
-import { TrialName } from "@/lib/trials"
+import { TrialName, trials } from "@/lib/trials"
 import calculateScore from "@/lib/calc-score"
 
 type Submission = {
@@ -64,6 +65,32 @@ type AuthResponse = {
 }
 
 const submissionUuidListKey = "submission_uuids"
+
+function parseFilename(filename: string): { trialName?: TrialName; time?: string } {
+  const result: { trialName?: TrialName; time?: string } = {}
+
+  // Extract time in format x.xxx (e.g., 12.345)
+  const timeMatch = filename.match(/(\d+(?:\.\d{1,3})?)/)
+  if (timeMatch) {
+    const time = timeMatch[1]
+    // Validate it's a reasonable time (not too long, not zero)
+    const timeNum = parseFloat(time)
+    if (timeNum > 0 && timeNum < 1000) { // reasonable bounds for trial times
+      result.time = time
+    }
+  }
+
+  // Extract trial name (case insensitive)
+  const filenameLower = filename.toLowerCase()
+  for (const trial of trials) {
+    if (filenameLower.includes(trial.toLowerCase())) {
+      result.trialName = trial
+      break
+    }
+  }
+
+  return result
+}
 
 function mergeSubmissions(current: Submission[], next: Submission[]) {
   const seen = new Set<string>()
@@ -134,6 +161,14 @@ function SubmissionsPage() {
   const [hasMore, setHasMore] = useState(true)
   const [filteredPlayerName, setFilteredPlayerName] = useState<string | null>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
+
+  // Drag and drop state
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [dragDialogOpen, setDragDialogOpen] = useState(false)
+  const [parsedFileData, setParsedFileData] = useState<{ trialName?: TrialName; time?: string; file: File } | null>(null)
+  const [uploadingDragFile, setUploadingDragFile] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStatus, setUploadStatus] = useState<string>("")
 
   useEffect(() => {
     // Initialize player filter from URL params
@@ -242,26 +277,122 @@ function SubmissionsPage() {
     fetchMeta()
   }, [playerFilter])
 
-  useEffect(() => {
-    if (!playerFilter) {
-      setFilteredPlayerName(null)
-      return
-    }
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(true)
+  }
 
-    const fetchPlayerName = async () => {
-      try {
-        const response = await fetch(`/api/players/${playerFilter}`)
-        if (response.ok) {
-          const data = await response.json() as { player: { player_name: string } | null }
-          setFilteredPlayerName(data.player?.player_name || null)
-        }
-      } catch (err) {
-        console.error("Failed to fetch player name:", err)
+  const handleDragLeave = (event: React.DragEvent) => {
+    event.preventDefault()
+    // Only set drag over to false if we're leaving the main container
+    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+      setIsDragOver(false)
+    }
+  }
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(false)
+
+    const files = Array.from(event.dataTransfer.files)
+    const videoFile = files.find(file => file.type.startsWith('video/'))
+
+    if (videoFile) {
+      const parsed = parseFilename(videoFile.name)
+      if (parsed.trialName || parsed.time) {
+        setParsedFileData({ ...parsed, file: videoFile })
+        setDragDialogOpen(true)
+      } else {
+        setError("Could not parse trial name or time from filename. Please use the new submission form.")
       }
+    } else {
+      setError("Please drop a video file.")
     }
+  }
 
-    fetchPlayerName()
-  }, [playerFilter])
+  const handleDragUpload = async () => {
+    if (!parsedFileData || !isAuthenticated) return
+
+    setUploadingDragFile(true)
+    setDragDialogOpen(false)
+    setUploadProgress(0)
+    setUploadStatus("Preparing upload...")
+
+    return new Promise<void>((resolve, reject) => {
+      const formData = new FormData()
+      formData.append("submissions", JSON.stringify([{
+        trial_name: parsedFileData.trialName || trials[0],
+        time: parsedFileData.time || "",
+        proof_url: ""
+      }]))
+      formData.append("proof_file_0", parsedFileData.file)
+
+      const request = new XMLHttpRequest()
+
+      request.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          setUploadProgress(50)
+          setUploadStatus("Uploading...")
+          return
+        }
+
+        const progress = Math.min(Math.round((event.loaded / event.total) * 90), 90)
+        setUploadProgress(progress)
+        setUploadStatus(`Uploading... ${progress}%`)
+      }
+
+      request.upload.onload = () => {
+        setUploadProgress(90)
+        setUploadStatus("Processing submission...")
+      }
+
+      request.onload = () => {
+        let json: { error?: string } | null = null
+
+        try {
+          json = JSON.parse(request.responseText || "null") as { error?: string } | null
+        } catch {
+          json = null
+        }
+
+        if (request.status >= 200 && request.status < 300) {
+          setUploadProgress(100)
+          setUploadStatus("Upload complete!")
+          setTimeout(() => {
+            setUploadingDragFile(false)
+            setUploadProgress(0)
+            setUploadStatus("")
+            setParsedFileData(null)
+            window.location.reload()
+          }, 1000)
+          resolve()
+          return
+        }
+
+        reject(new Error(json?.error || "Unable to create submission"))
+      }
+
+      request.onerror = () => {
+        reject(new Error("Unable to create submission"))
+      }
+
+      request.onabort = () => {
+        reject(new Error("Upload was cancelled"))
+      }
+
+      setUploadProgress(0)
+      setUploadStatus("Starting upload...")
+      request.open("POST", "/api/submissions")
+      request.send(formData)
+    }).catch((err) => {
+      console.error("Upload error:", err)
+      setError(err instanceof Error ? err.message : "Failed to upload submission")
+      setUploadingDragFile(false)
+      setUploadProgress(0)
+      setUploadStatus("")
+      setParsedFileData(null)
+    })
+  }
 
   useEffect(() => {
     if (loading) {
@@ -334,7 +465,32 @@ function SubmissionsPage() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col gap-4">
+    <div 
+      className={`flex h-full w-full flex-col gap-4 ${isDragOver ? 'relative' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {uploadingDragFile && (
+        <div className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm py-4">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+              <span>{uploadStatus}</span>
+              <span>{uploadProgress}%</span>
+            </div>
+            <Progress value={uploadProgress} className="w-full" />
+          </div>
+        </div>
+      )}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <UploadIcon className="h-12 w-12 text-primary" />
+            <p className="text-lg font-semibold">Drop your video file here</p>
+            <p className="text-sm text-muted-foreground">We'll try to parse the trial name and time from the filename</p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold">Submissions</h1>
@@ -410,6 +566,52 @@ function SubmissionsPage() {
                   >
                     Login with Discord
                   </a>
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog
+            open={dragDialogOpen}
+            onOpenChange={setDragDialogOpen}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirm Submission</AlertDialogTitle>
+                <AlertDialogDescription>
+                  We parsed the following data from "{parsedFileData?.file.name}":
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="py-4">
+                <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Trial</label>
+                    <div className="rounded-md border px-3 py-2 text-sm">
+                      {parsedFileData?.trialName || "Not detected - will use default"}
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Time</label>
+                    <div className="rounded-md border px-3 py-2 text-sm">
+                      {parsedFileData?.time || "Not detected - will be empty"}
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">File</label>
+                    <div className="rounded-md border px-3 py-2 text-sm">
+                      {parsedFileData?.file.name}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleDragUpload}
+                  disabled={uploadingDragFile}
+                >
+                  {uploadingDragFile ? <Spinner className="size-4 mr-2" /> : null}
+                  {uploadingDragFile ? "Uploading..." : "Upload Submission"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
