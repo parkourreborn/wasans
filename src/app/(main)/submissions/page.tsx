@@ -169,6 +169,8 @@ function SubmissionsPage() {
   const [uploadingDragFile, setUploadingDragFile] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadStatus, setUploadStatus] = useState<string>("")
+  const [editedTrialName, setEditedTrialName] = useState<TrialName | "">("")
+  const [editedTime, setEditedTime] = useState<string>("")
 
   useEffect(() => {
     // Initialize player filter from URL params
@@ -301,6 +303,8 @@ function SubmissionsPage() {
       const parsed = parseFilename(videoFile.name)
       if (parsed.trialName || parsed.time) {
         setParsedFileData({ ...parsed, file: videoFile })
+        setEditedTrialName(parsed.trialName || trials[0])
+        setEditedTime(parsed.time || "")
         setDragDialogOpen(true)
       } else {
         setError("Could not parse trial name or time from filename. Please use the new submission form.")
@@ -321,8 +325,8 @@ function SubmissionsPage() {
     return new Promise<void>((resolve, reject) => {
       const formData = new FormData()
       formData.append("submissions", JSON.stringify([{
-        trial_name: parsedFileData.trialName || trials[0],
-        time: parsedFileData.time || "",
+        trial_name: editedTrialName || trials[0],
+        time: editedTime || "",
         proof_url: ""
       }]))
       formData.append("proof_file_0", parsedFileData.file)
@@ -363,6 +367,8 @@ function SubmissionsPage() {
             setUploadProgress(0)
             setUploadStatus("")
             setParsedFileData(null)
+            setEditedTrialName("")
+            setEditedTime("")
             window.location.reload()
           }, 1000)
           resolve()
@@ -391,6 +397,8 @@ function SubmissionsPage() {
       setUploadProgress(0)
       setUploadStatus("")
       setParsedFileData(null)
+      setEditedTrialName("")
+      setEditedTime("")
     })
   }
 
@@ -573,7 +581,14 @@ function SubmissionsPage() {
 
           <AlertDialog
             open={dragDialogOpen}
-            onOpenChange={setDragDialogOpen}
+            onOpenChange={(open) => {
+              setDragDialogOpen(open)
+              if (!open) {
+                setParsedFileData(null)
+                setEditedTrialName("")
+                setEditedTime("")
+              }
+            }}
           >
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -586,19 +601,38 @@ function SubmissionsPage() {
                 <div className="grid gap-4">
                   <div className="grid gap-2">
                     <label className="text-sm font-medium">Trial</label>
-                    <div className="rounded-md border px-3 py-2 text-sm">
-                      {parsedFileData?.trialName || "Not detected - will use default"}
-                    </div>
+                    <Select value={editedTrialName} onValueChange={(value) => setEditedTrialName(value as TrialName)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select trial" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {trials.map((trial) => (
+                          <SelectItem key={trial} value={trial}>
+                            {trial}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid gap-2">
                     <label className="text-sm font-medium">Time</label>
-                    <div className="rounded-md border px-3 py-2 text-sm">
-                      {parsedFileData?.time || "Not detected - will be empty"}
-                    </div>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      pattern="^\d+(\.\d{1,3})?$"
+                      value={editedTime}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        if (/^\d*(\.\d{0,3})?$/.test(value)) {
+                          setEditedTime(value)
+                        }
+                      }}
+                      placeholder="e.g., 12.345"
+                    />
                   </div>
                   <div className="grid gap-2">
                     <label className="text-sm font-medium">File</label>
-                    <div className="rounded-md border px-3 py-2 text-sm">
+                    <div className="rounded-md border px-3 py-2 text-sm bg-muted">
                       {parsedFileData?.file.name}
                     </div>
                   </div>
