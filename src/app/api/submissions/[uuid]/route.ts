@@ -168,8 +168,8 @@ async function scheduleSubmissionPostProcessing(
         .first<{ submission_uuid: string; player_uuid: string; player_name: string; trial_name: string; time: number; date: string } | null>()
 
       const shouldCreateThread =
-        wrRow?.submission_uuid === uuid ||
-        (state === "approved" && state !== previousState && Number(updatedSubmission?.player_score) > 0.3)
+        (wrRow?.submission_uuid === uuid && previousWrRow?.submission_uuid !== uuid) || // New WR
+        (state === "approved" && state !== previousState && Number(updatedSubmission?.player_score) > 0.3) // New approval
 
       if (!shouldCreateThread) {
         return
