@@ -68,6 +68,32 @@ type UploadState = {
 let cachedWorldRecords: Record<string, number> | null = null
 let worldRecordsRequest: Promise<Record<string, number>> | null = null
 
+function parseFilename(filename: string): { trialName?: TrialName; time?: string } {
+  const result: { trialName?: TrialName; time?: string } = {}
+
+  // Extract time in format x.xxx (e.g., 12.345)
+  const timeMatch = filename.match(/(\d+(?:\.\d{1,3})?)/)
+  if (timeMatch) {
+    const time = timeMatch[1]
+    // Validate it's a reasonable time (not too long, not zero)
+    const timeNum = parseFloat(time)
+    if (timeNum > 0 && timeNum < 1000) { // reasonable bounds for trial times
+      result.time = time
+    }
+  }
+
+  // Extract trial name (case insensitive)
+  const filenameLower = filename.toLowerCase()
+  for (const trial of trials) {
+    if (filenameLower.includes(trial.toLowerCase())) {
+      result.trialName = trial
+      break
+    }
+  }
+
+  return result
+}
+
 function createDraft(id = "submission-1"): SubmissionDraft {
   return {
     id,
@@ -562,11 +588,23 @@ export default function NewSubmissionPage() {
                       id={`proof-file-${submission.id}`}
                       type="file"
                       accept="video/*"
-                      onChange={(event) =>
-                        updateSubmission(submission.id, {
-                          proof_file: event.target.files?.[0] ?? null,
-                        })
-                      }
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null
+                        const updates: Partial<SubmissionDraft> = { proof_file: file }
+
+                        if (file) {
+                          const parsed = parseFilename(file.name)
+                          // Only autofill if the field is empty or default value
+                          if (parsed.trialName && (!submission.trial_name || submission.trial_name === trials[0])) {
+                            updates.trial_name = parsed.trialName
+                          }
+                          if (parsed.time && !submission.time) {
+                            updates.time = parsed.time
+                          }
+                        }
+
+                        updateSubmission(submission.id, updates)
+                      }}
                       disabled={submitting}
                     />
                   </div>
