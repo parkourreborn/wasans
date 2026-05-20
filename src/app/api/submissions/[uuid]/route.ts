@@ -1,11 +1,12 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { canModerate, getAuthUser } from "@/lib/server/auth"
-import { refreshAllPlayerScores, refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
-import { refreshPlayerPb, refreshPlayerPbs } from "@/lib/server/pbs"
+import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
+import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 import { insertAuditLog } from "@/lib/server/audit"
 import {
   deleteBotThread,
+  getRankLabel,
   postApprovedRun,
   sendDiscordDm,
 } from "@/lib/server/notifications"
@@ -127,9 +128,13 @@ async function scheduleSubmissionPostProcessing(
   state: string | null,
   previousState: string,
   user: any,
-  oldPlayer: { score: number; player_id: number } | null,
+  oldPlayer: { score: number; player_id: string } | null,
   oldPb: { time: number } | null,
-  uuid: string
+  uuid: string,
+  stateChanged: boolean,
+  noteChanged: boolean,
+  previousModeratorNote: string | null,
+  newModeratorNote: string | null
 ) {
   ctx.waitUntil((async () => {
     try {
@@ -167,6 +172,52 @@ async function scheduleSubmissionPostProcessing(
       )
         .bind(submission.trial_name)
         .first<{ submission_uuid: string; player_uuid: string; player_name: string; trial_name: string; time: number; date: string } | null>()
+
+      const playerScoreBefore = oldPlayer?.score
+      const newState = state ?? previousState
+      const finalModeratorNote = newModeratorNote ?? previousModeratorNote
+      const scoreChanged = typeof playerScoreBefore === "number" && Number(updatedSubmission?.player_score) !== playerScoreBefore
+      const newPlayerScore = Number(updatedSubmission?.player_score)
+      const oldRankName = typeof playerScoreBefore === "number" ? getRankLabel(playerScoreBefore) : null
+      const newRankName = getRankLabel(newPlayerScore)
+      const rankChanged = oldRankName !== null && newRankName !== null && oldRankName !== newRankName
+
+      if ((stateChanged || noteChanged || scoreChanged || rankChanged) && oldPlayer?.player_id) {
+        const displayState = (value: string) => {
+          if (value === "approved") return "Accepted"
+          if (value === "denied") return "Denied"
+          return "Pending"
+        }
+
+        let content = `Your submission https://wasans.tully.sh/submissions/${uuid} has been moderated by ${user.player_name}`
+
+        if (stateChanged) {
+          content += `\n\nState\n${displayState(previousState)} -> ${displayState(newState)}`
+        }
+
+        if (noteChanged) {
+          const oldNote = previousModeratorNote ?? "N/A"
+          const updatedNote = finalModeratorNote ?? "N/A"
+          content += `\n\nModerator note\n${oldNote} -> ${updatedNote}`
+        }
+
+        if (scoreChanged) {
+          content += `\n\nScore\n*${playerScoreBefore?.toFixed(3)}* -> *${newPlayerScore.toFixed(3)}*`
+        }
+
+        if (rankChanged) {
+          const rankDirection = newPlayerScore > (playerScoreBefore ?? 0) ? "ranked up" : "ranked down"
+          content += `\n\nRank\n${oldRankName} -> ${newRankName} (${rankDirection})`
+        }
+
+        ctx.waitUntil((async () => {
+          try {
+            await sendDiscordDm(oldPlayer.player_id, content)
+          } catch (error) {
+            console.error("Failed to send submission moderation DM:", error)
+          }
+        })())
+      }
 
       const shouldCreateThread =
         (wrRow?.submission_uuid === uuid && previousWrRow?.submission_uuid !== uuid) || // New WR
@@ -365,40 +416,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     .bind(submission.player_uuid, submission.trial_name)
     .first<{ time: number }>()
 
-  scheduleSubmissionPostProcessing(ctx, env, submission, state, previousState, user, oldPlayer, oldPb, uuid)
-
-  const newState = state ?? previousState
   const newModeratorNote = moderatorNote !== null ? moderatorNote : submission.moderator_note
   const noteChanged = submission.moderator_note !== newModeratorNote
   const stateChanged = state !== null && state !== previousState
 
-  if ((stateChanged || noteChanged) && oldPlayer?.player_id) {
-    const displayState = (value: string) => {
-      if (value === "approved") return "Accepted"
-      if (value === "denied") return "Denied"
-      return "Pending"
-    }
-
-    let content = `Your submission https://wasans.tully.sh/submissions/${uuid} has been moderated by ${user.player_name}`
-    
-    if (previousState !== newState) {
-      content += `\n\nState\n${displayState(previousState)} -> ${displayState(newState)}`
-    }
-
-    if (noteChanged) {
-      const oldNote = submission.moderator_note ?? "N/A"
-      const updatedNote = newModeratorNote ?? "N/A"
-      content += `\n\nModerator note\n${oldNote} -> ${updatedNote}`
-    }
-
-    ctx.waitUntil((async () => {
-      try {
-        await sendDiscordDm(oldPlayer.player_id, content)
-      } catch (error) {
-        console.error("Failed to send submission moderation DM:", error)
-      }
-    })())
-  }
+  scheduleSubmissionPostProcessing(
+    ctx,
+    env,
+    submission,
+    state,
+    previousState,
+    user,
+    oldPlayer,
+    oldPb,
+    uuid,
+    stateChanged,
+    noteChanged,
+    submission.moderator_note,
+    newModeratorNote
+  )
 
   const { results } = await env.wasans.prepare(
     `SELECT submissions.*, players.score as player_score

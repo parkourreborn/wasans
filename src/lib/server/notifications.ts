@@ -101,6 +101,11 @@ export async function sendDiscordDm(userId: string, content: string) {
   })
 }
 
+export function getRankLabel(score: number) {
+  const roleId = getRoleForScore(score)
+  return roleId ? roleNames[roleId] ?? roleId : null
+}
+
 function getRoleIndex(roleId: string) {
   return sortedRankRoles.findIndex((rank) => rank.roleId === roleId)
 }
