@@ -42,7 +42,7 @@ const faqItems = [
   },
   {
     question: "There's too much rules to read. What are the essentials?",
-    answer: "Show your FPS, show your final time after finish, and have proper video quality.",
+    answer: "Show your final time after finish and have proper video quality.",
   },
 ]
 
