@@ -5,7 +5,6 @@ const runRules = [
   "Using autoparkour and autotransition is prohibited and automatically invalidates the run.",
   "The clip must include the entire run, along with the actual time after exiting the trial.",
   "The clip must clearly show: the timer, player's username, and the game build number at the bottom of the screen.",
-  "PC players MUST show FPS via Shift + F5 during the entire run. Runs without the FPS indicator will be rejected. (Applies to runs recorded after 03/01/2026; console users are exempt. Runs without FPS are only accepted for build 224 or earlier.)",
   "If you are permanently banned from the game, you are ineligible to submit runs. This is done to comply with the main game rule.",
   "Alternative accounts are allowed ONLY if you are not ban evading.",
   "World-record runs must be submitted within an acceptable time after being recorded. Normal life delays (vacation, sleep) are acceptable. Gatekeeping or intentionally delaying submission is not acceptable.",
