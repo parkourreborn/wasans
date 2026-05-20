@@ -93,6 +93,10 @@ type SubmissionsResponse = {
   error?: string;
 };
 
+type AuthResponse = {
+  user?: any | null;
+};
+
 const trialKey = (trial: string) => trial.toUpperCase();
 const zeroTimes = Object.fromEntries(trialNames.map((trial) => [trialKey(trial), "0.000"]));
 const CALCULATOR_LOCAL_STORAGE_KEY = "calculator_saved_times";
@@ -183,8 +187,8 @@ export default function Home() {
     const loadAuth = async () => {
       try {
         const response = await fetch("/api/auth/me", { cache: "no-store" });
-        const json = await response.json();
-        setAuthUser(json.user ?? null);
+        const authJson = (await response.json().catch(() => null)) as AuthResponse | null;
+        setAuthUser(authJson?.user ?? null);
       } catch (err) {
         console.error(err);
         setAuthUser(null);
