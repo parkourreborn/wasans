@@ -4,6 +4,7 @@ import {
   getDiscordClientSecret,
   getDiscordRedirectUri,
 } from "@/lib/server/discord-oauth"
+import { grantDiscordAuthenticatedRole } from "@/lib/server/notifications"
 
 type DiscordTokenResponse = {
   access_token: string
@@ -254,6 +255,13 @@ export async function GET(request: Request) {
     const discordUser = await getDiscordUser(token.access_token, token.token_type)
     const player = await findOrCreatePlayer(env.wasans, discordUser, token)
     const sessionToken = await createSession(env.wasans, player.uuid)
+
+    try {
+      await grantDiscordAuthenticatedRole(discordUser.id)
+    } catch (error) {
+      console.error("Failed to assign Discord authenticated role:", error)
+    }
+
     const destinationUrl = new URL(nextUrl, requestUrl.origin)
     const headers = new Headers({
       location: destinationUrl.toString(),

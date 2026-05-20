@@ -7,6 +7,7 @@ import { insertAuditLog } from "@/lib/server/audit"
 import {
   deleteBotThread,
   postApprovedRun,
+  sendDiscordDm,
 } from "@/lib/server/notifications"
 
 export async function GET(_: Request, { params }: { params: Promise<{ uuid: string }> }) {
@@ -356,7 +357,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     `SELECT score, player_id FROM players WHERE players.uuid = ?`
   )
     .bind(submission.player_uuid)
-    .first<{ score: number, player_id: number }>()
+    .first<{ score: number, player_id: string }>()
 
   const oldPb = await env.wasans.prepare(
     `SELECT time FROM pbs WHERE player_uuid = ? AND trial_name = ?`
@@ -365,6 +366,39 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     .first<{ time: number }>()
 
   scheduleSubmissionPostProcessing(ctx, env, submission, state, previousState, user, oldPlayer, oldPb, uuid)
+
+  const newState = state ?? previousState
+  const newModeratorNote = moderatorNote !== null ? moderatorNote : submission.moderator_note
+  const noteChanged = submission.moderator_note !== newModeratorNote
+  const stateChanged = state !== null && state !== previousState
+
+  if ((stateChanged || noteChanged) && oldPlayer?.player_id) {
+    const displayState = (value: string) => {
+      if (value === "approved") return "Accepted"
+      if (value === "denied") return "Denied"
+      return "Pending"
+    }
+
+    let content = `Your submission https://wasans.tully.sh/submissions/${uuid} has been moderated by ${user.player_name}`
+    
+    if (previousState !== newState) {
+      content += `\n\nState\n${displayState(previousState)} -> ${displayState(newState)}`
+    }
+
+    if (noteChanged) {
+      const oldNote = submission.moderator_note ?? "N/A"
+      const updatedNote = newModeratorNote ?? "N/A"
+      content += `\n\nModerator note\n${oldNote} -> ${updatedNote}`
+    }
+
+    ctx.waitUntil((async () => {
+      try {
+        await sendDiscordDm(oldPlayer.player_id, content)
+      } catch (error) {
+        console.error("Failed to send submission moderation DM:", error)
+      }
+    })())
+  }
 
   const { results } = await env.wasans.prepare(
     `SELECT submissions.*, players.score as player_score
