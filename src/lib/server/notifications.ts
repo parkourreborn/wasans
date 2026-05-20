@@ -88,6 +88,19 @@ async function manageDiscordRole(userId: string, roleId: string, action: "add" |
   }
 }
 
+export const DISCORD_AUTHENTICATED_ROLE_ID = "1371654123446992936"
+
+export async function grantDiscordAuthenticatedRole(userId: string) {
+  return manageDiscordRole(userId, DISCORD_AUTHENTICATED_ROLE_ID, "add")
+}
+
+export async function sendDiscordDm(userId: string, content: string) {
+  return sendBotApiRequest("/send-dm", {
+    user_id: userId,
+    content,
+  })
+}
+
 function getRoleIndex(roleId: string) {
   return sortedRankRoles.findIndex((rank) => rank.roleId === roleId)
 }
