@@ -94,6 +94,16 @@ function parseFilename(filename: string): { trialName?: TrialName; time?: string
   return result
 }
 
+function isMedalLink(value: string) {
+  try {
+    const url = new URL(value)
+    const host = url.hostname.toLowerCase()
+    return host === "medal.tv" || host === "www.medal.tv"
+  } catch {
+    return false
+  }
+}
+
 function createDraft(id = "submission-1"): SubmissionDraft {
   return {
     id,
@@ -149,7 +159,8 @@ function formatTime(value: number) {
 
 function uploadSubmissions(
   submissions: SubmissionDraft[],
-  onProgress: (progress: number, status: UploadState["status"]) => void
+  onProgress: (progress: number, status: UploadState["status"], message?: string) => void,
+  hasMedalLink: boolean
 ) {
   return new Promise<ListResponse<unknown>>((resolve, reject) => {
     const payload = submissions.map((submission) => ({
@@ -171,16 +182,20 @@ function uploadSubmissions(
 
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable) {
-        onProgress(50, "uploading")
+        onProgress(50, "uploading", hasMedalLink ? "Uploading submission" : "Uploading submission")
         return
       }
 
       const progress = Math.min(Math.round((event.loaded / event.total) * 90), 90)
-      onProgress(progress, "uploading")
+      onProgress(progress, "uploading", hasMedalLink ? `Uploading ${progress}%` : `Uploading ${progress}%`)
     }
 
     request.upload.onload = () => {
-      onProgress(90, "processing")
+      if (hasMedalLink) {
+        onProgress(55, "uploading", "Downloading proof video")
+      } else {
+        onProgress(90, "processing", "Processing submissions")
+      }
     }
 
     request.onload = () => {
@@ -193,7 +208,7 @@ function uploadSubmissions(
       }
 
       if (request.status >= 200 && request.status < 300) {
-        onProgress(100, "done")
+        onProgress(100, "done", "Uploaded")
         resolve(json || {})
         return
       }
@@ -209,13 +224,14 @@ function uploadSubmissions(
       reject(new Error("Upload was cancelled"))
     }
 
-    onProgress(submissions.some((submission) => submission.proof_file) ? 0 : 90, "uploading")
+    onProgress(0, "uploading", "Preparing upload")
     request.open("POST", "/api/submissions")
     request.send(formData)
   })
 }
 
 export default function NewSubmissionPage() {
+
   const router = useRouter()
   const [authUser, setAuthUser] = useState<{ uuid: string } | null>(null)
   const [personalBests, setPersonalBests] = useState<Record<string, number>>({})
@@ -337,16 +353,6 @@ export default function NewSubmissionPage() {
     })
   }
 
-  const updateUploadState = (id: string, values: Partial<UploadState>) => {
-    setUploadStates((current) => ({
-      ...current,
-      [id]: {
-        ...(current[id] || { progress: 0, status: "idle" as const }),
-        ...values,
-      },
-    }))
-  }
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
@@ -373,7 +379,12 @@ export default function NewSubmissionPage() {
     )
 
     try {
-      await uploadSubmissions(submissions, (progress, status) => {
+      const preparedSubmissions = submissions
+      const hasMedalLink = submissions.some(
+        (submission) => !submission.proof_file && isMedalLink(submission.proof_url.trim())
+      )
+
+      await uploadSubmissions(preparedSubmissions, (progress, status, message) => {
         setUploadStates((current) =>
           Object.fromEntries(
             Object.entries(current).map(([id, state]) => [
@@ -383,16 +394,17 @@ export default function NewSubmissionPage() {
                 progress,
                 status,
                 message:
-                  status === "processing"
+                  message ??
+                  (status === "processing"
                     ? "Processing submissions"
                     : status === "done"
                     ? "Uploaded"
-                    : `Uploading ${progress}%`,
+                    : `Uploading ${progress}%`),
               },
             ])
           )
         )
-      })
+      }, hasMedalLink)
 
       setMessage("Submitted")
       router.push("/submissions")

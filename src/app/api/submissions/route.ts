@@ -390,9 +390,6 @@ export async function POST(request: Request) {
         return jsonError(`Medal did not return a video file for submission ${index + 1}`, 502)
       }
 
-      // Note: Medal videos are stored as-is. To re-encode them to H.265, 
-      // you would need to implement FFmpeg WASM processing on the client side
-      // by fetching the Medal video, converting it, then uploading the result.
       const uploaded = await uploadVideo(
         env.SUBMISSION_VIDEOS,
         objectKey,
