@@ -150,7 +150,7 @@ export default function Home() {
   React.useEffect(() => {
     const loadPlayers = async () => {
       try {
-        const response = await fetch("/api/players", { cache: "force-cache" })
+        const response = await fetch("/api/players", { cache: "no-store" })
         const json = (await response.json()) as {
           results?: Array<{ uuid: string; player_name: string; score: number }>
           error?: string
