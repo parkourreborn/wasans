@@ -28,6 +28,7 @@ import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import calculateScore from "@/lib/calc-score"
+import { createFile } from "mp4box"
 
 type SubmissionDraft = {
   id: string
@@ -35,6 +36,7 @@ type SubmissionDraft = {
   time: string
   proof_url: string
   proof_file: File | null
+  proof_file_error?: string
 }
 
 type SubmissionValue = {
@@ -111,7 +113,95 @@ function createDraft(id = "submission-1"): SubmissionDraft {
     time: "",
     proof_url: "",
     proof_file: null,
+    proof_file_error: undefined,
   }
+}
+
+async function isValidH264Mp4(file: File) {
+  const fileName = file.name.toLowerCase()
+  if (!file.type.includes("mp4") && !fileName.endsWith(".mp4")) {
+    return false
+  }
+
+  const mp4boxFile = createFile()
+
+  return new Promise<boolean>(async (resolve, reject) => {
+    let resolved = false
+
+    mp4boxFile.onError = (error: unknown) => {
+      if (!resolved) {
+        resolved = true
+        reject(new Error(String(error)))
+      }
+    }
+
+    mp4boxFile.onReady = (info) => {
+      if (resolved) {
+        return
+      }
+
+      const validTrack = (info.tracks || []).some((track) => {
+        const codec = String(track.codec || "").toLowerCase()
+        return /^avc[13]/.test(codec)
+      })
+
+      resolved = true
+      resolve(validTrack)
+    }
+
+    try {
+      const stream = file.stream?.()
+
+      if (stream) {
+        const reader = stream.getReader()
+        let offset = 0
+
+        const pump = async (): Promise<void> => {
+          const { done, value } = await reader.read()
+
+          if (done) {
+            mp4boxFile.flush()
+            if (!resolved) {
+              resolved = true
+              resolve(false)
+            }
+            return
+          }
+
+          if (!value) {
+            return pump()
+          }
+
+          const chunk = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer & {
+            fileStart: number
+          }
+          chunk.fileStart = offset
+          offset += chunk.byteLength
+
+          mp4boxFile.appendBuffer(chunk)
+          return pump()
+        }
+
+        await pump()
+      } else {
+        const arrayBuffer = await file.arrayBuffer()
+        const buffer = arrayBuffer as ArrayBuffer & { fileStart: number }
+        buffer.fileStart = 0
+        mp4boxFile.appendBuffer(buffer)
+        mp4boxFile.flush()
+
+        if (!resolved) {
+          resolved = true
+          resolve(false)
+        }
+      }
+    } catch (err) {
+      if (!resolved) {
+        resolved = true
+        reject(err)
+      }
+    }
+  })
 }
 
 async function getWorldRecords() {
@@ -311,7 +401,8 @@ export default function NewSubmissionPage() {
       submissions.every((submission) => {
         const hasTime = Number(submission.time) > 0 && /^\d+(\.\d{1,3})?$/.test(submission.time)
         const hasProof = submission.proof_url.trim().length > 0 || submission.proof_file
-        return submission.trial_name && hasTime && hasProof
+        const hasValidFile = !submission.proof_file_error
+        return submission.trial_name && hasTime && hasProof && hasValidFile
       })
     )
   }, [invalidPersonalBest, loadingContext, submissions])
@@ -331,6 +422,45 @@ export default function NewSubmissionPage() {
     if (/^\d*(\.\d{0,3})?$/.test(value)) {
       updateSubmission(id, { time: value })
     }
+  }
+
+  const handleProofFileChange = async (id: string, file: File | null) => {
+    if (!file) {
+      updateSubmission(id, { proof_file: null, proof_file_error: undefined })
+      return
+    }
+
+    const submission = submissions.find((item) => item.id === id)
+    const updates: Partial<SubmissionDraft> = {
+      proof_file: null,
+      proof_file_error: "Validating file...",
+    }
+
+    if (submission) {
+      const parsed = parseFilename(file.name)
+      if (parsed.trialName && (!submission.trial_name || submission.trial_name === trials[0])) {
+        updates.trial_name = parsed.trialName
+      }
+      if (parsed.time && !submission.time) {
+        updates.time = parsed.time
+      }
+    }
+
+    updateSubmission(id, updates)
+
+    const isValid = await isValidH264Mp4(file)
+    if (isValid) {
+      updateSubmission(id, {
+        proof_file: file,
+        proof_file_error: undefined,
+      })
+      return
+    }
+
+    updateSubmission(id, {
+      proof_file: null,
+      proof_file_error: "Video file must be an H.264 MP4.",
+    })
   }
 
   const addSubmission = () => {
@@ -599,26 +729,17 @@ export default function NewSubmissionPage() {
                     <Input
                       id={`proof-file-${submission.id}`}
                       type="file"
-                      accept="video/*"
+                      accept="video/mp4"
                       onChange={(event) => {
                         const file = event.target.files?.[0] ?? null
-                        const updates: Partial<SubmissionDraft> = { proof_file: file }
-
-                        if (file) {
-                          const parsed = parseFilename(file.name)
-                          // Only autofill if the field is empty or default value
-                          if (parsed.trialName && (!submission.trial_name || submission.trial_name === trials[0])) {
-                            updates.trial_name = parsed.trialName
-                          }
-                          if (parsed.time && !submission.time) {
-                            updates.time = parsed.time
-                          }
-                        }
-
-                        updateSubmission(submission.id, updates)
+                        void handleProofFileChange(submission.id, file)
                       }}
                       disabled={submitting}
+                      aria-invalid={Boolean(submission.proof_file_error)}
                     />
+                    {submission.proof_file_error ? (
+                      <p className="text-sm text-destructive">{submission.proof_file_error}</p>
+                    ) : null}
                   </div>
                 </div>
 
