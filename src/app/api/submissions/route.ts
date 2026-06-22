@@ -2,6 +2,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { getAuthUser } from "@/lib/server/auth"
 import { refreshPlayerScore } from "@/lib/server/player-scores"
 import { insertAuditLog } from "@/lib/server/audit"
+import { postPendingRun } from "@/lib/server/notifications"
 import { trials } from "@/lib/trials"
 import { refreshPlayerPb, refreshPlayerPbs } from "@/lib/server/pbs"
 
@@ -348,6 +349,29 @@ export async function POST(request: Request) {
             source: "upload",
           },
         })
+        
+        // Post pending run to Discord and save thread id to the submission row
+        try {
+          const { threadId } = await postPendingRun({
+            submission_uuid: uuid,
+            player_uuid: player.uuid,
+            player_name: player.player_name,
+            trial_name: trialName,
+            time,
+            player_score: 0,
+            discordUserId: player.player_id,
+          })
+
+          if (threadId) {
+            console.log("Posting pending run created thread:", threadId, "for submission", uuid)
+            const res = await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
+            console.log("DB update result for thread_id set:", res)
+          } else {
+            console.log("No threadId returned for pending run", uuid)
+          }
+        } catch (err) {
+          console.error("Failed to post pending run:", err)
+        }
       } catch (err) {
         await env.SUBMISSION_VIDEOS.delete(objectKey).catch((deleteErr) => {
           console.error(deleteErr)
@@ -413,6 +437,29 @@ export async function POST(request: Request) {
             source: "medal",
           },
         })
+        
+        // Post pending run to Discord and save thread id to the submission row
+        try {
+          const { threadId } = await postPendingRun({
+            submission_uuid: uuid,
+            player_uuid: player.uuid,
+            player_name: player.player_name,
+            trial_name: trialName,
+            time,
+            player_score: 0,
+            discordUserId: player.player_id,
+          })
+
+          if (threadId) {
+            console.log("Posting pending run created thread:", threadId, "for submission", uuid)
+            const res = await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
+            console.log("DB update result for thread_id set:", res)
+          } else {
+            console.log("No threadId returned for pending run", uuid)
+          }
+        } catch (err) {
+          console.error("Failed to post pending run:", err)
+        }
       } catch (err) {
         await env.SUBMISSION_VIDEOS.delete(objectKey).catch((deleteErr) => {
           console.error(deleteErr)
@@ -436,6 +483,29 @@ export async function POST(request: Request) {
         source: "link",
       },
     })
+    
+    // Post pending run to Discord and save thread id to the submission row
+    try {
+      const { threadId } = await postPendingRun({
+        submission_uuid: uuid,
+        player_uuid: player.uuid,
+        player_name: player.player_name,
+        trial_name: trialName,
+        time,
+        player_score: 0,
+        discordUserId: player.player_id,
+      })
+
+      if (threadId) {
+        console.log("Posting pending run created thread:", threadId, "for submission", uuid)
+        const res = await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
+        console.log("DB update result for thread_id set:", res)
+      } else {
+        console.log("No threadId returned for pending run", uuid)
+      }
+    } catch (err) {
+      console.error("Failed to post pending run:", err)
+    }
 
     created.push({ uuid, trial_name: trialName, proof_url: link })
   }
