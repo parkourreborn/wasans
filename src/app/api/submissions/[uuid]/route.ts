@@ -8,7 +8,11 @@ import {
   deleteBotThread,
   getRankLabel,
   postApprovedRun,
+  postPendingRun,
   sendDiscordDm,
+  updateSubmissionThreadTags,
+  updateSubmissionThreadContent,
+  updateDiscordUsernameOnScoreChange,
 } from "@/lib/server/notifications"
 
 export async function GET(_: Request, { params }: { params: Promise<{ uuid: string }> }) {
@@ -132,6 +136,7 @@ async function scheduleSubmissionPostProcessing(
   oldPb: { time: number } | null,
   uuid: string,
   stateChanged: boolean,
+  timeChanged: boolean,
   noteChanged: boolean,
   previousModeratorNote: string | null,
   newModeratorNote: string | null
@@ -140,15 +145,31 @@ async function scheduleSubmissionPostProcessing(
     try {
       const db = env.wasans as D1Database
       const previousWrRow = await db.prepare(
-        `SELECT submission_uuid, player_uuid, player_name, time, date
-         FROM wrs
-         WHERE trial_name = ?`
+        `SELECT w.submission_uuid, w.player_uuid, w.player_name, w.time, w.date, s.thread_id AS previous_thread_id
+         FROM wrs w
+         LEFT JOIN submissions s ON s.uuid = w.submission_uuid
+         WHERE w.trial_name = ?`
       )
         .bind(submission.trial_name)
-        .first<{ submission_uuid: string; player_uuid: string; player_name: string; time: number; date: string } | null>()
+        .first<{ submission_uuid: string; player_uuid: string; player_name: string; time: number; date: string; previous_thread_id: string | null } | null>()
+
+      const previousPbRow = previousState === "approved"
+        ? await db.prepare(
+            `SELECT time FROM submissions
+             WHERE player_uuid = ?
+               AND trial_name = ?
+               AND state = 'approved'
+               AND uuid != ?
+             ORDER BY time ASC, CAST(date AS INTEGER) ASC, uuid ASC
+             LIMIT 1`
+          )
+            .bind(submission.player_uuid, submission.trial_name, submission.uuid)
+            .first() as { time: number } | undefined
+        : null
 
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       await refreshWorldRecords(env.wasans, submission.trial_name, user)
+      // Recalculate scores and let refreshPlayerScore update Discord nicknames.
       await refreshPlayerScore(env.wasans, submission.player_uuid)
 
       const { results } = await db.prepare(
@@ -166,12 +187,13 @@ async function scheduleSubmissionPostProcessing(
       }
 
       const wrRow = await db.prepare(
-        `SELECT submission_uuid, player_uuid, player_name, trial_name, time, date
-         FROM wrs
-         WHERE trial_name = ?`
+        `SELECT w.submission_uuid, w.player_uuid, w.player_name, w.trial_name, w.time, w.date, s.thread_id AS previous_thread_id
+         FROM wrs w
+         LEFT JOIN submissions s ON s.uuid = w.submission_uuid
+         WHERE w.trial_name = ?`
       )
         .bind(submission.trial_name)
-        .first<{ submission_uuid: string; player_uuid: string; player_name: string; trial_name: string; time: number; date: string } | null>()
+        .first<{ submission_uuid: string; player_uuid: string; player_name: string; trial_name: string; time: number; date: string; previous_thread_id: string | null } | null>()
 
       const playerScoreBefore = oldPlayer?.score
       const newState = state ?? previousState
@@ -219,19 +241,92 @@ async function scheduleSubmissionPostProcessing(
         })())
       }
 
-      const shouldCreateThread =
-        (wrRow?.submission_uuid === uuid && previousWrRow?.submission_uuid !== uuid) || // New WR
-        (state === "approved" && state !== previousState && Number(updatedSubmission?.player_score) > 0.3) // New approval
+      const isWr = wrRow?.submission_uuid === uuid
+      const hasExistingThread = Boolean(submission.thread_id)
+      const shouldUpdateThread = hasExistingThread && (stateChanged || timeChanged)
+
+      // If there's already a thread and the submission changed state or time, update the tags/content
+      if (shouldUpdateThread) {
+        if (submission.thread_id) {
+          // compute averageScoreDelta if this is a WR so we can include it in the updated content
+          let averageScoreDelta: number | undefined
+          if (isWr) {
+            try {
+              const oldWr = previousWrRow?.time ?? null
+              averageScoreDelta = await calculateAverageScoreDeltaForWrChange(env.wasans, submission.trial_name, oldWr, wrRow!.time)
+            } catch (err) {
+              console.error("Failed to calculate average score delta:", err)
+            }
+          }
+
+          ctx.waitUntil((async () => {
+            try {
+              await updateSubmissionThreadTags(submission.thread_id as string, newState, isWr)
+            } catch (error) {
+              console.error("Failed to update submission thread tags:", error)
+            }
+
+            try {
+              const previousToShow = previousWrRow?.submission_uuid === uuid ? wrRow : previousWrRow
+              const previousWrThreadId = previousToShow?.previous_thread_id ?? undefined
+              const updateOldTime = previousPbRow?.time ?? oldPb?.time
+
+              await updateSubmissionThreadContent(submission.thread_id as string, {
+                submission_uuid: updatedSubmission.uuid,
+                player_uuid: updatedSubmission.player_uuid,
+                player_name: updatedSubmission.player_name,
+                trial_name: updatedSubmission.trial_name,
+                time: Number(updatedSubmission.time),
+                player_score: Number(updatedSubmission.player_score),
+                oldPlayerScore: oldPlayer?.score,
+                oldTime: updateOldTime,
+                discordUserId: String(oldPlayer?.player_id),
+                averageScoreDelta,
+                is_wr: isWr,
+                previous_wr_submission_uuid: previousToShow?.submission_uuid,
+                previous_wr_time: previousToShow?.time,
+                previous_wr_player_name: previousToShow?.player_name,
+                previous_wr_thread_id: previousWrThreadId,
+                new_state: newState,
+              })
+            } catch (error) {
+              console.error("Failed to update submission thread content:", error)
+            }
+          })())
+        }
+      }
+
+      // Update Discord username/roles only when moderation state changed to approved or denied,
+      // but skip updates when this submission is a world record (testing mode: don't change usernames on WR).
+      if (stateChanged && (state === "approved" || state === "denied")) {
+        ctx.waitUntil((async () => {
+          try {
+            await updateDiscordUsernameOnScoreChange(submission.player_uuid, oldPlayer?.score ?? 0)
+          } catch (error) {
+            console.error("Failed to update Discord username after moderation:", error)
+          }
+        })())
+      }
+
+      // Only create a new thread if one doesn't exist already
+      const shouldCreateThread = !hasExistingThread &&
+        ((isWr && previousWrRow?.submission_uuid !== uuid) || // New WR
+        (state === "approved" && state !== previousState && Number(updatedSubmission?.player_score) > 0.3)) // New approval
 
       if (!shouldCreateThread) {
         return
       }
 
       let averageScoreDelta: number | undefined
-      if (wrRow?.submission_uuid === uuid) {
+      if (isWr) {
         const oldWr = previousWrRow?.time ?? null
-        averageScoreDelta = await calculateAverageScoreDeltaForWrChange(env.wasans, submission.trial_name, oldWr, wrRow.time)
+        averageScoreDelta = await calculateAverageScoreDeltaForWrChange(env.wasans, submission.trial_name, oldWr, wrRow!.time)
       }
+
+      // When creating a new thread for an approved run, include previous WR metadata if available
+      const previousWrThreadId = previousWrRow?.previous_thread_id ?? undefined
+
+      console.log("Creating new approved thread:", { submission: updatedSubmission.uuid, isWr, previousWrRow, previousWrThreadId })
 
       const { threadId } = await postApprovedRun({
         submission_uuid: updatedSubmission.uuid,
@@ -244,12 +339,16 @@ async function scheduleSubmissionPostProcessing(
         oldTime: oldPb?.time,
         discordUserId: String(oldPlayer?.player_id),
         averageScoreDelta,
-        is_wr: wrRow?.submission_uuid === uuid,
+        is_wr: isWr,
+        previous_wr_submission_uuid: previousWrRow?.submission_uuid,
+        previous_wr_time: previousWrRow?.time,
+        previous_wr_player_name: previousWrRow?.player_name,
+        previous_wr_thread_id: previousWrThreadId,
       })
 
-      if (wrRow?.submission_uuid === uuid) {
-        await refreshScoresForTrial(env.wasans, submission.trial_name)
-      }
+      // if (isWr) {
+      //   await refreshScoresForTrial(env.wasans, submission.trial_name)
+      // }
 
       if (threadId) {
         await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
@@ -395,14 +494,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     details: auditDetails,
   })
 
-  const shouldRemoveThread = previousState === "approved" && state !== "approved" && submission.thread_id
-  if (shouldRemoveThread) {
-    const threadId = submission.thread_id as string
-    ctx.waitUntil((async () => {
-      await deleteBotThread(threadId).catch(() => null)
-    })())
-    await env.wasans.prepare(`UPDATE submissions SET thread_id = NULL WHERE uuid = ?`).bind(uuid).run()
-  }
+  // Note: do not delete threads when a submission is moved back to "pending".
+  // Threads are only deleted when the submission itself is removed (handled in DELETE).
 
   const oldPlayer = await env.wasans.prepare(
     `SELECT score, player_id FROM players WHERE players.uuid = ?`
@@ -419,6 +512,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   const newModeratorNote = moderatorNote !== null ? moderatorNote : submission.moderator_note
   const noteChanged = submission.moderator_note !== newModeratorNote
   const stateChanged = state !== null && state !== previousState
+  const timeChanged = time !== null && time !== submission.time
 
   scheduleSubmissionPostProcessing(
     ctx,
@@ -431,6 +525,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     oldPb,
     uuid,
     stateChanged,
+    timeChanged,
     noteChanged,
     submission.moderator_note,
     newModeratorNote

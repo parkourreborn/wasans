@@ -13,6 +13,13 @@ export type ApprovedHighScoreRun = {
   discordUserId?: string,
   averageScoreDelta?: number
   is_wr: boolean
+  // optional previous WR info (when this run becomes a WR)
+  previous_wr_submission_uuid?: string
+  previous_wr_time?: number
+  previous_wr_player_name?: string
+  previous_wr_thread_id?: string
+  // the new state (approved/denied/pending) when updating existing threads
+  new_state?: string
 }
 
 export type WorldRecordRun = {
@@ -23,9 +30,6 @@ export type WorldRecordRun = {
   time: number
   date: string
 }
-
-
-const wasansMemberRoleId = "1315480739311124593";
 
 const roleRanks = {
   0.0: "1257994886070800465", // unranked
@@ -202,6 +206,42 @@ async function createBotThread(
   }
 }
 
+async function updateBotThreadTags(
+  threadId: string,
+  tags: string[]
+): Promise<boolean> {
+  try {
+    await sendBotApiRequest("/update-thread-tags", {
+      thread_id: threadId,
+      channel_id: THREAD_CHANNEL_ID,
+      tags,
+    })
+    return true
+  } catch (error) {
+    console.error("Failed to update bot thread tags:", error)
+    return false
+  }
+}
+
+async function updateBotThreadContent(
+  threadId: string,
+  title: string | null,
+  content: string
+): Promise<boolean> {
+  try {
+    await sendBotApiRequest("/update-thread", {
+      thread_id: threadId,
+      channel_id: THREAD_CHANNEL_ID,
+      title,
+      content,
+    })
+    return true
+  } catch (error) {
+    console.error("Failed to update bot thread content:", error)
+    return false
+  }
+}
+
 export async function deleteBotThread(threadId: string): Promise<boolean> {
   try {
     await sendBotApiRequest("/delete-thread", {
@@ -228,17 +268,32 @@ export async function postApprovedRun(run: ApprovedHighScoreRun) {
       ?
         `Average score decrease: ${run.averageScoreDelta.toFixed(3)}`
         : null
+        
+    const lines: Array<string | null> = []
 
-    const announcementMessage = [
-      run.is_wr ? "<@&1335389577883418736>" : null,
-      `**${run.trial_name} ${newTimeFormatted} | ${userMention}**`,
-      `${oldTimeFormatted} -> ${newTimeFormatted}`,
-      `*${oldScoreFormatted}* -> *${newScoreFormatted}*`,
-      scoreDeltaLine,
-      `https://wasans.tully.sh/submissions/${run.submission_uuid}`,
-    ]
-      .filter(Boolean)
-      .join("\n")
+    if (run.is_wr) {
+      lines.push("<@&1335389577883418736>")
+    }
+
+    lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
+    lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
+    lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`)
+
+    if (run.previous_wr_time && run.previous_wr_player_name) {
+      if (run.previous_wr_thread_id) {
+        lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name} <#${run.previous_wr_thread_id}>`)
+      } else {
+        lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name}`)
+      }
+    }
+
+    if (scoreDeltaLine) {
+      lines.push(scoreDeltaLine)
+    }
+
+    lines.push(`https://wasans.tully.sh/submissions/${run.submission_uuid}`)
+
+    const announcementMessage = lines.filter(Boolean).join("\n")
 
     const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
     const threadContent = announcementMessage
@@ -256,25 +311,146 @@ export async function postApprovedRun(run: ApprovedHighScoreRun) {
   }
 }
 
+export type PendingSubmissionPost = {
+  submission_uuid: string
+  player_uuid: string
+  player_name: string
+  trial_name: string
+  time: number
+  player_score: number
+  discordUserId?: string
+}
 
-export async function updateDiscordUsernameOnScoreChange(playerUuid: string, oldScore = 0) {
-  const { env } = await getCloudflareContext({ async: true })
-  const row = await env.wasans.prepare(
-    `SELECT player_id, score, player_name FROM players WHERE uuid = ?`)
-    .bind(playerUuid)
-    .first<{ player_id: string, score: number, player_name: string }>()
+export async function postPendingRun(submission: PendingSubmissionPost): Promise<{ threadId: string | null }> {
+  try {
+    const timeFormatted = submission.time.toFixed(3)
+    const userMention = submission.discordUserId ? `<@${submission.discordUserId}>` : submission.player_name
 
-  if (!row) {
-    return
+    const announcementMessage = [
+      `**${submission.trial_name} ${timeFormatted} | ${userMention}**`,
+      `https://wasans.tully.sh/submissions/${submission.submission_uuid}`,
+    ]
+      .filter(Boolean)
+      .join("\n")
+
+    const threadTitle = `${submission.trial_name} ${timeFormatted} | ${submission.player_name}`
+    const threadContent = announcementMessage
+
+    const tags = ["1351580041896656936"]
+
+    const threadId = await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent, tags)
+    return { threadId }
+  } catch (error) {
+    console.error("Error posting pending run:", error)
+    return { threadId: null }
+  }
+}
+
+export async function updateSubmissionThreadTags(
+  threadId: string,
+  newState: string,
+  isWr: boolean
+): Promise<boolean> {
+  const tags: string[] = []
+
+  if (newState === "approved") {
+    tags.push("1351581039499284521")
+  } else if (newState === "denied") {
+    tags.push("1351581072043020442")
+  } else if (newState === "pending") {
+    tags.push("1351580041896656936")
   }
 
-  const playerId = row.player_id
-  const score = row.score
-  const playerName = row.player_name
-  const oldRoleId = getRoleForScore(oldScore)
-  const newRoleId = getRoleForScore(score)
+  // Only add WR tag when the submission is approved
+  if (isWr && newState === "approved") {
+    tags.push("1351581114841436230")
+  }
 
+  return updateBotThreadTags(threadId, tags)
+}
+
+export async function updateSubmissionThreadContent(
+  threadId: string,
+  run: ApprovedHighScoreRun
+): Promise<boolean> {
   try {
+    const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime.toFixed(3) : "N/A"
+    const newTimeFormatted = run.time.toFixed(3)
+    const oldScoreFormatted = run.oldPlayerScore !== undefined ? run.oldPlayerScore.toFixed(3) : "N/A"
+    const newScoreFormatted = run.player_score.toFixed(3)
+    const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
+
+    const scoreDeltaLine =
+      run.averageScoreDelta !== undefined
+      ?
+        `Average score decrease: ${run.averageScoreDelta.toFixed(3)}`
+        : null
+
+    const lines: Array<string | null> = []
+    const state = run.new_state ?? "approved"
+
+    if (state === "approved") {
+      if (run.is_wr) {
+        lines.push("<@1501043686828544121>")
+      }
+
+      lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
+      lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
+      lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`)
+
+      if (run.is_wr) {
+        if (run.previous_wr_thread_id) {
+          lines.push(`Previous WR: <#${run.previous_wr_thread_id}>`)
+        } else if (run.previous_wr_time && run.previous_wr_player_name) {
+          lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name}`)
+        }
+      }
+
+      if (scoreDeltaLine) {
+        lines.push(scoreDeltaLine)
+      }
+    } else if (state === "pending" || state === "denied") {
+      lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
+      if (run.oldTime !== undefined) {
+        lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
+      }
+    } else {
+      lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
+    }
+
+    lines.push(`https://wasans.tully.sh/submissions/${run.submission_uuid}`)
+
+    const announcementMessage = lines.filter(Boolean).join("\n")
+
+    const threadTitle = state === "approved" ? `${run.trial_name} ${newTimeFormatted} | ${run.player_name}` : null
+
+    const ok = await updateBotThreadContent(threadId, threadTitle, announcementMessage)
+    return ok
+  } catch (error) {
+    console.error("Failed to update submission thread content:", error)
+    return false
+  }
+}
+
+
+export async function updateDiscordUsernameOnScoreChange(playerUuid: string, oldScore = 0) {
+  try {
+    const { env } = await getCloudflareContext({ async: true })
+    const row = await env.wasans.prepare(
+      `SELECT player_id, score, player_name FROM players WHERE uuid = ?`)
+      .bind(playerUuid)
+      .first<{ player_id: string, score: number, player_name: string }>()
+
+    if (!row) {
+      return
+    }
+
+    const playerId = row.player_id
+    const score = row.score
+    const playerName = row.player_name
+    const oldRoleId = getRoleForScore(oldScore)
+    const newRoleId = getRoleForScore(score)
+
     if (newRoleId) {
       for (const rank of sortedRankRoles) {
         if (rank.roleId === newRoleId) {
@@ -294,25 +470,25 @@ export async function updateDiscordUsernameOnScoreChange(playerUuid: string, old
         console.error("Failed to add Discord rank role:", { playerId, roleId: newRoleId, error })
       }
     }
-  } catch (error) {
-    console.error("Failed to update Discord rank roles on score change:", error)
-  }
 
-  if (oldRoleId && newRoleId && oldRoleId !== newRoleId) {
-    try {
-      await sendPromotionMessage(playerId, oldRoleId, newRoleId)
-    } catch (error) {
-      console.error("Failed to announce role promotion:", error)
+    if (oldRoleId && newRoleId && oldRoleId !== newRoleId) {
+      try {
+        await sendPromotionMessage(playerId, oldRoleId, newRoleId)
+      } catch (error) {
+        console.error("Failed to announce role promotion:", error)
+      }
     }
-  }
 
-  try {
-    await sendBotApiRequest("/set-nick", {
-      guild_id: GUILD_ID,
-      user_id: playerId,
-      nick: `${playerName} (${score.toFixed(3)})`,
-    })
+    try {
+      await sendBotApiRequest("/set-nick", {
+        guild_id: GUILD_ID,
+        user_id: playerId,
+        nick: `${playerName} (${score.toFixed(3)})`,
+      })
+    } catch (error) {
+      console.error("Failed to update Discord username on score change:", error)
+    }
   } catch (error) {
-    console.error("Failed to update Discord username on score change:", error)
+    console.error("updateDiscordUsernameOnScoreChange failed:", error)
   }
 }
