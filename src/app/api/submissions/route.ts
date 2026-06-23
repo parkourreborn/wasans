@@ -5,6 +5,7 @@ import { insertAuditLog } from "@/lib/server/audit"
 import { postPendingRun } from "@/lib/server/notifications"
 import { trials } from "@/lib/trials"
 import { refreshPlayerPb, refreshPlayerPbs } from "@/lib/server/pbs"
+import { generateShortId } from "@/lib/utils"
 
 type IncomingSubmission = {
   trial_name?: unknown
@@ -305,7 +306,7 @@ export async function POST(request: Request) {
         return jsonError("Submission video bucket is not available", 500)
       }
 
-      const uuid = crypto.randomUUID()
+      const uuid = generateShortId()
       const objectKey = `scores/${uuid}.mp4`
       const proofUrl = `${publicVideoBaseUrl}/scores/${uuid}.mp4`
 
@@ -392,7 +393,7 @@ export async function POST(request: Request) {
         return jsonError("Submission video bucket is not available", 500)
       }
 
-      const uuid = crypto.randomUUID()
+      const uuid = generateShortId()
       const objectKey = `scores/${uuid}.mp4`
       const proofUrl = `${publicVideoBaseUrl}/scores/${uuid}.mp4`
       let medalVideoResponse: Response
@@ -471,7 +472,7 @@ export async function POST(request: Request) {
       continue
     }
 
-    const uuid = crypto.randomUUID()
+    const uuid = generateShortId()
 
     await createSubmissionRow(env.wasans, uuid, player, trialName, time, now)
     await insertAuditLog(env.wasans, "submission_created", "submission", uuid, {
