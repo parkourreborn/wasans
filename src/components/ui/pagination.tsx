@@ -35,13 +35,15 @@ function PaginationItem({ ...props }: React.ComponentProps<"li">) {
 
 type PaginationLinkProps = {
   isActive?: boolean
+  disabled?: boolean
 } & Pick<React.ComponentProps<typeof Button>, "size"> &
-  React.ComponentProps<"a">
+  Omit<React.ComponentProps<"a">, "disabled">
 
 function PaginationLink({
   className,
   isActive,
   size = "icon",
+  disabled,
   ...props
 }: PaginationLinkProps) {
   return (
@@ -49,6 +51,7 @@ function PaginationLink({
       asChild
       variant={isActive ? "outline" : "ghost"}
       size={size}
+      disabled={disabled}
       className={cn(className)}
     >
       <a
