@@ -1,9 +1,10 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -47,6 +48,7 @@ type WorldRecord = {
 
 type SubmissionsResponse = {
   results: Submission[]
+  count: number
 }
 
 type WorldRecordsResponse = {
@@ -90,20 +92,6 @@ function parseFilename(filename: string): { trialName?: TrialName; time?: string
   }
 
   return result
-}
-
-function mergeSubmissions(current: Submission[], next: Submission[]) {
-  const seen = new Set<string>()
-  const merged: Submission[] = []
-
-  for (const submission of [...current, ...next]) {
-    if (!seen.has(submission.uuid)) {
-      seen.add(submission.uuid)
-      merged.push(submission)
-    }
-  }
-
-  return merged
 }
 
 function formatTime(rawTime: number | string) {
@@ -150,17 +138,23 @@ function SubmissionsPage() {
   const [worldRecordTimes, setWorldRecordTimes] = useState<Record<string, number>>({})
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [playerFilter, setPlayerFilter] = useState("")
+  const playerUuidFromParams = searchParams.get("player_uuid") || ""
+  const [playerFilter, setPlayerFilter] = useState(playerUuidFromParams)
   const [authLabel, setAuthLabel] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [signInDialogOpen, setSignInDialogOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadingSubmissions, setLoadingSubmissions] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
-  const [filteredPlayerName, setFilteredPlayerName] = useState<string | null>(null)
-  const loadMoreRef = useRef<HTMLDivElement>(null)
+  const [totalPages, setTotalPages] = useState(1)
+  const [resultCount, setResultCount] = useState(0)
+  const filteredPlayerName = playerFilter || null
+  const [pageInput, setPageInput] = useState<string>("1")
+
+  const setCurrentPage = (newPage: number) => {
+    setPage(newPage)
+    setPageInput(String(newPage))
+  }
 
   // Drag and drop state
   const [isDragOver, setIsDragOver] = useState(false)
@@ -172,41 +166,25 @@ function SubmissionsPage() {
   const [editedTrialName, setEditedTrialName] = useState<TrialName | "">("")
   const [editedTime, setEditedTime] = useState<string>("")
 
-  useEffect(() => {
-    // Initialize player filter from URL params
-    const playerUuid = searchParams.get("player_uuid")
-    if (playerUuid) {
-      setPlayerFilter(playerUuid)
-    }
-  }, [searchParams])
-
-  const filteredSubmissions = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase()
-
-    return submissions.filter((submission) => {
-      const matchesStatus = statusFilter === "all" || submission.state === statusFilter
-      const matchesPlayer = !playerFilter || submission.player_uuid === playerFilter
-      const matchesSearch =
-        !normalizedQuery ||
-        submission.trial_name.toLowerCase().includes(normalizedQuery) ||
-        submission.player_name.toLowerCase().includes(normalizedQuery)
-
-      return matchesStatus && matchesPlayer && matchesSearch
-    })
-  }, [searchQuery, statusFilter, playerFilter, submissions])
 
   useEffect(() => {
-    const fetchPage = async (pageToLoad: number) => {
-      setLoadingMore(pageToLoad > 1)
+    const fetchPage = async () => {
+      setLoadingSubmissions(true)
       setError(null)
 
       try {
         const params = new URLSearchParams({
-          page: pageToLoad.toString(),
+          page: page.toString(),
           limit: "50"
         })
         if (playerFilter) {
           params.set("player_uuid", playerFilter)
+        }
+        if (statusFilter !== "all") {
+          params.set("state", statusFilter)
+        }
+        if (searchQuery.trim()) {
+          params.set("search", searchQuery.trim())
         }
 
         const submissionsResponse = await fetch(
@@ -216,22 +194,32 @@ function SubmissionsPage() {
 
         if (!submissionsResponse.ok) {
           setError("Failed to load submissions")
+          setSubmissions([])
+          setResultCount(0)
+          setTotalPages(1)
           return
         }
 
         const submissionsJson = (await submissionsResponse.json()) as SubmissionsResponse
-        setSubmissions((current) => mergeSubmissions(current, submissionsJson.results || []))
-        setHasMore((submissionsJson.results?.length || 0) >= 50)
-        setPage(pageToLoad)
+        setSubmissions(submissionsJson.results || [])
+        const count = submissionsJson.count ?? 0
+        setResultCount(count)
+        setTotalPages(Math.max(1, Math.ceil(count / 50)))
       } catch (err) {
         setError("Error loading submissions")
+        setSubmissions([])
+        setResultCount(0)
+        setTotalPages(1)
         console.error(err)
       } finally {
-        setLoading(false)
-        setLoadingMore(false)
+        setLoadingSubmissions(false)
       }
     }
 
+    fetchPage()
+  }, [page, playerFilter, statusFilter, searchQuery])
+
+  useEffect(() => {
     const fetchMeta = async () => {
       try {
         const [wrsResponse, authResponse] = await Promise.all([
@@ -275,9 +263,8 @@ function SubmissionsPage() {
       }
     }
 
-    fetchPage(1)
     fetchMeta()
-  }, [playerFilter])
+  }, [])
 
   const handleDragOver = (event: React.DragEvent) => {
     event.preventDefault()
@@ -403,74 +390,15 @@ function SubmissionsPage() {
   }
 
   useEffect(() => {
-    if (loading) {
+    if (loadingSubmissions) {
       return
     }
 
     window.localStorage.setItem(
       submissionUuidListKey,
-      JSON.stringify(filteredSubmissions.map((submission) => submission.uuid))
+      JSON.stringify(submissions.map((submission) => submission.uuid))
     )
-  }, [filteredSubmissions, loading])
-
-  useEffect(() => {
-    if (!loadMoreRef.current || loading || loadingMore || !hasMore) {
-      return
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setLoadingMore(true)
-          const params = new URLSearchParams({
-            page: (page + 1).toString(),
-            limit: "50"
-          })
-          if (playerFilter) {
-            params.set("player_uuid", playerFilter)
-          }
-
-          fetch(`/api/submissions?${params.toString()}`, { cache: "no-store" })
-            .then(async (response) => {
-              if (!response.ok) {
-                throw new Error("Failed to load more submissions")
-              }
-              const json = (await response.json()) as SubmissionsResponse
-              setSubmissions((current) => mergeSubmissions(current, json.results || []))
-              setHasMore((json.results?.length || 0) >= 50)
-              setPage((current) => current + 1)
-            })
-            .catch((err) => {
-              console.error(err)
-              setError("Unable to load more submissions")
-            })
-            .finally(() => {
-              setLoadingMore(false)
-            })
-        }
-      },
-      { rootMargin: "200px" }
-    )
-
-    observer.observe(loadMoreRef.current)
-    return () => observer.disconnect()
-  }, [loading, loadingMore, hasMore, page, playerFilter])
-
-  if (loading) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-destructive">{error}</p>
-      </div>
-    )
-  }
+  }, [submissions, loadingSubmissions])
 
   return (
     <div 
@@ -495,7 +423,7 @@ function SubmissionsPage() {
           <div className="flex flex-col items-center gap-4 text-center">
             <UploadIcon className="h-12 w-12 text-primary" />
             <p className="text-lg font-semibold">Drop your video file here</p>
-            <p className="text-sm text-muted-foreground">We'll try to parse the trial name and time from the filename</p>
+            <p className="text-sm text-muted-foreground">We&apos;ll try to parse the trial name and time from the filename</p>
           </div>
         </div>
       )}
@@ -521,13 +449,19 @@ function SubmissionsPage() {
           <Input
             type="search"
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onChange={(event) => {
+              setSearchQuery(event.target.value)
+              setCurrentPage(1)
+            }}
             placeholder="Search submissions by trial or player name"
             aria-label="Search submissions by trial or player name"
             className="h-10 flex-1"
           />
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={(value) => {
+              setStatusFilter(value)
+              setCurrentPage(1)
+            }}>
             <SelectTrigger className="w-full lg:w-40">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -594,7 +528,7 @@ function SubmissionsPage() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Confirm Submission</AlertDialogTitle>
                 <AlertDialogDescription>
-                  We parsed the following data from "{parsedFileData?.file.name}":
+                  We parsed the following data from &quot;{parsedFileData?.file.name}&quot;:
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <div className="py-4">
@@ -656,16 +590,24 @@ function SubmissionsPage() {
       {authLabel && <p className="text-sm text-muted-foreground">Logged in as {authLabel}</p>}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {filteredSubmissions.length === 0 ? (
+        {error ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <p className="text-destructive">{error}</p>
+          </div>
+        ) : loadingSubmissions ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <Spinner className="size-8 text-muted-foreground" />
+          </div>
+        ) : submissions.length === 0 ? (
           <div className="flex h-full w-full items-center justify-center">
             <p className="text-muted-foreground">
-              {submissions.length === 0 ? "No submissions available" : "No matching submissions"}
+              No submissions available
             </p>
           </div>
         ) : (
           <>
             <div className="submissions-grid">
-              {filteredSubmissions.map((submission) => (
+              {submissions.map((submission) => (
                 <div
                   key={submission.uuid}
                   className="submission-grid-item cursor-pointer"
@@ -745,14 +687,135 @@ function SubmissionsPage() {
                 </div>
               ))}
             </div>
-            <div ref={loadMoreRef} className="flex h-16 items-center justify-center">
-              {loadingMore ? (
-                <Spinner className="size-8 text-muted-foreground" />
-              ) : hasMore ? (
-                <p className="text-sm text-muted-foreground">Scroll to load more submissions</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">No more submissions</p>
-              )}
+            <div className="flex flex-col items-center gap-3 py-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {submissions.length} of {resultCount} submission{resultCount === 1 ? "" : "s"}
+              </p>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      disabled={page === 1}
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        if (page > 1) {
+                          setCurrentPage(page - 1)
+                        }
+                      }}
+                    />
+                  </PaginationItem>
+                  {page > 1 && (
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setCurrentPage(1)
+                        }}
+                      >
+                        1
+                      </PaginationLink>
+                    </PaginationItem>
+                  )}
+                  {page > 3 && (
+                    <PaginationItem>
+                      <span className="px-3 text-sm text-muted-foreground">...</span>
+                    </PaginationItem>
+                  )}
+                  {page > 2 && (
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setCurrentPage(page - 1)
+                        }}
+                      >
+                        {page - 1}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )}
+                  <PaginationItem>
+                    <PaginationLink
+                      href="#"
+                      isActive
+                      onClick={(event) => event.preventDefault()}
+                    >
+                      {page}
+                    </PaginationLink>
+                  </PaginationItem>
+                  {page < totalPages - 1 && (
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setCurrentPage(page + 1)
+                        }}
+                      >
+                        {page + 1}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )}
+                  {page < totalPages - 2 && (
+                    <PaginationItem>
+                      <span className="px-3 text-sm text-muted-foreground">...</span>
+                    </PaginationItem>
+                  )}
+                  {page < totalPages && (
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setCurrentPage(totalPages)
+                        }}
+                      >
+                        {totalPages}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )}
+                  <PaginationItem>
+                    <PaginationNext
+                      disabled={page === totalPages}
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        if (page < totalPages) {
+                          setCurrentPage(page + 1)
+                        }
+                      }}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+              <div className="flex items-center gap-2">
+                <label htmlFor="submissions-page" className="text-sm text-muted-foreground">
+                  Go to page
+                </label>
+                <Input
+                  id="submissions-page"
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={pageInput}
+                  onChange={(event) => setPageInput(event.target.value)}
+                  className="h-10 w-20"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const nextPage = Number(pageInput)
+                    if (!Number.isNaN(nextPage) && nextPage >= 1 && nextPage <= totalPages) {
+                      setCurrentPage(nextPage)
+                    }
+                  }}
+                >
+                  Go
+                </Button>
+              </div>
             </div>
           </>
         )}

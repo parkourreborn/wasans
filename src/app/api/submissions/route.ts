@@ -170,6 +170,7 @@ export async function GET(request: Request) {
   const offset = (page - 1) * limit
   const status = url.searchParams.get("state")
   const playerUuid = url.searchParams.get("player_uuid")
+  const searchQuery = String(url.searchParams.get("search") || "").trim().toLowerCase()
 
   const whereConditions = []
   const bindValues: (string | number)[] = []
@@ -184,9 +185,20 @@ export async function GET(request: Request) {
     bindValues.push(playerUuid)
   }
 
+  if (searchQuery) {
+    whereConditions.push("(LOWER(submissions.trial_name) LIKE ? OR LOWER(submissions.player_name) LIKE ?)")
+    bindValues.push(`%${searchQuery}%`, `%${searchQuery}%`)
+  }
+
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : ""
 
   try {
+    const countStatement = env.wasans.prepare(
+      `SELECT COUNT(*) AS count FROM submissions ${whereClause}`
+    )
+    const countResult = await countStatement.bind(...bindValues).first<{ count: number }>()
+    const totalCount = countResult?.count ?? 0
+
     const statement = env.wasans.prepare(
       `SELECT submissions.*, players.score as player_score
        FROM submissions
@@ -198,7 +210,7 @@ export async function GET(request: Request) {
 
     const results = await statement.bind(...bindValues, limit, offset).all()
 
-    return new Response(JSON.stringify({ results: results.results || [] }), {
+    return new Response(JSON.stringify({ results: results.results || [], count: totalCount }), {
       status: 200,
       headers: {
         ...cacheHeaders,
