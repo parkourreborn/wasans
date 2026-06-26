@@ -140,3 +140,6 @@ CREATE TABLE audit_logs (
   details TEXT,
   FOREIGN KEY (actor_uuid) REFERENCES players(uuid)
 );
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action_created_at ON audit_logs(action, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);

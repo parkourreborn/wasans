@@ -14,3 +14,7 @@ export function generateShortId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(11))
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("")
 }
+
+export function generateUUID(): string {
+  return crypto.randomUUID()
+}

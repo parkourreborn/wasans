@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {  Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { ClientErrorLogger } from "@/components/custom/client-error-logger";
 import "./globals.css";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
@@ -22,6 +23,7 @@ export default function RootLayout({
           <link rel="icon" type="image/x-icon" sizes="16x16" href="https://tully.sh/icons/favicon.ico" /> */}
         </head>
       <body>
+        <ClientErrorLogger />
         {children}
       </body>
     </html>
