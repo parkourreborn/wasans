@@ -1,6 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { canModerate, getAuthUser } from "@/lib/server/auth"
-import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
+import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 import { insertAuditLog } from "@/lib/server/audit"
@@ -8,11 +8,9 @@ import {
   deleteBotThread,
   getRankLabel,
   postApprovedRun,
-  postPendingRun,
   sendDiscordDm,
   updateSubmissionThreadTags,
   updateSubmissionThreadContent,
-  updateDiscordUsernameOnScoreChange,
 } from "@/lib/server/notifications"
 
 export async function GET(_: Request, { params }: { params: Promise<{ uuid: string }> }) {
@@ -167,10 +165,34 @@ async function scheduleSubmissionPostProcessing(
             .first() as { time: number } | undefined
         : null
 
+      const newState = state ?? previousState
+      const wasApproved = previousState === "approved"
+      const isApproved = newState === "approved"
+      const scoreRecalculationNeeded = (stateChanged || timeChanged) && (wasApproved || isApproved)
+
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       await refreshWorldRecords(env.wasans, submission.trial_name, user)
-      // Recalculate scores and let refreshPlayerScore handle Discord roles/nicknames once.
-      await refreshPlayerScore(env.wasans, submission.player_uuid)
+
+      const wrRow = await db.prepare(
+        `SELECT w.submission_uuid, w.player_uuid, w.player_name, w.trial_name, w.time, w.date, s.thread_id AS previous_thread_id
+         FROM wrs w
+         LEFT JOIN submissions s ON s.uuid = w.submission_uuid
+         WHERE w.trial_name = ?`
+      )
+        .bind(submission.trial_name)
+        .first<{ submission_uuid: string; player_uuid: string; player_name: string; trial_name: string; time: number; date: string; previous_thread_id: string | null } | null>()
+
+      const wasWr = previousWrRow?.submission_uuid === submission.uuid
+      const isCurrentWr = wrRow?.submission_uuid === submission.uuid
+      const shouldRefreshEveryone = scoreRecalculationNeeded && (wasWr || isCurrentWr)
+
+      if (scoreRecalculationNeeded) {
+        if (shouldRefreshEveryone) {
+          await refreshAllPlayerScores(env.wasans)
+        } else if (wasApproved || isApproved) {
+          await refreshPlayerScore(env.wasans, submission.player_uuid)
+        }
+      }
 
       const { results } = await db.prepare(
         `SELECT submissions.*, players.score as player_score
@@ -186,17 +208,8 @@ async function scheduleSubmissionPostProcessing(
         return
       }
 
-      const wrRow = await db.prepare(
-        `SELECT w.submission_uuid, w.player_uuid, w.player_name, w.trial_name, w.time, w.date, s.thread_id AS previous_thread_id
-         FROM wrs w
-         LEFT JOIN submissions s ON s.uuid = w.submission_uuid
-         WHERE w.trial_name = ?`
-      )
-        .bind(submission.trial_name)
-        .first<{ submission_uuid: string; player_uuid: string; player_name: string; trial_name: string; time: number; date: string; previous_thread_id: string | null } | null>()
 
       const playerScoreBefore = oldPlayer?.score
-      const newState = state ?? previousState
       const finalModeratorNote = newModeratorNote ?? previousModeratorNote
       const scoreChanged = typeof playerScoreBefore === "number" && Number(updatedSubmission?.player_score) !== playerScoreBefore
       const newPlayerScore = Number(updatedSubmission?.player_score)
@@ -241,7 +254,7 @@ async function scheduleSubmissionPostProcessing(
         })())
       }
 
-      const isWr = wrRow?.submission_uuid === uuid
+      const submissionIsWr = wrRow?.submission_uuid === uuid
       const hasExistingThread = Boolean(submission.thread_id)
       const shouldUpdateThread = hasExistingThread && (stateChanged || timeChanged)
 
@@ -250,7 +263,7 @@ async function scheduleSubmissionPostProcessing(
         if (submission.thread_id) {
           // compute averageScoreDelta if this is a WR so we can include it in the updated content
           let averageScoreDelta: number | undefined
-          if (isWr) {
+          if (submissionIsWr) {
             try {
               const oldWr = previousWrRow?.time ?? null
               averageScoreDelta = await calculateAverageScoreDeltaForWrChange(env.wasans, submission.trial_name, oldWr, wrRow!.time)
@@ -261,7 +274,7 @@ async function scheduleSubmissionPostProcessing(
 
           ctx.waitUntil((async () => {
             try {
-              await updateSubmissionThreadTags(submission.thread_id as string, newState, isWr)
+              await updateSubmissionThreadTags(submission.thread_id as string, newState, submissionIsWr)
             } catch (error) {
               console.error("Failed to update submission thread tags:", error)
             }
@@ -282,7 +295,7 @@ async function scheduleSubmissionPostProcessing(
                 oldTime: updateOldTime,
                 discordUserId: String(oldPlayer?.player_id),
                 averageScoreDelta,
-                is_wr: isWr,
+                is_wr: submissionIsWr,
                 previous_wr_submission_uuid: previousToShow?.submission_uuid,
                 previous_wr_time: previousToShow?.time,
                 previous_wr_player_name: previousToShow?.player_name,
@@ -298,7 +311,7 @@ async function scheduleSubmissionPostProcessing(
 
       // Only create a new thread if one doesn't exist already
       const shouldCreateThread = !hasExistingThread &&
-        ((isWr && previousWrRow?.submission_uuid !== uuid) || // New WR
+        ((submissionIsWr && previousWrRow?.submission_uuid !== uuid) || // New WR
         (state === "approved" && state !== previousState && Number(updatedSubmission?.player_score) > 0.3)) // New approval
 
       if (!shouldCreateThread) {
@@ -306,7 +319,7 @@ async function scheduleSubmissionPostProcessing(
       }
 
       let averageScoreDelta: number | undefined
-      if (isWr) {
+      if (submissionIsWr) {
         const oldWr = previousWrRow?.time ?? null
         averageScoreDelta = await calculateAverageScoreDeltaForWrChange(env.wasans, submission.trial_name, oldWr, wrRow!.time)
       }
@@ -314,7 +327,7 @@ async function scheduleSubmissionPostProcessing(
       // When creating a new thread for an approved run, include previous WR metadata if available
       const previousWrThreadId = previousWrRow?.previous_thread_id ?? undefined
 
-      console.log("Creating new approved thread:", { submission: updatedSubmission.uuid, isWr, previousWrRow, previousWrThreadId })
+      console.log("Creating new approved thread:", { submission: updatedSubmission.uuid, isWr: submissionIsWr, previousWrRow, previousWrThreadId })
 
       const { threadId } = await postApprovedRun({
         submission_uuid: updatedSubmission.uuid,
@@ -327,7 +340,7 @@ async function scheduleSubmissionPostProcessing(
         oldTime: oldPb?.time,
         discordUserId: String(oldPlayer?.player_id),
         averageScoreDelta,
-        is_wr: isWr,
+        is_wr: submissionIsWr,
         previous_wr_submission_uuid: previousWrRow?.submission_uuid,
         previous_wr_time: previousWrRow?.time,
         previous_wr_player_name: previousWrRow?.player_name,
@@ -360,10 +373,8 @@ async function scheduleSubmissionDeletePostProcessing(
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       if (isWr && wrTrialName) {
         await refreshWorldRecords(env.wasans, wrTrialName, user)
-        await refreshScoresForTrial(env.wasans, wrTrialName)
-      } else {
-        await refreshPlayerScore(env.wasans, submission.player_uuid)
       }
+      await refreshAllPlayerScores(env.wasans)
     } catch (error) {
       console.error("Background submission delete post-processing failed:", error)
     }
