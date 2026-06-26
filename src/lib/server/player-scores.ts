@@ -3,10 +3,6 @@ import calculateScore from "../calc-score"
 import { TrialName } from "../trials"
 import { updateDiscordUsernameOnScoreChange } from "./notifications"
 
-type TrialRow = {
-  name: string
-}
-
 type BestSubmissionRow = {
   trial_name: TrialName
   time: number
@@ -82,7 +78,7 @@ export async function refreshPlayerScores(
 
   const updates = [] as Array<ReturnType<D1Database["prepare"]>>
   const refreshedPlayers: Array<{ uuid: string; score: number }> = []
-  const discordUpdates: Array<Promise<void>> = []
+  const discordUpdates: Array<{ playerUuid: string; oldScore: number }> = []
 
   for (const playerUuid of uniquePlayerUuids) {
     const bestRows = pbsByPlayer.get(playerUuid) ?? fallbackByPlayer.get(playerUuid) ?? []
@@ -111,7 +107,7 @@ export async function refreshPlayerScores(
     }
 
     if (!options.skipDiscordUpdate && oldScore !== score) {
-      discordUpdates.push(updateDiscordUsernameOnScoreChange(playerUuid, oldScore))
+      discordUpdates.push({ playerUuid, oldScore })
     }
   }
 
@@ -120,7 +116,11 @@ export async function refreshPlayerScores(
   }
 
   if (discordUpdates.length > 0) {
-    await Promise.all(discordUpdates)
+    await Promise.all(
+      discordUpdates.map(({ playerUuid, oldScore }) =>
+        updateDiscordUsernameOnScoreChange(playerUuid, oldScore)
+      )
+    )
   }
 
   return refreshedPlayers
