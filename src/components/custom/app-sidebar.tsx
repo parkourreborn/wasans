@@ -23,6 +23,7 @@ import {
   HomeIcon,
   LogInIcon,
   MedalIcon,
+  OctagonAlertIcon,
   TimerIcon,
   TrophyIcon,
   UserSearchIcon
@@ -41,9 +42,24 @@ type AuthResponse = {
   user: AuthUser | null
 }
 
+type AuditSummaryResponse = {
+  summary?: {
+    latest_error?: {
+      id: number
+      created_at: string
+    } | null
+  }
+}
+
 const discordInviteUrl = "https://discord.gg/9pnRYDU6wg"
+const lastSeenErrorStorageKey = "wasans:last-seen-error-at"
+
 export function AppSidebar() {
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [latestErrorAt, setLatestErrorAt] = useState<string | null>(null)
+  const [lastSeenErrorAt, setLastSeenErrorAt] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : window.localStorage.getItem(lastSeenErrorStorageKey)
+  )
   const playerId = user?.player_id || ""
 
   useEffect(() => {
@@ -63,6 +79,44 @@ export function AppSidebar() {
     loadUser()
   }, [])
 
+  useEffect(() => {
+    const updateLastSeen = () => {
+      setLastSeenErrorAt(window.localStorage.getItem(lastSeenErrorStorageKey))
+    }
+
+    window.addEventListener("storage", updateLastSeen)
+    window.addEventListener("wasans:last-seen-error-updated", updateLastSeen)
+
+    return () => {
+      window.removeEventListener("storage", updateLastSeen)
+      window.removeEventListener("wasans:last-seen-error-updated", updateLastSeen)
+    }
+  }, [])
+
+  useEffect(() => {
+    if ((user?.permission ?? 0) < 1) {
+      return
+    }
+
+    const loadAuditSummary = async () => {
+      try {
+        const response = await fetch("/api/audit-logs?limit=1&kind=errors", { cache: "no-store" })
+        const json = (await response.json()) as AuditSummaryResponse
+
+        if (response.ok) {
+          setLatestErrorAt(json.summary?.latest_error?.created_at || null)
+        }
+      } catch (err) {
+        console.error(err)
+      }
+    }
+
+    loadAuditSummary()
+    const interval = window.setInterval(loadAuditSummary, 60000)
+
+    return () => window.clearInterval(interval)
+  }, [user])
+
   const avatarUrl = useMemo(() => {
     if (!playerId || !/^\d+$/.test(playerId)) {
       return ""
@@ -73,6 +127,7 @@ export function AppSidebar() {
   }, [playerId])
 
   const fallback = user?.player_name?.slice(0, 2).toUpperCase() || "WA"
+  const hasNewErrors = Boolean(latestErrorAt && (!lastSeenErrorAt || latestErrorAt > lastSeenErrorAt))
 
   return (
     <Sidebar collapsible="icon">
@@ -193,8 +248,15 @@ export function AppSidebar() {
                         <SidebarMenuItem>
                           <SidebarMenuButton asChild>
                             <Link href="/logs">
-                              <div className="flex items-center gap-2">
-                                <FileTextIcon />
+                              <div className="flex w-full items-center gap-2">
+                                <div className="relative">
+                                  <FileTextIcon />
+                                  {hasNewErrors && (
+                                    <span className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-destructive ring-2 ring-sidebar">
+                                      <OctagonAlertIcon className="size-2 text-destructive-foreground" />
+                                    </span>
+                                  )}
+                                </div>
                                 <span>Logs</span>
                               </div>
                             </Link>

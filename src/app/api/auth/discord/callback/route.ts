@@ -4,7 +4,7 @@ import {
   getDiscordClientSecret,
   getDiscordRedirectUri,
 } from "@/lib/server/discord-oauth"
-import { generateShortId } from "@/lib/utils"
+import { generateUUID } from "@/lib/utils"
 
 type DiscordTokenResponse = {
   access_token: string
@@ -157,7 +157,7 @@ async function findOrCreatePlayer(
       throw new Error("Discord username is not valid")
     }
 
-    const playerUuid = generateShortId()
+    const playerUuid = generateUUID()
 
     await db.prepare(
       `INSERT INTO players (uuid, player_id, player_name, date_joined, permission)
