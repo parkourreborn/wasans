@@ -387,7 +387,7 @@ export async function updateSubmissionThreadContent(
 
     if (state === "approved") {
       if (run.is_wr) {
-        lines.push("<@1501043686828544121> ")
+        lines.push("<@&1335389577883418736>")
       }
 
       lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)

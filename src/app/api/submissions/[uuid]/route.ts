@@ -169,7 +169,7 @@ async function scheduleSubmissionPostProcessing(
 
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       await refreshWorldRecords(env.wasans, submission.trial_name, user)
-      // Recalculate scores and let refreshPlayerScore update Discord nicknames.
+      // Recalculate scores and let refreshPlayerScore handle Discord roles/nicknames once.
       await refreshPlayerScore(env.wasans, submission.player_uuid)
 
       const { results } = await db.prepare(
@@ -294,18 +294,6 @@ async function scheduleSubmissionPostProcessing(
             }
           })())
         }
-      }
-
-      // Update Discord username/roles only when moderation state changed to approved or denied,
-      // but skip updates when this submission is a world record (testing mode: don't change usernames on WR).
-      if (stateChanged && (state === "approved" || state === "denied")) {
-        ctx.waitUntil((async () => {
-          try {
-            await updateDiscordUsernameOnScoreChange(submission.player_uuid, oldPlayer?.score ?? 0)
-          } catch (error) {
-            console.error("Failed to update Discord username after moderation:", error)
-          }
-        })())
       }
 
       // Only create a new thread if one doesn't exist already
