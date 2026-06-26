@@ -251,60 +251,80 @@ export async function deleteBotThread(threadId: string): Promise<boolean> {
   }
 }
 
-export async function postApprovedRun(run: ApprovedHighScoreRun) {
-  try {
-    const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime.toFixed(3) : "N/A"
-    const newTimeFormatted = run.time.toFixed(3)
-    const oldScoreFormatted = run.oldPlayerScore !== undefined ? run.oldPlayerScore.toFixed(3) : "N/A"
-    const newScoreFormatted = run.player_score.toFixed(3)
-    const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
+export function reportMissingApprovedThread(run: ApprovedHighScoreRun) {
+  const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime.toFixed(3) : "N/A"
+  const newTimeFormatted = run.time.toFixed(3)
+  const oldScoreFormatted = run.oldPlayerScore !== undefined ? run.oldPlayerScore.toFixed(3) : "N/A"
+  const newScoreFormatted = run.player_score.toFixed(3)
+  const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
 
-    const scoreDeltaLine =
-      run.averageScoreDelta !== undefined
-      ?
-        `Average score decrease: ${run.averageScoreDelta.toFixed(3)}`
-        : null
-        
-    const lines: Array<string | null> = []
+  const lines: Array<string | null> = []
 
-    if (run.is_wr) {
-      lines.push("<@&1335389577883418736>")
-    }
-
-    lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
-    lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
-    lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`)
-
-    if (run.previous_wr_time && run.previous_wr_player_name) {
-      if (run.previous_wr_thread_id) {
-        lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name} <#${run.previous_wr_thread_id}>`)
-      } else {
-        lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name}`)
-      }
-    }
-
-    if (scoreDeltaLine) {
-      lines.push(scoreDeltaLine)
-    }
-
-    lines.push(`https://wasans.tully.sh/submissions/${run.submission_uuid}`)
-
-    const announcementMessage = lines.filter(Boolean).join("\n")
-
-    const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
-    const threadContent = announcementMessage
-
-    const tags = ["1351581039499284521"]
-    if (run.is_wr) {
-      tags.push("1351581114841436230")
-    }
-
-    const threadId = await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent, tags)
-    return { threadId }
-  } catch (error) {
-    console.error("Error queuing approved high score run:", error)
-    return { threadId: null }
+  if (run.is_wr) {
+    lines.push("<@&1335389577883418736>")
   }
+
+  lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
+  lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
+  lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`)
+
+  if (run.previous_wr_time && run.previous_wr_player_name) {
+    if (run.previous_wr_thread_id) {
+      lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name} <#${run.previous_wr_thread_id}>`)
+    } else {
+      lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name}`)
+    }
+  }
+
+  if (run.averageScoreDelta !== undefined) {
+    lines.push(`Average score decrease: ${run.averageScoreDelta.toFixed(3)}`)
+  }
+
+  const submissionUrl = `https://wasans.tully.sh/submissions/${run.submission_uuid}`
+  lines.push(submissionUrl)
+
+  const title = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
+  const content = lines.filter(Boolean).join("\n")
+  const tags = ["1351581039499284521"]
+  if (run.is_wr) {
+    tags.push("1351581114841436230")
+  }
+
+  console.error("Approved submission has no Discord thread; manual thread creation/update required", {
+    channel_id: THREAD_CHANNEL_ID,
+    guild_id: GUILD_ID,
+    title,
+    content,
+    tags,
+    submission: {
+      uuid: run.submission_uuid,
+      url: submissionUrl,
+      player_uuid: run.player_uuid,
+      player_name: run.player_name,
+      discord_user_id: run.discordUserId,
+      trial_name: run.trial_name,
+      is_wr: run.is_wr,
+    },
+    time_change: {
+      old_time: run.oldTime,
+      old_time_formatted: oldTimeFormatted,
+      new_time: run.time,
+      new_time_formatted: newTimeFormatted,
+    },
+    score_change: {
+      old_score: run.oldPlayerScore,
+      old_score_formatted: oldScoreFormatted,
+      new_score: run.player_score,
+      new_score_formatted: newScoreFormatted,
+      average_score_delta: run.averageScoreDelta,
+    },
+    previous_wr: {
+      submission_uuid: run.previous_wr_submission_uuid,
+      time: run.previous_wr_time,
+      player_name: run.previous_wr_player_name,
+      thread_id: run.previous_wr_thread_id,
+    },
+  })
 }
 
 export type PendingSubmissionPost = {
@@ -313,17 +333,20 @@ export type PendingSubmissionPost = {
   player_name: string
   trial_name: string
   time: number
+  oldTime?: number
   player_score: number
   discordUserId?: string
 }
 
 export async function postPendingRun(submission: PendingSubmissionPost): Promise<{ threadId: string | null }> {
   try {
+    const oldTimeFormatted = submission.oldTime !== undefined ? submission.oldTime.toFixed(3) : "N/A"
     const timeFormatted = submission.time.toFixed(3)
     const userMention = submission.discordUserId ? `<@${submission.discordUserId}>` : submission.player_name
 
     const announcementMessage = [
       `**${submission.trial_name} ${timeFormatted} | ${userMention}**`,
+      `${oldTimeFormatted} -> ${timeFormatted}`,
       `https://wasans.tully.sh/submissions/${submission.submission_uuid}`,
     ]
       .filter(Boolean)
@@ -405,11 +428,13 @@ export async function updateSubmissionThreadContent(
       if (scoreDeltaLine) {
         lines.push(scoreDeltaLine)
       }
-    } else if (state === "pending" || state === "denied") {
+    } else if (state === "pending") {
       lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
       if (run.oldTime !== undefined) {
         lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
       }
+    } else if (state === "denied") {
+      lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
     } else {
       lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
     }

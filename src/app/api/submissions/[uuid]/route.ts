@@ -1,13 +1,15 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { canModerate, getAuthUser } from "@/lib/server/auth"
+import type { AuthUser } from "@/lib/server/auth"
 import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 import { insertAuditLog } from "@/lib/server/audit"
+import type { AuditAction } from "@/lib/server/audit"
 import {
   deleteBotThread,
   getRankLabel,
-  postApprovedRun,
+  reportMissingApprovedThread,
   sendDiscordDm,
   updateSubmissionThreadTags,
   updateSubmissionThreadContent,
@@ -125,11 +127,11 @@ async function calculateAverageScoreDeltaForWrChange(
 
 async function scheduleSubmissionPostProcessing(
   ctx: ExecutionContext,
-  env: any,
+  env: CloudflareEnv,
   submission: SubmissionRow,
   state: string | null,
   previousState: string,
-  user: any,
+  user: AuthUser,
   oldPlayer: { score: number; player_id: string } | null,
   oldPb: { time: number } | null,
   uuid: string,
@@ -327,9 +329,7 @@ async function scheduleSubmissionPostProcessing(
       // When creating a new thread for an approved run, include previous WR metadata if available
       const previousWrThreadId = previousWrRow?.previous_thread_id ?? undefined
 
-      console.log("Creating new approved thread:", { submission: updatedSubmission.uuid, isWr: submissionIsWr, previousWrRow, previousWrThreadId })
-
-      const { threadId } = await postApprovedRun({
+      reportMissingApprovedThread({
         submission_uuid: updatedSubmission.uuid,
         player_uuid: updatedSubmission.player_uuid,
         player_name: updatedSubmission.player_name,
@@ -346,14 +346,6 @@ async function scheduleSubmissionPostProcessing(
         previous_wr_player_name: previousWrRow?.player_name,
         previous_wr_thread_id: previousWrThreadId,
       })
-
-      // if (isWr) {
-      //   await refreshScoresForTrial(env.wasans, submission.trial_name)
-      // }
-
-      if (threadId) {
-        await env.wasans.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, uuid).run()
-      }
     } catch (error) {
       console.error("Background submission post-processing failed:", error)
     }
@@ -362,11 +354,11 @@ async function scheduleSubmissionPostProcessing(
 
 async function scheduleSubmissionDeletePostProcessing(
   ctx: ExecutionContext,
-  env: any,
+  env: CloudflareEnv,
   submission: SubmissionRow,
   isWr: boolean,
   wrTrialName: string | null,
-  user: any
+  user: AuthUser
 ) {
   ctx.waitUntil((async () => {
     try {
@@ -391,7 +383,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
 
   const user = await getAuthUser(request, env.wasans)
 
-  if (!canModerate(user)) {
+  if (!user || !canModerate(user)) {
     return jsonError("Moderator permission is required", 403)
   }
 
@@ -464,7 +456,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   const auditDetails: Record<string, unknown> = {
     trial_name: submission.trial_name,
   }
-  let auditAction: string = "submission_updated"
+  let auditAction: AuditAction = "submission_updated"
 
   if (state && state !== previousState) {
     auditDetails.old_state = previousState
@@ -488,7 +480,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     }
   }
 
-  await insertAuditLog(env.wasans, auditAction as any, "submission", uuid, {
+  await insertAuditLog(env.wasans, auditAction, "submission", uuid, {
     actor: user,
     details: auditDetails,
   })
