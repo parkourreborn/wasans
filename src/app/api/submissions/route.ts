@@ -1,10 +1,8 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { getAuthUser } from "@/lib/server/auth"
-import { refreshPlayerScore } from "@/lib/server/player-scores"
 import { insertAuditLog } from "@/lib/server/audit"
 import { postPendingRun } from "@/lib/server/notifications"
 import { trials } from "@/lib/trials"
-import { refreshPlayerPb, refreshPlayerPbs } from "@/lib/server/pbs"
 import { generateShortId } from "@/lib/utils"
 
 type IncomingSubmission = {
@@ -371,6 +369,7 @@ export async function POST(request: Request) {
             player_name: player.player_name,
             trial_name: trialName,
             time,
+            oldTime: personalBest?.time,
             player_score: 0,
             discordUserId: player.player_id,
           })
@@ -459,6 +458,7 @@ export async function POST(request: Request) {
             player_name: player.player_name,
             trial_name: trialName,
             time,
+            oldTime: personalBest?.time,
             player_score: 0,
             discordUserId: player.player_id,
           })
@@ -505,6 +505,7 @@ export async function POST(request: Request) {
         player_name: player.player_name,
         trial_name: trialName,
         time,
+        oldTime: personalBest?.time,
         player_score: 0,
         discordUserId: player.player_id,
       })
