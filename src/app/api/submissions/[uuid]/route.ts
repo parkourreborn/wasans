@@ -59,6 +59,33 @@ function jsonError(message: string, status = 400) {
   return Response.json({ error: message }, { status })
 }
 
+function getBotApiKeyFromRequest(request: Request) {
+  const authorization = request.headers.get("authorization")
+
+  if (authorization?.startsWith("Bearer ")) {
+    return authorization.slice("Bearer ".length).trim()
+  }
+
+  return request.headers.get("x-api-key")?.trim()
+    || request.headers.get("x-bot-api-key")?.trim()
+    || null
+}
+
+function isBotApiRequest(request: Request, env: CloudflareEnv) {
+  const providedKey = getBotApiKeyFromRequest(request)
+  const expectedKey = (env as CloudflareEnv & { botApiKey?: string }).botApiKey || process.env.botApiKey
+
+  return Boolean(providedKey && expectedKey && providedKey === expectedKey)
+}
+
+const botModeratorUser: AuthUser = {
+  uuid: "discord-bot",
+  player_id: "discord-bot",
+  player_name: "Discord Bot",
+  score: 0,
+  permission: 1,
+}
+
 function normalizeState(value: unknown) {
   if (value === "accepted") {
     return "approved"
@@ -258,7 +285,7 @@ async function scheduleSubmissionPostProcessing(
 
       const submissionIsWr = wrRow?.submission_uuid === uuid
       const hasExistingThread = Boolean(submission.thread_id)
-      const shouldUpdateThread = hasExistingThread && (stateChanged || timeChanged)
+      const shouldUpdateThread = hasExistingThread && (stateChanged || timeChanged || noteChanged)
 
       // If there's already a thread and the submission changed state or time, update the tags/content
       if (shouldUpdateThread) {
@@ -303,6 +330,7 @@ async function scheduleSubmissionPostProcessing(
                 previous_wr_player_name: previousToShow?.player_name,
                 previous_wr_thread_id: previousWrThreadId,
                 new_state: newState,
+                moderator_note: updatedSubmission.moderator_note,
               })
             } catch (error) {
               console.error("Failed to update submission thread content:", error)
@@ -381,7 +409,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     return jsonError("DB binding not available", 500)
   }
 
-  const user = await getAuthUser(request, env.wasans)
+  const sessionUser = await getAuthUser(request, env.wasans)
+  const user = canModerate(sessionUser)
+    ? sessionUser
+    : isBotApiRequest(request, env)
+    ? botModeratorUser
+    : sessionUser
 
   if (!user || !canModerate(user)) {
     return jsonError("Moderator permission is required", 403)

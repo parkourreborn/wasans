@@ -20,6 +20,7 @@ export type ApprovedHighScoreRun = {
   previous_wr_thread_id?: string
   // the new state (approved/denied/pending) when updating existing threads
   new_state?: string
+  moderator_note?: string | null
 }
 
 export type WorldRecordRun = {
@@ -439,11 +440,15 @@ export async function updateSubmissionThreadContent(
       lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
     }
 
+    if (run.moderator_note) {
+      lines.push(`Moderator note: ${run.moderator_note}`)
+    }
+
     lines.push(`https://wasans.tully.sh/submissions/${run.submission_uuid}`)
 
     const announcementMessage = lines.filter(Boolean).join("\n")
 
-    const threadTitle = state === "approved" ? `${run.trial_name} ${newTimeFormatted} | ${run.player_name}` : null
+    const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
 
     const ok = await updateBotThreadContent(threadId, threadTitle, announcementMessage)
     return ok
