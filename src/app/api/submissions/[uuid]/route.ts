@@ -86,6 +86,54 @@ const botModeratorUser: AuthUser = {
   permission: 1,
 }
 
+function normalizeDiscordId(value: unknown) {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const discordId = value.trim()
+  return discordId.length > 0 ? discordId : null
+}
+
+async function resolveModeratorUserFromDiscordId(env: CloudflareEnv, discordId: string | null) {
+  if (!discordId) {
+    return botModeratorUser
+  }
+
+  const account = await env.wasans.prepare(
+    `SELECT player_uuid
+     FROM oauth_accounts
+     WHERE provider = 'discord' AND provider_account_id = ?
+     ORDER BY updated_at DESC
+     LIMIT 1`
+  )
+    .bind(discordId)
+    .first<{ player_uuid: string }>()
+
+  if (!account?.player_uuid) {
+    return botModeratorUser
+  }
+
+  const moderator = await env.wasans.prepare(
+    `SELECT players.uuid,
+            COALESCE(oauth_accounts.provider_account_id, players.player_id) AS player_id,
+            players.player_name,
+            players.score,
+            players.permission
+     FROM players
+     LEFT JOIN oauth_accounts
+       ON oauth_accounts.player_uuid = players.uuid
+       AND oauth_accounts.provider = 'discord'
+     WHERE players.uuid = ?
+     ORDER BY oauth_accounts.updated_at DESC
+     LIMIT 1`
+  )
+    .bind(account.player_uuid)
+    .first<AuthUser>()
+
+  return moderator ?? botModeratorUser
+}
+
 function normalizeState(value: unknown) {
   if (value === "accepted") {
     return "approved"
@@ -409,22 +457,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
     return jsonError("DB binding not available", 500)
   }
 
+  const body = await request.json().catch(() => null) as {
+    state?: unknown
+    moderator_note?: unknown
+    time?: unknown
+    discordId?: unknown
+  } | null
+
   const sessionUser = await getAuthUser(request, env.wasans)
+  const resolvedDiscordId = normalizeDiscordId(body?.discordId)
   const user = canModerate(sessionUser)
     ? sessionUser
     : isBotApiRequest(request, env)
-    ? botModeratorUser
+    ? await resolveModeratorUserFromDiscordId(env, resolvedDiscordId)
     : sessionUser
 
   if (!user || !canModerate(user)) {
     return jsonError("Moderator permission is required", 403)
   }
 
-  const body = await request.json().catch(() => null) as {
-    state?: unknown
-    moderator_note?: unknown
-    time?: unknown
-  } | null
   const state = normalizeState(body?.state)
   const moderatorNote = normalizeModeratorNote(body?.moderator_note)
   const rawTime = body?.time
