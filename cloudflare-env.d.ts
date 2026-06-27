@@ -11,6 +11,7 @@ declare namespace Cloudflare {
 		WORKER_SELF_REFERENCE: Fetcher /* wasans */;
 		discordClientId: string;
 		discordClientSecret: string;
+		botApiKey: string;
 	}
 }
 interface CloudflareEnv extends Cloudflare.Env {}
