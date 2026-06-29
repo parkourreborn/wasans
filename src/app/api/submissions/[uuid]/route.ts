@@ -9,6 +9,7 @@ import type { AuditAction } from "@/lib/server/audit"
 import {
   deleteBotThread,
   getRankLabel,
+  postApprovedRun,
   reportMissingApprovedThread,
   sendDiscordDm,
   updateSubmissionThreadTags,
@@ -405,7 +406,7 @@ async function scheduleSubmissionPostProcessing(
       // When creating a new thread for an approved run, include previous WR metadata if available
       const previousWrThreadId = previousWrRow?.previous_thread_id ?? undefined
 
-      reportMissingApprovedThread({
+      const approvedRun = {
         submission_uuid: updatedSubmission.uuid,
         player_uuid: updatedSubmission.player_uuid,
         player_name: updatedSubmission.player_name,
@@ -421,7 +422,15 @@ async function scheduleSubmissionPostProcessing(
         previous_wr_time: previousWrRow?.time,
         previous_wr_player_name: previousWrRow?.player_name,
         previous_wr_thread_id: previousWrThreadId,
-      })
+      }
+
+      const { threadId } = await postApprovedRun(approvedRun)
+
+      if (threadId) {
+        await db.prepare(`UPDATE submissions SET thread_id = ? WHERE uuid = ?`).bind(threadId, updatedSubmission.uuid).run()
+      } else {
+        reportMissingApprovedThread(approvedRun)
+      }
     } catch (error) {
       console.error("Background submission post-processing failed:", error)
     }

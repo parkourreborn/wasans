@@ -366,6 +366,54 @@ export async function postPendingRun(submission: PendingSubmissionPost): Promise
   }
 }
 
+export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ threadId: string | null }> {
+  try {
+    const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime.toFixed(3) : "N/A"
+    const newTimeFormatted = run.time.toFixed(3)
+    const oldScoreFormatted = run.oldPlayerScore !== undefined ? run.oldPlayerScore.toFixed(3) : "N/A"
+    const newScoreFormatted = run.player_score.toFixed(3)
+    const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
+
+    const lines: Array<string | null> = []
+
+    if (run.is_wr) {
+      lines.push("<@&1335389577883418736>")
+    }
+
+    lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
+    lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
+    lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`)
+
+    if (run.is_wr) {
+      if (run.previous_wr_thread_id) {
+        lines.push(`Previous WR: <#${run.previous_wr_thread_id}>`)
+      } else if (run.previous_wr_time && run.previous_wr_player_name) {
+        lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name}`)
+      }
+    }
+
+    if (run.averageScoreDelta !== undefined) {
+      lines.push(`Average score decrease: ${run.averageScoreDelta.toFixed(3)}`)
+    }
+
+    lines.push(`https://wasans.tully.sh/submissions/${run.submission_uuid}`)
+
+    const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
+    const threadContent = lines.filter(Boolean).join("\n")
+    const tags = ["1351581039499284521"]
+
+    if (run.is_wr) {
+      tags.push("1351581114841436230")
+    }
+
+    const threadId = await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent, tags)
+    return { threadId }
+  } catch (error) {
+    console.error("Error posting approved run:", error)
+    return { threadId: null }
+  }
+}
+
 export async function updateSubmissionThreadTags(
   threadId: string,
   newState: string,
