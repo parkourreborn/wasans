@@ -5,7 +5,7 @@ declare global {
 }
 
 export function getApiBaseUrl() {
-  return "https://only-api-wasans.tullycockerham.workers.dev"
+  return "https://wasans.tully.sh"
 }
 
 export function apiV1(path: string) {
