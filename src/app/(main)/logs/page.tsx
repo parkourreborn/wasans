@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useEffect, useMemo, useState } from "react"
+import { apiV1 } from "@/lib/api"
 import {
   AlertTriangleIcon,
   ChevronDownIcon,
@@ -135,7 +136,7 @@ export default function LogsPage() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const response = await fetch("/api/auth/me", { cache: "no-store" })
+        const response = await fetch(apiV1("/auth/me"), { cache: "no-store" })
         const json = (await response.json()) as AuthResponse
         if (!response.ok) {
           throw new Error(json?.error || "Unable to load user")
@@ -171,7 +172,7 @@ export default function LogsPage() {
         params.set("q", query.trim())
       }
 
-      const response = await fetch(`/api/audit-logs?${params.toString()}`, { cache: "no-store" })
+      const response = await fetch(`${apiV1("/admin/audit-logs")}?${params.toString()}`, { cache: "no-store" })
       const json = (await response.json()) as AuditLogResponse
       if (!response.ok) {
         throw new Error(json.error || "Unable to load audit logs")

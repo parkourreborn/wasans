@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { apiV1 } from "@/lib/api"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
@@ -103,7 +104,7 @@ export default function SubmissionsPage() {
 
     const fetchSubmissions = async () => {
       try {
-        const response = await fetch(`/api/wrs`, { cache: "no-cache" })
+        const response = await fetch(apiV1("/records/world"), { cache: "no-cache" })
         if (!response.ok) {
           if (!cachedResults) {
             setError("Failed to load submissions")

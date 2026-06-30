@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { apiV1 } from "@/lib/api";
 import { TrialName, trials as trialNames } from "@/lib/trials";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -126,7 +127,7 @@ export default function Home() {
   React.useEffect(() => {
     const loadWorldRecords = async () => {
       try {
-        const response = await fetch("/api/wrs", { cache: "force-cache" });
+        const response = await fetch(apiV1("/records/world"), { cache: "force-cache" });
         const json = (await response.json()) as WorldRecordsResponse;
 
         if (!response.ok) {
@@ -150,7 +151,7 @@ export default function Home() {
   React.useEffect(() => {
     const loadPlayers = async () => {
       try {
-        const response = await fetch("/api/players", { cache: "no-store" })
+        const response = await fetch(apiV1("/players"), { cache: "no-store" })
         const json = (await response.json()) as {
           results?: Array<{ uuid: string; player_name: string; score: number }>
           error?: string
@@ -186,7 +187,7 @@ export default function Home() {
   React.useEffect(() => {
     const loadAuth = async () => {
       try {
-        const response = await fetch("/api/auth/me", { cache: "no-store" });
+        const response = await fetch(apiV1("/auth/me"), { cache: "no-store" });
         const authJson = (await response.json().catch(() => null)) as AuthResponse | null;
         setAuthUser(authJson?.user ?? null);
       } catch (err) {
@@ -245,10 +246,13 @@ export default function Home() {
         }
 
         const response = await fetch(
-          `/api/pbs/player/${encodeURIComponent(playerUuid)}`,
+          `${apiV1(`/players/${encodeURIComponent(playerUuid)}`)}?include=pbs`,
           { cache: "no-store" }
         )
-        const json = (await response.json()) as { results?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }> }
+        const json = (await response.json()) as {
+          pbs?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }>
+          results?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }>
+        }
 
         if (!response.ok) {
           throw new Error("Unable to load personal bests")
@@ -256,7 +260,9 @@ export default function Home() {
 
         const bestTimes: Record<string, number> = {}
 
-        for (const pb of json.results || []) {
+        const pbRows = json.pbs || json.results || []
+
+        for (const pb of pbRows) {
           const trial = trialKey(pb.trial_name)
           const time = Number(pb.time)
           if (Number.isFinite(time) && time > 0) {

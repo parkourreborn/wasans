@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { trials as trialNames, TrialName } from "@/lib/trials"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
@@ -123,7 +124,7 @@ export default function ComparePage() {
   React.useEffect(() => {
     const loadPlayers = async () => {
       try {
-        const response = await fetch("/api/players", { cache: "force-cache" })
+        const response = await fetch(apiV1("/players"), { cache: "force-cache" })
         const json = (await response.json()) as ListResponse<PlayerItem>
         if (!response.ok) {
           throw new Error(json.error || "Unable to load players")
@@ -138,7 +139,7 @@ export default function ComparePage() {
 
     const loadWorldRecords = async () => {
       try {
-        const response = await fetch("/api/wrs", { cache: "force-cache" })
+        const response = await fetch(apiV1("/records/world"), { cache: "force-cache" })
         const json = (await response.json()) as ListResponse<WorldRecordValue>
         if (!response.ok) {
           throw new Error(json.error || "Unable to load WRs")
@@ -164,7 +165,7 @@ export default function ComparePage() {
 
       try {
         const requests = [playerAUuid, playerBUuid].filter(Boolean).map((uuid) =>
-          fetch(`/api/submissions/player/${encodeURIComponent(uuid)}?approvedOnly=true&page=1&limit=50`, {
+          fetch(`${apiV1("/submissions")}?player_uuid=${encodeURIComponent(uuid)}&state=approved&page=1&limit=50`, {
             cache: "no-store",
           }).then(async (response) => {
             const json = (await response.json()) as ListResponse<SubmissionValue>
