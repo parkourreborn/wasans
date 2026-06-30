@@ -4,25 +4,25 @@ This repository now runs as an API-first backend with a consolidated, production
 
 ## Canonical API surface
 
-All new clients should use `/api/v1`:
+All new clients should use `/v1`:
 
-- `GET /api/v1/health`
-- `GET /api/v1/auth/me`
-- `GET /api/v1/auth/discord/start`
-- `GET /api/v1/auth/discord/callback`
-- `GET /api/v1/players?page=&limit=&search=`
-- `GET /api/v1/players/:uuid?include=pbs,recent_submissions&submissions_limit=`
-- `GET /api/v1/submissions?page=&limit=&state=&player_uuid=&search=`
-- `POST /api/v1/submissions`
-- `GET /api/v1/submissions/:uuid`
-- `PATCH /api/v1/submissions/:uuid`
-- `DELETE /api/v1/submissions/:uuid`
-- `GET /api/v1/leaderboards/overall?page=&limit=`
-- `GET /api/v1/leaderboards/trials/:trial?page=&limit=`
-- `GET /api/v1/records/world`
-- `GET /api/v1/records/world/:trial`
-- `GET /api/v1/admin/audit-logs`
-- `POST /api/v1/admin/maintenance/deduplicate`
+- `GET /v1/health`
+- `GET /v1/auth/me`
+- `GET /v1/auth/discord/start`
+- `GET /v1/auth/discord/callback`
+- `GET /v1/players?page=&limit=&search=`
+- `GET /v1/players/:uuid?include=pbs,recent_submissions&submissions_limit=`
+- `GET /v1/submissions?page=&limit=&state=&player_uuid=&search=`
+- `POST /v1/submissions`
+- `GET /v1/submissions/:uuid`
+- `PATCH /v1/submissions/:uuid`
+- `DELETE /v1/submissions/:uuid`
+- `GET /v1/leaderboards/overall?page=&limit=`
+- `GET /v1/leaderboards/trials/:trial?page=&limit=`
+- `GET /v1/records/world`
+- `GET /v1/records/world/:trial`
+- `GET /v1/admin/audit-logs`
+- `POST /v1/admin/maintenance/deduplicate`
 
 ## Removed routes
 
@@ -36,36 +36,6 @@ Previously available split routes:
 
 Use consolidated routes instead:
 
-- `/api/v1/players/:uuid?include=pbs`
-- `/api/v1/submissions?player_uuid=:uuid`
-- `/api/v1/submissions/:uuid` with bot API auth headers
-
-## Development
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Run dev server:
-
-```bash
-npm run dev
-```
-
-Build:
-
-```bash
-npm run build
-```
-
-Deploy:
-
-```bash
-npm run deploy
-```
-
-## Database notes
-
-`schema.sql` includes additional indexes for production read/write patterns on `submissions`, `pbs`, `auth_sessions`, and `oauth_accounts`.
+- `/v1/players/:uuid?include=pbs`
+- `/v1/submissions?player_uuid=:uuid`
+- `/v1/submissions/:uuid` with bot API auth headers
