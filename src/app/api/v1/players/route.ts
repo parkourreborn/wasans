@@ -1,5 +1,5 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
-import { jsonError, jsonResponse, parsePagination } from "@/lib/server/http"
+import { getRequestId, jsonError, jsonResponse, parsePagination } from "@/lib/server/http"
 import { listPlayers } from "@/lib/server/repositories/player-repository"
 
 const cacheHeaders = {
@@ -7,10 +7,11 @@ const cacheHeaders = {
 }
 
 export async function GET(request: Request) {
+  const requestId = getRequestId(request)
   const { env } = await getCloudflareContext({ async: true })
 
   if (!env?.wasans) {
-    return jsonError("DB binding not available", 500)
+    return jsonError("DB binding not available", 500, { code: "internal_error", requestId })
   }
 
   const url = new URL(request.url)
@@ -31,6 +32,9 @@ export async function GET(request: Request) {
       total: data.total,
     },
     200,
-    cacheHeaders
+    {
+      headers: cacheHeaders,
+      requestId,
+    }
   )
 }

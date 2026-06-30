@@ -1,17 +1,22 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { buildPlayerDetail } from "@/lib/server/services/player-service"
-import { jsonError, jsonResponse, parseBoolean } from "@/lib/server/http"
+import { getRequestId, jsonError, jsonResponse, parseBoolean, validationError } from "@/lib/server/http"
 
 const cacheHeaders = {
   "cache-control": "max-age=30, stale-while-revalidate=60",
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ uuid: string }> }) {
+  const requestId = getRequestId(request)
   const { env } = await getCloudflareContext({ async: true })
   const { uuid } = await params
 
   if (!env?.wasans) {
-    return jsonError("DB binding not available", 500)
+    return jsonError("DB binding not available", 500, { code: "internal_error", requestId })
+  }
+
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(uuid)) {
+    return validationError("Invalid player uuid", requestId)
   }
 
   const url = new URL(request.url)
@@ -29,8 +34,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ uuid
   })
 
   if (!detail) {
-    return jsonResponse({ player: null }, 200, cacheHeaders)
+    return jsonResponse({ player: null }, 200, { headers: cacheHeaders, requestId })
   }
 
-  return jsonResponse({ player: detail }, 200, cacheHeaders)
+  return jsonResponse({ player: detail }, 200, { headers: cacheHeaders, requestId })
 }
