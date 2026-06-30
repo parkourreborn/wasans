@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ uuid
     return jsonError("DB binding not available", 500, { code: "internal_error", requestId })
   }
 
-  if (!/^[A-Za-z0-9_-]{6,64}$/.test(uuid)) {
+  if ((!/^[A-Za-z0-9_-]{6,64}$/.test(uuid)) && (uuid !== "0")) {
     return validationError("Invalid player uuid", requestId)
   }
 
