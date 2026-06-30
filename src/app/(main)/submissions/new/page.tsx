@@ -251,7 +251,8 @@ function formatTime(value: number) {
 function uploadSubmissions(
   submissions: SubmissionDraft[],
   onProgress: (progress: number, status: UploadState["status"], message?: string) => void,
-  hasMedalLink: boolean
+  hasMedalLink: boolean,
+  idempotencyKey: string
 ) {
   return new Promise<ListResponse<unknown>>((resolve, reject) => {
     const payload = submissions.map((submission) => ({
@@ -317,6 +318,7 @@ function uploadSubmissions(
 
     onProgress(0, "uploading", "Preparing upload")
     request.open("POST", apiV1("/submissions"))
+    request.setRequestHeader("Idempotency-Key", idempotencyKey)
     request.send(formData)
   })
 }
@@ -514,6 +516,7 @@ export default function NewSubmissionPage() {
       const hasMedalLink = submissions.some(
         (submission) => !submission.proof_file && isMedalLink(submission.proof_url.trim())
       )
+      const idempotencyKey = crypto.randomUUID()
 
       await uploadSubmissions(preparedSubmissions, (progress, status, message) => {
         setUploadStates((current) =>
@@ -535,7 +538,7 @@ export default function NewSubmissionPage() {
             ])
           )
         )
-      }, hasMedalLink)
+      }, hasMedalLink, idempotencyKey)
 
       setMessage("Submitted")
       router.push("/submissions")
