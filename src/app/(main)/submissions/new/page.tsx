@@ -53,7 +53,19 @@ type WorldRecordValue = {
 
 type ListResponse<T> = {
   results?: T[]
-  error?: string
+  error?: string | { message?: string }
+}
+
+function getApiErrorMessage(error: ListResponse<unknown>["error"], fallback: string) {
+  if (typeof error === "string") {
+    return error
+  }
+
+  if (error?.message) {
+    return error.message
+  }
+
+  return fallback
 }
 
 type AuthResponse = {
@@ -215,7 +227,7 @@ async function getWorldRecords() {
       const json = (await response.json()) as ListResponse<WorldRecordValue>
 
       if (!response.ok) {
-        throw new Error(json.error || "Unable to load world records")
+        throw new Error(getApiErrorMessage(json.error, "Unable to load world records"))
       }
 
       cachedWorldRecords = Object.fromEntries(
@@ -263,6 +275,7 @@ function uploadSubmissions(
 
     const formData = new FormData()
     formData.append("submissions", JSON.stringify(payload))
+    formData.append("idempotency_key", idempotencyKey)
 
     submissions.forEach((submission, index) => {
       if (submission.proof_file) {
@@ -305,7 +318,9 @@ function uploadSubmissions(
         return
       }
 
-      reject(new Error(json?.error || "Unable to create submission"))
+      const errorMessage = getApiErrorMessage(json?.error, "Unable to create submission")
+
+      reject(new Error(errorMessage))
     }
 
     request.onerror = () => {
@@ -358,7 +373,7 @@ export default function NewSubmissionPage() {
         const pbJson = (await pbResponse.json()) as ListResponse<SubmissionValue>
 
         if (!pbResponse.ok) {
-          throw new Error(pbJson.error || "Unable to load current scores")
+          throw new Error(getApiErrorMessage(pbJson.error, "Unable to load current scores"))
         }
 
         const nextPersonalBests: Record<string, number> = {}
