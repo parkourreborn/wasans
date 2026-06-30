@@ -14,7 +14,20 @@ async function sha256Hex(value: string) {
 }
 
 export function readIdempotencyKey(request: Request) {
-  const key = request.headers.get("idempotency-key")?.trim()
+  const key = request.headers.get("idempotency-key")?.trim() || request.headers.get("x-idempotency-key")?.trim()
+  if (!key) {
+    return null
+  }
+
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(key)) {
+    return null
+  }
+
+  return key
+}
+
+export function readIdempotencyKeyFromFormData(formData: FormData) {
+  const key = String(formData.get("idempotency_key") || "").trim()
   if (!key) {
     return null
   }

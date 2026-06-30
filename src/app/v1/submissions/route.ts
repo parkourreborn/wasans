@@ -8,6 +8,7 @@ import {
   buildRequestHash,
   lookupIdempotentResponse,
   readIdempotencyKey,
+  readIdempotencyKeyFromFormData,
   storeIdempotentResponse,
 } from "@/lib/server/services/idempotency-service"
 
@@ -92,17 +93,17 @@ export async function POST(request: Request) {
     })
   }
 
-  const idempotencyKey = readIdempotencyKey(request)
-  if (!idempotencyKey) {
-    return validationError("Missing or invalid idempotency-key header", requestId)
-  }
-
   const formData = await request.formData().catch(() => null)
   if (!formData) {
     return jsonError("Submission payload is too large or invalid", 413, {
       code: "validation_error",
       requestId,
     })
+  }
+
+  const idempotencyKey = readIdempotencyKey(request) || readIdempotencyKeyFromFormData(formData)
+  if (!idempotencyKey) {
+    return validationError("Missing or invalid idempotency-key header", requestId)
   }
 
   const rawSubmissions = String(formData.get("submissions") || "")
