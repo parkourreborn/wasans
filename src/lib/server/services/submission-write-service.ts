@@ -262,7 +262,7 @@ export async function createSubmissionsFromRequest(db: D1Database, env: Cloudfla
           trial_name: trialName,
           time,
           oldTime: personalBest,
-          player_score: 0,
+          player_score: Number(player.score),
           discordUserId: player.player_id,
         })
 

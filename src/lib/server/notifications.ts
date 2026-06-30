@@ -358,6 +358,10 @@ export type PendingSubmissionPost = {
 
 export async function postPendingRun(submission: PendingSubmissionPost): Promise<{ threadId: string | null }> {
   try {
+    if (!Number.isFinite(submission.player_score) || submission.player_score < 0.3) {
+      return { threadId: null }
+    }
+
     const oldTimeFormatted = submission.oldTime !== undefined ? submission.oldTime.toFixed(3) : "N/A"
     const timeFormatted = submission.time.toFixed(3)
     const userMention = submission.discordUserId ? `<@${submission.discordUserId}>` : submission.player_name
