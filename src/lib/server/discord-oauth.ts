@@ -1,6 +1,6 @@
 import "server-only"
 
-export const discordRedirectUri = "https://wasans.tully.sh/api/auth/discord/callback"
+export const discordRedirectUri = "https://wasans.tully.sh/v1/auth/discord/callback"
 
 type DiscordOAuthEnv = {
   discordClientId?: string

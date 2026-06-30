@@ -28,6 +28,7 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react"
+import { apiV1 } from "@/lib/api"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 
@@ -158,7 +159,7 @@ export default function Home() {
       setError(null)
 
       try {
-        const response = await fetch(`/api/submissions/${uuid}`)
+        const response = await fetch(apiV1(`/submissions/${uuid}`))
         const json: unknown = await response.json().catch(() => null)
 
         if (!response.ok) {
@@ -182,7 +183,7 @@ export default function Home() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch("/api/auth/me")
+        const response = await fetch(apiV1("/auth/me"))
         const json = (await response.json()) as AuthResponse
 
         if (response.ok) {
@@ -203,7 +204,7 @@ export default function Home() {
     setError(null)
 
     try {
-      const response = await fetch(`/api/submissions/${uuid}`, {
+      const response = await fetch(apiV1(`/submissions/${uuid}`), {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
@@ -239,7 +240,7 @@ export default function Home() {
     setError(null)
 
     try {
-      const response = await fetch(`/api/submissions/${uuid}`, {
+      const response = await fetch(apiV1(`/submissions/${uuid}`), {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
@@ -310,7 +311,7 @@ export default function Home() {
     setEditTimeError(null)
 
     try {
-      const response = await fetch(`/api/submissions/${uuid}`, {
+      const response = await fetch(apiV1(`/submissions/${uuid}`), {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
@@ -344,7 +345,7 @@ export default function Home() {
     setError(null)
 
     try {
-      const response = await fetch(`/api/submissions/${uuid}`, {
+      const response = await fetch(apiV1(`/submissions/${uuid}`), {
         method: "DELETE",
         headers: authHeaders,
       })

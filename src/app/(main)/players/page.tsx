@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { apiV1 } from "@/lib/api"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -41,7 +42,7 @@ export default function PlayersPage() {
       setError(null)
 
       try {
-        const response = await fetch(`/api/players`, { cache: "no-store" })
+        const response = await fetch(apiV1("/players"), { cache: "no-store" })
 
         if (!response.ok) {
           throw new Error("Failed to load players")

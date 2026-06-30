@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { apiV1 } from "@/lib/api"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
@@ -188,7 +189,7 @@ function SubmissionsPage() {
         }
 
         const submissionsResponse = await fetch(
-          `/api/submissions?${params.toString()}`,
+          `${apiV1("/submissions")}?${params.toString()}`,
           { cache: "no-store" }
         )
 
@@ -223,8 +224,8 @@ function SubmissionsPage() {
     const fetchMeta = async () => {
       try {
         const [wrsResponse, authResponse] = await Promise.all([
-          fetch(`/api/wrs`, { cache: "force-cache" }),
-          fetch(`/api/auth/me`),
+          fetch(apiV1("/records/world"), { cache: "force-cache" }),
+          fetch(apiV1("/auth/me")),
         ])
 
         if (wrsResponse.ok) {
@@ -375,7 +376,7 @@ function SubmissionsPage() {
 
       setUploadProgress(0)
       setUploadStatus("Starting upload...")
-      request.open("POST", "/api/submissions")
+      request.open("POST", apiV1("/submissions"))
       request.send(formData)
     }).catch((err) => {
       console.error("Upload error:", err)
@@ -503,7 +504,7 @@ function SubmissionsPage() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction asChild>
                   <a
-                    href="/api/auth/discord/start"
+                    href={apiV1("/auth/discord/start")}
                     className="inline-flex w-full items-center justify-center"
                   >
                     Login with Discord

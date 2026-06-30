@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
+import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { trials as trialNames } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
@@ -69,17 +70,17 @@ export default function PlayerProfilePage() {
       setError(null)
 
       try {
-        const [playerResponse, pbsResponse, wrResponse] = await Promise.all([
-          fetch(`/api/players/${encodeURIComponent(uuid)}`, { cache: "force-cache" }),
-          fetch(`/api/pbs/player/${encodeURIComponent(uuid)}`, { cache: "no-store" }),
-          fetch(`/api/wrs`, { cache: "force-cache" }),
+        const [playerResponse, wrResponse] = await Promise.all([
+          fetch(`${apiV1(`/players/${encodeURIComponent(uuid)}`)}?include=pbs`, { cache: "force-cache" }),
+          fetch(apiV1("/records/world"), { cache: "force-cache" }),
         ])
 
         const playerJson = (await playerResponse.json()) as {
           player?: PlayerInfo | null
           error?: string
         }
-        const pbsJson = (await pbsResponse.json()) as {
+        const pbsJson = playerJson as {
+          pbs?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }>
           results?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }>
           error?: string
         }
@@ -92,10 +93,6 @@ export default function PlayerProfilePage() {
           throw new Error(playerJson.error || "Unable to load player")
         }
 
-        if (!pbsResponse.ok) {
-          throw new Error(pbsJson.error || "Unable to load personal bests")
-        }
-
         if (!wrResponse.ok) {
           throw new Error(wrJson.error || "Unable to load world records")
         }
@@ -105,7 +102,9 @@ export default function PlayerProfilePage() {
 
         // Convert PB data to the format expected by the rest of the code
         const pbTimes: Record<string, { time: string; submissionUuid: string; date: string }> = {}
-        for (const pb of pbsJson.results || []) {
+        const pbs = pbsJson.pbs || pbsJson.results || []
+
+        for (const pb of pbs) {
           const trial = pb.trial_name.toUpperCase()
           pbTimes[trial] = {
             time: Number(pb.time).toFixed(3),
