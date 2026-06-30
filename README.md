@@ -1,41 +1,6 @@
-# wasans API
-
-This repository now runs as an API-first backend with a consolidated, production-oriented route surface.
-
-## Canonical API surface
-
-All new clients should use `/v1`:
-
-- `GET /v1/health`
-- `GET /v1/auth/me`
-- `GET /v1/auth/discord/start`
-- `GET /v1/auth/discord/callback`
-- `GET /v1/players?page=&limit=&search=`
-- `GET /v1/players/:uuid?include=pbs,recent_submissions&submissions_limit=`
-- `GET /v1/submissions?page=&limit=&state=&player_uuid=&search=`
-- `POST /v1/submissions`
-- `GET /v1/submissions/:uuid`
-- `PATCH /v1/submissions/:uuid`
-- `DELETE /v1/submissions/:uuid`
-- `GET /v1/leaderboards/overall?page=&limit=`
-- `GET /v1/leaderboards/trials/:trial?page=&limit=`
-- `GET /v1/records/world`
-- `GET /v1/records/world/:trial`
-- `GET /v1/admin/audit-logs`
-- `POST /v1/admin/maintenance/deduplicate`
-
-## Removed routes
-
-The legacy non-v1 route surface has been removed.
-
-Previously available split routes:
-
-- `/api/pbs/player/:uuid`
-- `/api/submissions/player/:uuid`
-- `/bot/:uuid`
-
-Use consolidated routes instead:
-
-- `/v1/players/:uuid?include=pbs`
-- `/v1/submissions?player_uuid=:uuid`
-- `/v1/submissions/:uuid` with bot API auth headers
+hi i wasans i'm trying to explain my sin and its explanation so far i didn't get a boost i got a boost i admit this and i went to master using route but how is the route? I think making a route is also a skill.
+The reason route is a skill is that it takes effort and skill to envision a gap and to do it.
+Also, please shut up the guys who gave me ranked. Why do you call me router when you can't even win?
+And not all Koreans received a boost. chr and headrog are not rank trading, but data loss while they are ranked.
+Lastly, because you disabled alt acc, people who got perm ban use alt acc because they want to play the game. They use alt acc because you completely block the game.
+Security a little bit too easy to get in this discord server
