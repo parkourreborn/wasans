@@ -1,6 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { listTrialLeaderboard } from "@/lib/server/repositories/leaderboard-repository"
-import { jsonError, jsonResponse, parsePagination } from "@/lib/server/http"
+import { getRequestId, jsonError, jsonResponse, parsePagination } from "@/lib/server/http"
 import { trials } from "@/lib/trials"
 
 const cacheHeaders = {
@@ -8,16 +8,17 @@ const cacheHeaders = {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ trial: string }> }) {
+  const requestId = getRequestId(request)
   const { env } = await getCloudflareContext({ async: true })
   const { trial } = await params
 
   if (!env?.wasans) {
-    return jsonError("DB binding not available", 500)
+    return jsonError("DB binding not available", 500, { code: "internal_error", requestId })
   }
 
   const trialName = trial.trim()
   if (!trials.includes(trialName as (typeof trials)[number])) {
-    return jsonError("Invalid trial", 400)
+    return jsonError("Invalid trial", 400, { code: "validation_error", requestId })
   }
 
   const url = new URL(request.url)
@@ -30,5 +31,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ tria
     page,
     limit,
     total: leaderboard.total,
-  }, 200, cacheHeaders)
+  }, 200, { headers: cacheHeaders, requestId })
 }

@@ -1,18 +1,34 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { canModerate, getAuthUser } from "@/lib/server/auth"
 import { insertAuditLog } from "@/lib/server/audit"
-import { jsonError, jsonResponse } from "@/lib/server/http"
+import { getRequestId, jsonError, jsonResponse } from "@/lib/server/http"
+import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 
 export async function POST(request: Request) {
+  const requestId = getRequestId(request)
   const { env } = await getCloudflareContext({ async: true })
 
   if (!env?.wasans) {
-    return jsonError("DB binding not available", 500)
+    return jsonError("DB binding not available", 500, { code: "internal_error", requestId })
   }
 
   const user = await getAuthUser(request, env.wasans)
   if (!user || !canModerate(user)) {
-    return jsonError("Moderator permission required", 403)
+    return jsonError("Moderator permission required", 403, { code: "forbidden", requestId })
+  }
+
+  const rate = await enforceRateLimit(env.wasans, getRateLimitKey(request, "v1:admin:maintenance:deduplicate", user.uuid), {
+    limit: 10,
+    windowSeconds: 60,
+  })
+
+  if (!rate.allowed) {
+    return jsonError("Rate limit exceeded", 429, {
+      code: "rate_limited",
+      requestId,
+      details: { retry_after: rate.retryAfter },
+      headers: { "retry-after": String(rate.retryAfter) },
+    })
   }
 
   const duplicates = await env.wasans.prepare(
@@ -30,7 +46,7 @@ export async function POST(request: Request) {
 
   const duplicateUuids = (duplicates.results || []).map((row) => row.uuid)
   if (duplicateUuids.length === 0) {
-    return jsonResponse({ deletedCount: 0, deletedSubmissions: [] })
+    return jsonResponse({ deletedCount: 0, deletedSubmissions: [] }, 200, { requestId })
   }
 
   const session = env.wasans.withSession("first-primary")
@@ -54,5 +70,5 @@ export async function POST(request: Request) {
   return jsonResponse({
     deletedCount: duplicateUuids.length,
     deletedSubmissions: duplicateUuids,
-  })
+  }, 200, { requestId })
 }

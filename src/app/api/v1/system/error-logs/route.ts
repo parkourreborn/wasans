@@ -1,7 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { getAuthUser } from "@/lib/server/auth"
 import { insertSiteErrorLog } from "@/lib/server/audit"
-import { jsonError, jsonResponse } from "@/lib/server/http"
+import { getRequestId, jsonError, jsonResponse } from "@/lib/server/http"
 
 function textValue(value: unknown, maxLength: number) {
   if (typeof value !== "string") {
@@ -18,10 +18,11 @@ function objectValue(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestId(request)
   const { env } = await getCloudflareContext({ async: true })
 
   if (!env?.wasans) {
-    return jsonError("DB binding not available", 500)
+    return jsonError("DB binding not available", 500, { code: "internal_error", requestId })
   }
 
   let body: Record<string, unknown>
@@ -58,5 +59,5 @@ export async function POST(request: Request) {
     console.error("Failed to store client error log:", error)
   }
 
-  return jsonResponse({ ok: true })
+  return jsonResponse({ ok: true }, 200, { requestId })
 }
