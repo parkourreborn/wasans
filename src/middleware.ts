@@ -29,7 +29,7 @@ function applyCorsHeaders(response: NextResponse, origin: string) {
   response.headers.set("Vary", "Origin")
 }
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const origin = request.headers.get("origin")
   const isPreflight = request.method === "OPTIONS"
 
