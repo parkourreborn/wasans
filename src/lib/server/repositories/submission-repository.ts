@@ -21,6 +21,7 @@ export type PlayerSubmissionContext = {
   uuid: string
   player_id: string
   player_name: string
+  score: number | string | null
 }
 
 export async function listSubmissions(
@@ -75,7 +76,7 @@ export async function listSubmissions(
 }
 
 export async function findPlayerByUuid(db: D1Database, playerUuid: string) {
-  return db.prepare(`SELECT uuid, player_id, player_name FROM players WHERE uuid = ?`)
+  return db.prepare(`SELECT uuid, player_id, player_name, score FROM players WHERE uuid = ?`)
     .bind(playerUuid)
     .first<PlayerSubmissionContext>()
 }
