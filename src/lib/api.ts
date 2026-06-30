@@ -4,15 +4,8 @@ declare global {
   }
 }
 
-function trimTrailingSlashes(value: string) {
-  return value.replace(/\/+$/, "")
-}
-
 export function getApiBaseUrl() {
-  const runtimeBase =
-    typeof window !== "undefined" ? window.__WASANS_API_BASE_URL__ : undefined
-  const configuredBase = runtimeBase ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? ""
-  return trimTrailingSlashes(configuredBase.trim())
+  return "https://only-api-wasans.tullycockerham.workers.dev"
 }
 
 export function apiV1(path: string) {

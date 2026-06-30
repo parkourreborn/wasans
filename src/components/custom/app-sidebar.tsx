@@ -295,6 +295,7 @@ export function AppSidebar() {
                 <a
                     href={apiV1("/auth/discord/start")}
                     className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
+                    target="_blank"
                 >
                     <LogInIcon className="size-4" />
                     <span>Login with Discord</span>
