@@ -143,3 +143,11 @@ CREATE TABLE audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action_created_at ON audit_logs(action, created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_submissions_player_state_trial_date ON submissions(player_uuid, state, trial_name, date);
+CREATE INDEX IF NOT EXISTS idx_submissions_state_trial_time_date ON submissions(state, trial_name, time, date);
+CREATE INDEX IF NOT EXISTS idx_submissions_date ON submissions(date);
+CREATE INDEX IF NOT EXISTS idx_submissions_trial_name ON submissions(trial_name);
+CREATE INDEX IF NOT EXISTS idx_pbs_player_trial ON pbs(player_uuid, trial_name);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_token_expires ON auth_sessions(token, expires_at);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_player_uuid ON auth_sessions(player_uuid);
+CREATE INDEX IF NOT EXISTS idx_oauth_accounts_provider_player ON oauth_accounts(provider, provider_account_id, player_uuid);
