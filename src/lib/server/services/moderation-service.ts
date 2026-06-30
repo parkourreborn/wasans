@@ -74,7 +74,13 @@ function getBotApiKeyFromRequest(request: Request) {
 
 function isBotApiRequest(request: Request, env: CloudflareEnv) {
   const providedKey = getBotApiKeyFromRequest(request)
-  const expectedKey = (env as CloudflareEnv & { botApiKey?: string }).botApiKey || process.env.botApiKey
+  const expectedKey = String(
+    (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).botApiKey
+    || (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).BOT_API_KEY
+    || process.env.botApiKey
+    || process.env.BOT_API_KEY
+    || ""
+  ).trim()
 
   return Boolean(providedKey && expectedKey && providedKey === expectedKey)
 }
@@ -389,9 +395,10 @@ export async function patchSubmission(
         }).catch(() => null)
       }
 
-      const shouldCreateThread = !hasExistingThread &&
-        ((submissionIsWr && previousWrRow?.submission_uuid !== uuid) ||
-        (state === "approved" && state !== previousState && Number(updatedSubmission.player_score) > 0.3))
+      const shouldCreateThread = !hasExistingThread && (
+        (submissionIsWr && previousWrRow?.submission_uuid !== uuid)
+        || (newState === "approved" && previousState !== "approved" && Number(updatedSubmission.player_score) > 0.3)
+      )
 
       if (!shouldCreateThread || !wrRow) {
         return
