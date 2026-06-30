@@ -5,6 +5,8 @@ DROP TABLE IF EXISTS oauth_accounts;
 DROP TABLE IF EXISTS auth_sessions;
 DROP TABLE IF EXISTS players;
 DROP TABLE IF EXISTS trials;
+DROP TABLE IF EXISTS api_idempotency_keys;
+DROP TABLE IF EXISTS api_rate_limits;
 
 -- Players
 CREATE TABLE players (
@@ -141,5 +143,34 @@ CREATE TABLE audit_logs (
   FOREIGN KEY (actor_uuid) REFERENCES players(uuid)
 );
 
+CREATE TABLE api_idempotency_keys (
+  scope TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  actor_uuid TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  response_json TEXT NOT NULL,
+  status_code INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  PRIMARY KEY (scope, idempotency_key, actor_uuid)
+);
+
+CREATE TABLE api_rate_limits (
+  bucket_key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  window_start INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action_created_at ON audit_logs(action, created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_submissions_player_state_trial_date ON submissions(player_uuid, state, trial_name, date);
+CREATE INDEX IF NOT EXISTS idx_submissions_state_trial_time_date ON submissions(state, trial_name, time, date);
+CREATE INDEX IF NOT EXISTS idx_submissions_date ON submissions(date);
+CREATE INDEX IF NOT EXISTS idx_submissions_trial_name ON submissions(trial_name);
+CREATE INDEX IF NOT EXISTS idx_pbs_player_trial ON pbs(player_uuid, trial_name);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_token_expires ON auth_sessions(token, expires_at);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_player_uuid ON auth_sessions(player_uuid);
+CREATE INDEX IF NOT EXISTS idx_oauth_accounts_provider_player ON oauth_accounts(provider, provider_account_id, player_uuid);
+CREATE INDEX IF NOT EXISTS idx_api_idempotency_expires ON api_idempotency_keys(expires_at);
+CREATE INDEX IF NOT EXISTS idx_api_rate_limits_window_start ON api_rate_limits(window_start);

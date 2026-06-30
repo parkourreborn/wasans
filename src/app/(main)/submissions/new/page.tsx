@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { apiV1 } from "@/lib/api"
 import { TrialName, trials } from "@/lib/trials"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
@@ -209,7 +210,7 @@ async function getWorldRecords() {
     return cachedWorldRecords
   }
 
-  worldRecordsRequest ??= fetch("/api/wrs", { cache: "force-cache" })
+  worldRecordsRequest ??= fetch(apiV1("/records/world"), { cache: "force-cache" })
     .then(async (response) => {
       const json = (await response.json()) as ListResponse<WorldRecordValue>
 
@@ -315,7 +316,7 @@ function uploadSubmissions(
     }
 
     onProgress(0, "uploading", "Preparing upload")
-    request.open("POST", "/api/submissions")
+    request.open("POST", apiV1("/submissions"))
     request.send(formData)
   })
 }
@@ -337,7 +338,7 @@ export default function NewSubmissionPage() {
   useEffect(() => {
     const loadContext = async () => {
       try {
-        const authResponse = await fetch("/api/auth/me")
+        const authResponse = await fetch(apiV1("/auth/me"))
         const authJson = (await authResponse.json().catch(() => null)) as AuthResponse | null
         const activePlayerUuid = authJson?.user?.uuid || ""
 
@@ -349,7 +350,7 @@ export default function NewSubmissionPage() {
         setAuthUser(authJson?.user || null)
 
         const [pbResponse, wrValues] = await Promise.all([
-          fetch(`/api/submissions/player/${encodeURIComponent(activePlayerUuid)}`),
+          fetch(`${apiV1("/submissions")}?player_uuid=${encodeURIComponent(activePlayerUuid)}&state=approved&page=1&limit=100`),
           getWorldRecords(),
         ])
         const pbJson = (await pbResponse.json()) as ListResponse<SubmissionValue>
@@ -615,7 +616,7 @@ export default function NewSubmissionPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction asChild>
               <a
-                href="/api/auth/discord/start"
+                href={apiV1("/auth/discord/start")}
                 className="inline-flex w-full items-center justify-center"
               >
                 Sign in with Discord
