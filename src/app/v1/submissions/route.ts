@@ -1,6 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { getAuthUser } from "@/lib/server/auth"
-import { getRequestId, jsonError, jsonResponse, validationError } from "@/lib/server/http"
+import { getRequestId, jsonError, jsonResponse } from "@/lib/server/http"
 import { querySubmissions } from "@/lib/server/services/submission-query-service"
 import { createSubmissionsFromRequest } from "@/lib/server/services/submission-write-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
@@ -101,12 +101,11 @@ export async function POST(request: Request) {
     })
   }
 
-  const idempotencyKey = readIdempotencyKey(request) || readIdempotencyKeyFromFormData(formData)
-  if (!idempotencyKey) {
-    return validationError("Missing or invalid idempotency-key header", requestId)
-  }
-
   const rawSubmissions = String(formData.get("submissions") || "")
+  const providedIdempotencyKey = readIdempotencyKey(request) || readIdempotencyKeyFromFormData(formData)
+  const idempotencyKey = providedIdempotencyKey
+    || await buildRequestHash("submissions.create:auto-key", user.uuid, rawSubmissions)
+
   const requestHash = await buildRequestHash("submissions.create", user.uuid, rawSubmissions)
   const idempotentResult = await lookupIdempotentResponse(env.wasans, {
     scope: "submissions.create",
@@ -127,6 +126,7 @@ export async function POST(request: Request) {
       requestId,
       headers: {
         "idempotent-replayed": "true",
+        "x-idempotency-key-source": providedIdempotencyKey ? "client" : "server-fallback",
         "x-ratelimit-limit": String(writeRate.limit),
         "x-ratelimit-remaining": String(writeRate.remaining),
       },
@@ -151,6 +151,7 @@ export async function POST(request: Request) {
     return jsonResponse(payload, 201, {
       requestId,
       headers: {
+        "x-idempotency-key-source": providedIdempotencyKey ? "client" : "server-fallback",
         "x-ratelimit-limit": String(writeRate.limit),
         "x-ratelimit-remaining": String(writeRate.remaining),
       },

@@ -133,10 +133,27 @@ const THREAD_CHANNEL_ID = "1351374148881874944"
 const BOT_API_BASE = "https://bot.wasans.tully.sh"
 
 async function getBotApiKey(): Promise<string> {
-  const botApiKey = process.env.botApiKey
-  if (!botApiKey) {
-    throw new Error("botApiKey environment variable is not configured")
+  let botApiKey = ""
+
+  try {
+    const { env } = await getCloudflareContext({ async: true })
+    botApiKey = String(
+      (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).botApiKey
+      || (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).BOT_API_KEY
+      || ""
+    ).trim()
+  } catch {
+    // Fall back to process.env for local/runtime environments without Cloudflare context.
   }
+
+  if (!botApiKey) {
+    botApiKey = String(process.env.botApiKey || process.env.BOT_API_KEY || "").trim()
+  }
+
+  if (!botApiKey) {
+    throw new Error("botApiKey/BOT_API_KEY is not configured")
+  }
+
   return botApiKey
 }
 
