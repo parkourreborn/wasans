@@ -38,6 +38,12 @@ type PlayerInfo = {
   score: number
   date_joined: string
   rank: number
+  pbs?: Array<{
+    trial_name: string
+    time: number
+    submission_uuid: string
+    date: string
+  }>
 }
 
 type WorldRecordValue = {
@@ -79,11 +85,6 @@ export default function PlayerProfilePage() {
           player?: PlayerInfo | null
           error?: string
         }
-        const pbsJson = playerJson as {
-          pbs?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }>
-          results?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }>
-          error?: string
-        }
         const wrJson = (await wrResponse.json()) as {
           results?: WorldRecordValue[]
           error?: string
@@ -102,7 +103,7 @@ export default function PlayerProfilePage() {
 
         // Convert PB data to the format expected by the rest of the code
         const pbTimes: Record<string, { time: string; submissionUuid: string; date: string }> = {}
-        const pbs = pbsJson.pbs || pbsJson.results || []
+        const pbs = playerJson.player?.pbs || []
 
         for (const pb of pbs) {
           const trial = pb.trial_name.toUpperCase()
