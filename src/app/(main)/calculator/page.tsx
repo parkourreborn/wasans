@@ -87,20 +87,54 @@ type SubmissionValue = {
   trial_name: string;
   time: number | string;
   state: string;
+  submission_uuid?: string;
+  date?: string;
 };
 
 type SubmissionsResponse = {
-  results?: SubmissionValue[];
+  player?: {
+    pbs?: SubmissionValue[];
+  } | null;
   error?: string;
 };
 
 type AuthResponse = {
-  user?: any | null;
+  user?: AuthUser | null;
+};
+
+type AuthUser = {
+  uuid?: string;
+  player_uuid?: string;
+  role?: string;
 };
 
 const trialKey = (trial: string) => trial.toUpperCase();
 const zeroTimes = Object.fromEntries(trialNames.map((trial) => [trialKey(trial), "0.000"]));
 const CALCULATOR_LOCAL_STORAGE_KEY = "calculator_saved_times";
+
+function getInitialTimes() {
+  if (typeof window === "undefined") {
+    return zeroTimes;
+  }
+
+  try {
+    const saved = window.localStorage.getItem(CALCULATOR_LOCAL_STORAGE_KEY);
+    if (!saved) {
+      return zeroTimes;
+    }
+
+    const parsed = JSON.parse(saved) as Record<string, string>;
+    return {
+      ...zeroTimes,
+      ...Object.fromEntries(
+        Object.entries(parsed).map(([key, value]) => [key, typeof value === "string" ? value : String(value)])
+      ),
+    };
+  } catch (err) {
+    console.error("Failed to restore saved calculator times", err);
+    return zeroTimes;
+  }
+}
 
 function getPlayerUuid() {
   if (typeof window === "undefined") {
@@ -116,11 +150,11 @@ export default function Home() {
   const [worldRecordError, setWorldRecordError] = React.useState<string | null>(null);
   const [loadingUserTimes, setLoadingUserTimes] = React.useState(true);
   const [userTimesError, setUserTimesError] = React.useState<string | null>(null);
-  const [times, setTimes] = React.useState<Record<string, string>>(zeroTimes);
+  const [times, setTimes] = React.useState<Record<string, string>>(getInitialTimes);
   const [pbs, setPbs] = React.useState<Record<string, string>>(zeroTimes);
   const [selectedPlayerUuid, setSelectedPlayerUuid] = React.useState("");
   const [players, setPlayers] = React.useState<Array<{ uuid: string; player_name: string; score: number }>>([]);
-  const [authUser, setAuthUser] = React.useState<any | null>(null);
+  const [authUser, setAuthUser] = React.useState<AuthUser | null>(null);
   const [authChecked, setAuthChecked] = React.useState(false);
   const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
 
@@ -201,29 +235,6 @@ export default function Home() {
     loadAuth();
   }, []);
 
-  React.useEffect(() => {
-    if (!authChecked || authUser) {
-      return;
-    }
-
-    try {
-      const saved = window.localStorage.getItem(CALCULATOR_LOCAL_STORAGE_KEY);
-      if (!saved) {
-        return;
-      }
-
-      const parsed = JSON.parse(saved) as Record<string, string>;
-      setTimes((current) => ({
-        ...current,
-        ...Object.fromEntries(
-          Object.entries(parsed).map(([key, value]) => [key, typeof value === "string" ? value : String(value)])
-        ),
-      }));
-    } catch (err) {
-      console.error("Failed to restore saved calculator times", err);
-    }
-  }, [authChecked, authUser]);
-
   const handleSaveTimes = () => {
     if (typeof window === "undefined") {
       return;
@@ -249,18 +260,19 @@ export default function Home() {
           `${apiV1(`/players/${encodeURIComponent(playerUuid)}`)}?include=pbs`,
           { cache: "no-store" }
         )
-        const json = (await response.json()) as {
-          pbs?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }>
-          results?: Array<{ trial_name: string; time: number; submission_uuid: string; date: string }>
-        }
+        const json = (await response.json()) as SubmissionsResponse
 
         if (!response.ok) {
           throw new Error("Unable to load personal bests")
         }
 
+        if (!json.player) {
+          throw new Error("Player not found")
+        }
+
         const bestTimes: Record<string, number> = {}
 
-        const pbRows = json.pbs || json.results || []
+        const pbRows = json.player.pbs || []
 
         for (const pb of pbRows) {
           const trial = trialKey(pb.trial_name)
