@@ -24,11 +24,11 @@ All new clients should use `/api/v1`:
 - `GET /api/v1/admin/audit-logs`
 - `POST /api/v1/admin/maintenance/deduplicate`
 
-## Legacy endpoints
+## Removed routes
 
-Legacy routes under `/api/*` remain available for compatibility, but are internally delegated to the v1 handlers where practical.
+The legacy non-v1 route surface has been removed.
 
-Removed split routes:
+Previously available split routes:
 
 - `/api/pbs/player/:uuid`
 - `/api/submissions/player/:uuid`
