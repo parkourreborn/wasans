@@ -30,7 +30,7 @@ const faq = [
   ],
   [
     "How do I invite people?",
-    "Use the Discord invite shared by staff. The exported server post included the active invite https://discord.gg/9pnRYDU6wg.",
+    "Use the Discord invite shared by staff. The server's rules post includes the active invite https://discord.gg/9pnRYDU6wg.",
   ],
 ]
 
