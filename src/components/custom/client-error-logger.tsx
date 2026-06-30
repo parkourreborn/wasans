@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { apiV1 } from "@/lib/api"
 
 type ClientErrorPayload = {
   source?: "client" | "client_console"
@@ -71,7 +72,7 @@ export function reportClientError(payload: ClientErrorPayload) {
     href: payload.href || window.location.href,
   }
 
-  return fetch("/api/error-logs", {
+  return fetch(apiV1("/admin/audit-logs"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),

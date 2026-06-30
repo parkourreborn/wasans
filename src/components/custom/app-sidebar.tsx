@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
+import { apiV1 } from "@/lib/api"
 import {
     ArrowRightLeftIcon,
   BookIcon,
@@ -65,7 +66,7 @@ export function AppSidebar() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const response = await fetch("/api/auth/me")
+        const response = await fetch(apiV1("/auth/me"))
         const json = (await response.json()) as AuthResponse
 
         if (response.ok) {
@@ -100,7 +101,7 @@ export function AppSidebar() {
 
     const loadAuditSummary = async () => {
       try {
-        const response = await fetch("/api/audit-logs?limit=1&kind=errors", { cache: "no-store" })
+        const response = await fetch(`${apiV1("/admin/audit-logs")}?limit=1&kind=errors`, { cache: "no-store" })
         const json = (await response.json()) as AuditSummaryResponse
 
         if (response.ok) {
@@ -292,8 +293,9 @@ export function AppSidebar() {
             )}
             {!user && (
                 <a
-                    href="/api/auth/discord/start"
+                    href={apiV1("/auth/discord/start")}
                     className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
+                    target="_blank"
                 >
                     <LogInIcon className="size-4" />
                     <span>Login with Discord</span>

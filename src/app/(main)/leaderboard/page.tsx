@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { apiV1 } from "@/lib/api"
 import { trials as trialNames } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
 import { Card, CardContent } from "@/components/ui/card"
@@ -52,8 +53,11 @@ export default function LeaderboardPage() {
       setError(null)
 
       try {
-        const query = mode === "trial" && trialName ? `?trialName=${encodeURIComponent(trialName)}` : ""
-        const response = await fetch(`/api/leaderboard${query}`, { cache: "no-store" })
+        const endpoint =
+          mode === "trial" && trialName
+            ? apiV1(`/leaderboards/trials/${encodeURIComponent(trialName)}`)
+            : apiV1("/leaderboards/overall")
+        const response = await fetch(`${endpoint}?page=1&limit=500`, { cache: "no-store" })
         const json = (await response.json()) as {
           results?: (OverallRow | TrialRow)[]
           error?: string
