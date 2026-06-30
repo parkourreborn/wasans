@@ -1,28 +1,6 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare"
+import { GET as v1PlayersGet } from "@/app/api/v1/players/route"
+import { withDeprecationHeaders } from "@/lib/server/deprecation"
 
-const cacheHeaders = {
-  "cache-control": "max-age=300, stale-while-revalidate=600",
-}
-
-export async function GET() {
-  const { env } = await getCloudflareContext({ async: true })
-
-  if (!env?.wasans) {
-    return new Response(JSON.stringify({ error: "DB binding not available" }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    })
-  }
-
-  const { results } = await env.wasans.prepare(
-    `SELECT * FROM players ORDER BY score DESC, player_name ASC`
-  ).all()
-
-  return new Response(JSON.stringify({ results }), {
-    status: 200,
-    headers: {
-      ...cacheHeaders,
-      "content-type": "application/json",
-    },
-  })
+export async function GET(request: Request) {
+  return withDeprecationHeaders(await v1PlayersGet(request))
 }

@@ -1,15 +1,6 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare"
-import { getAuthUser } from "@/lib/server/auth"
+import { GET as v1Get } from "@/app/api/v1/auth/me/route"
+import { withDeprecationHeaders } from "@/lib/server/deprecation"
 
 export async function GET(request: Request) {
-  const { env } = await getCloudflareContext({ async: true })
-
-  if (!env?.wasans) {
-    return Response.json({ error: "DB binding not available" }, { status: 500 })
-  }
-
-  const user = await getAuthUser(request, env.wasans)
-
-  return Response.json({ user })
+  return withDeprecationHeaders(await v1Get(request))
 }
-

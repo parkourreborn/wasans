@@ -1,6 +1,71 @@
-hi i wasans i'm trying to explain my sin and its explanation so far i didn't get a boost i got a boost i admit this and i went to master using route but how is the route? I think making a route is also a skill.
-The reason route is a skill is that it takes effort and skill to envision a gap and to do it.
-Also, please shut up the guys who gave me ranked. Why do you call me router when you can't even win?
-And not all Koreans received a boost. chr and headrog are not rank trading, but data loss while they are ranked.
-Lastly, because you disabled alt acc, people who got perm ban use alt acc because they want to play the game. They use alt acc because you completely block the game.
-Security a little bit too easy to get in this discord server
+# wasans API
+
+This repository now runs as an API-first backend with a consolidated, production-oriented route surface.
+
+## Canonical API surface
+
+All new clients should use `/api/v1`:
+
+- `GET /api/v1/health`
+- `GET /api/v1/auth/me`
+- `GET /api/v1/auth/discord/start`
+- `GET /api/v1/auth/discord/callback`
+- `GET /api/v1/players?page=&limit=&search=`
+- `GET /api/v1/players/:uuid?include=pbs,recent_submissions&submissions_limit=`
+- `GET /api/v1/submissions?page=&limit=&state=&player_uuid=&search=`
+- `POST /api/v1/submissions`
+- `GET /api/v1/submissions/:uuid`
+- `PATCH /api/v1/submissions/:uuid`
+- `DELETE /api/v1/submissions/:uuid`
+- `GET /api/v1/leaderboards/overall?page=&limit=`
+- `GET /api/v1/leaderboards/trials/:trial?page=&limit=`
+- `GET /api/v1/records/world`
+- `GET /api/v1/records/world/:trial`
+- `GET /api/v1/admin/audit-logs`
+- `POST /api/v1/admin/maintenance/deduplicate`
+
+## Legacy endpoints
+
+Legacy routes under `/api/*` remain available for compatibility, but are internally delegated to the v1 handlers where practical.
+
+Removed split routes:
+
+- `/api/pbs/player/:uuid`
+- `/api/submissions/player/:uuid`
+- `/bot/:uuid`
+
+Use consolidated routes instead:
+
+- `/api/v1/players/:uuid?include=pbs`
+- `/api/v1/submissions?player_uuid=:uuid`
+- `/api/v1/submissions/:uuid` with bot API auth headers
+
+## Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run dev server:
+
+```bash
+npm run dev
+```
+
+Build:
+
+```bash
+npm run build
+```
+
+Deploy:
+
+```bash
+npm run deploy
+```
+
+## Database notes
+
+`schema.sql` includes additional indexes for production read/write patterns on `submissions`, `pbs`, `auth_sessions`, and `oauth_accounts`.
