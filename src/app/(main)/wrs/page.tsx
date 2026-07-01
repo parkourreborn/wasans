@@ -13,6 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 type Submission = {
   submission_uuid: string
   player_uuid: string
+  player_id?: string | null
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   trial_name: string
   player_name: string
   player_score: number
@@ -33,6 +36,7 @@ type CachedWrs = {
 }
 
 const WR_CACHE_KEY = "wasans_wrs_cache"
+const submissionUuidListKey = "submission_uuids"
 
 const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
 
@@ -100,9 +104,9 @@ function loadCachedSubmissions() {
 
 export default function SubmissionsPage() {
   const router = useRouter()
-  const [submissions, setSubmissions] = useState<Submission[]>(() => loadCachedSubmissions() || [])
+  const [submissions, setSubmissions] = useState<Submission[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [loading, setLoading] = useState(() => !loadCachedSubmissions()?.length)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const orderedSubmissions = useMemo(() => {
@@ -122,7 +126,23 @@ export default function SubmissionsPage() {
   }, [searchQuery, orderedSubmissions])
 
   useEffect(() => {
+    if (typeof window === "undefined" || loading) {
+      return
+    }
+
+    window.localStorage.setItem(
+      submissionUuidListKey,
+      JSON.stringify(filteredSubmissions.map((submission) => submission.submission_uuid))
+    )
+  }, [filteredSubmissions, loading])
+
+  useEffect(() => {
     const cachedResults = loadCachedSubmissions()
+
+    if (cachedResults?.length) {
+      setSubmissions(cachedResults)
+      setLoading(false)
+    }
 
     const fetchSubmissions = async () => {
       try {
@@ -150,7 +170,9 @@ export default function SubmissionsPage() {
         }
         console.error(err)
       } finally {
-        setLoading(false)
+        if (!cachedResults) {
+          setLoading(false)
+        }
       }
     }
 
@@ -241,6 +263,9 @@ export default function SubmissionsPage() {
               playerUuid={submission.player_uuid}
               playerName={submission.player_name}
               playerScore={submission.player_score}
+              playerId={submission.player_id}
+              playerDiscordAvatar={submission.discord_avatar}
+              playerDiscordDiscriminator={submission.discord_discriminator}
               dateText={formatDate(submission.date)}
               state="approved"
               isWr

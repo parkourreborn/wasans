@@ -264,14 +264,16 @@ export function AppSidebar() {
 
       <SidebarFooter className="gap-2">
         {user ? (
-          <div className="flex min-w-0 items-center gap-3 rounded-lg border border-sidebar-border/70 p-2.5">
-            <PlayerAvatar
-              playerName={user.player_name}
-              discordId={user.player_id}
-              discordAvatar={user.discord_avatar}
-              discordDiscriminator={user.discord_discriminator}
-            />
-            <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-3 rounded-lg border border-sidebar-border/70 p-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1.5">
+            <Link href={`/players/${encodeURIComponent(user.uuid)}`} aria-label={`Open ${user.player_name} profile`}>
+              <PlayerAvatar
+                playerName={user.player_name}
+                discordId={user.player_id}
+                discordAvatar={user.discord_avatar}
+                discordDiscriminator={user.discord_discriminator}
+              />
+            </Link>
+            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
               <Link
                 href={`/players/${encodeURIComponent(user.uuid)}`}
                 className="truncate text-sm font-medium text-primary underline underline-offset-2"

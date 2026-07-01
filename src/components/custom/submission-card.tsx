@@ -1,5 +1,6 @@
 import Link from "next/link"
 import Badges from "@/components/custom/badges"
+import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
@@ -11,6 +12,9 @@ type SubmissionCardProps = {
   playerUuid: string
   playerName: string
   playerScore: number
+  playerId?: string | null
+  playerDiscordAvatar?: string | null
+  playerDiscordDiscriminator?: string | null
   dateText: string
   state: string
   isWr?: boolean
@@ -28,6 +32,9 @@ export function SubmissionCard({
   playerUuid,
   playerName,
   playerScore,
+  playerId,
+  playerDiscordAvatar,
+  playerDiscordDiscriminator,
   dateText,
   state,
   isWr = false,
@@ -69,13 +76,28 @@ export function SubmissionCard({
               {scoreText && state !== "denied" ? (
                 <p className="text-sm font-semibold">Score {scoreText}</p>
               ) : null}
-              <Link
-                href={`/players/${playerUuid}`}
-                className="text-muted-foreground truncate underline underline-offset-4"
-                onClick={(event) => event.stopPropagation()}
-              >
-                {formatPlayerNameWithScore(playerName, playerScore)}
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/players/${playerUuid}`}
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={`Open ${playerName} profile`}
+                >
+                  <PlayerAvatar
+                    size="sm"
+                    playerName={playerName}
+                    discordId={playerId}
+                    discordAvatar={playerDiscordAvatar}
+                    discordDiscriminator={playerDiscordDiscriminator}
+                  />
+                </Link>
+                <Link
+                  href={`/players/${playerUuid}`}
+                  className="text-muted-foreground truncate underline underline-offset-4"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {formatPlayerNameWithScore(playerName, playerScore)}
+                </Link>
+              </div>
               <p className="text-sm text-muted-foreground">{dateText}</p>
             </div>
 
@@ -89,13 +111,21 @@ export function SubmissionCard({
             </div>
           </div>
         </CardContent>
-        <CardFooter>
-          <div className="w-full flex items-center justify-between">
-            <p className="text-xs text-muted-foreground max-w-full wrap-break-word text-center">
+        <CardFooter className="hidden md:block">
+          <div className="flex w-full items-start justify-between gap-4">
+            <p
+              className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+              title={`Moderator Note: ${note}`}
+            >
               Moderator Note: {note}
             </p>
             {moderatorUsername ? (
-              <p className="text-xs text-muted-foreground">Mod: {moderatorUsername}</p>
+              <p
+                className="max-w-48 shrink-0 truncate text-xs text-muted-foreground"
+                title={`Mod: ${moderatorUsername}`}
+              >
+                Mod: {moderatorUsername}
+              </p>
             ) : null}
           </div>
         </CardFooter>

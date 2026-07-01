@@ -153,7 +153,7 @@ export default function Home() {
   const params = useParams<{ uuid: string }>()
   const router = useRouter()
   const uuid = params.uuid
-  const [submissionUuids] = useState<string[]>(getSubmissionUuids)
+  const [submissionUuids, setSubmissionUuids] = useState<string[]>([])
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [submission, setSubmission] = useState<SubmissionValue | null>(null)
   const [loading, setLoading] = useState(true)
@@ -166,6 +166,10 @@ export default function Home() {
   const [editTimeError, setEditTimeError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [worldRecords, setWorldRecords] = useState<WorldRecordValue[]>([])
+
+  useEffect(() => {
+    setSubmissionUuids(getSubmissionUuids())
+  }, [uuid])
 
   useEffect(() => {
     const fetchSubmission = async () => {
@@ -474,10 +478,13 @@ export default function Home() {
   const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 1
   const canModerate = (authUser?.permission ?? 0) >= 1
   const currentSubmissionIndex = submissionUuids.findIndex((item) => item === uuid)
+  const canNavigate = currentSubmissionIndex >= 0 && submissionUuids.length > 1
   const previousSubmissionUuid =
-    currentSubmissionIndex > 0 ? submissionUuids[currentSubmissionIndex - 1] : null
+    canNavigate && currentSubmissionIndex > 0
+      ? submissionUuids[currentSubmissionIndex - 1]
+      : null
   const nextSubmissionUuid =
-    currentSubmissionIndex >= 0 && currentSubmissionIndex < submissionUuids.length - 1
+    canNavigate && currentSubmissionIndex < submissionUuids.length - 1
       ? submissionUuids[currentSubmissionIndex + 1]
       : null
 

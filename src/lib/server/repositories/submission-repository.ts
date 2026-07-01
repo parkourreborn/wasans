@@ -15,6 +15,9 @@ export type SubmissionRow = {
 
 export type SubmissionWithScoreRow = SubmissionRow & {
   player_score: number | string
+  player_id: string | null
+  discord_avatar: string | null
+  discord_discriminator: string | null
 }
 
 export type PlayerSubmissionContext = {
@@ -59,7 +62,7 @@ export async function listSubmissions(
     .first<{ count: number }>()
 
   const rows = await db.prepare(
-    `SELECT submissions.*, players.score as player_score
+    `SELECT submissions.*, players.score as player_score, players.player_id, players.discord_avatar, players.discord_discriminator
      FROM submissions
      LEFT JOIN players ON players.uuid = submissions.player_uuid
      ${whereClause}

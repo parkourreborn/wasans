@@ -30,6 +30,9 @@ import { PageShell, SubmissionList } from "@/components/custom/page-shell"
 type Submission = {
   uuid: string
   player_uuid: string
+  player_id?: string | null
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   trial_name: string
   player_name: string
   player_score: number
@@ -633,6 +636,9 @@ function SubmissionsPage() {
                   playerUuid={submission.player_uuid}
                   playerName={submission.player_name}
                   playerScore={submission.player_score}
+                  playerId={submission.player_id}
+                  playerDiscordAvatar={submission.discord_avatar}
+                  playerDiscordDiscriminator={submission.discord_discriminator}
                   dateText={formatDate(submission.date)}
                   state={submission.state}
                   isWr={wrSubmissionIds.has(submission.uuid)}
