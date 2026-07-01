@@ -7,10 +7,9 @@ import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { TrialName, trials } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
+import { SubmissionCard } from "@/components/custom/submission-card"
 import { ErrorState, PageShell, SubmissionList } from "@/components/custom/page-shell"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
-import Badges from "@/components/custom/badges"
-import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -63,10 +62,15 @@ type WorldRecordValue = {
 
 type SubmissionValue = {
   uuid: string
+  player_id?: string | null
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   trial_name: string
   time: number | string
   state: "approved" | "pending" | "denied"
   date: string
+  moderator_note?: string | null
+  moderator_username?: string | null
 }
 
 type PlayerDetailResponse = {
@@ -90,6 +94,7 @@ type SubmissionsResponse = {
 type ViewMode = "submissions" | "pbs"
 
 const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
+const submissionUuidListKey = "submission_uuids"
 
 function compareByTrialOrder(aTrialName: string, bTrialName: string) {
   const aOrder = trialOrderByName.get(String(aTrialName).toUpperCase())
@@ -278,6 +283,18 @@ export default function PlayerProfilePage() {
     })
   }, [orderedSubmissionRows, search])
 
+  React.useEffect(() => {
+    if (typeof window === "undefined" || loading || !player) {
+      return
+    }
+
+    const visibleSubmissionUuids = mode === "submissions"
+      ? filteredSubmissions.map((row) => row.uuid)
+      : filteredPbs.map((row) => row.submission_uuid)
+
+    window.localStorage.setItem(submissionUuidListKey, JSON.stringify(visibleSubmissionUuids))
+  }, [filteredPbs, filteredSubmissions, loading, mode, player])
+
   if (loading) {
     return (
       <PageShell>
@@ -423,53 +440,25 @@ export default function PlayerProfilePage() {
         {mode === "submissions" ? (
           filteredSubmissions.length > 0 ? (
             filteredSubmissions.map((row) => (
-              <div
+              <SubmissionCard
                 key={row.uuid}
-                className="submission-grid-item cursor-pointer"
-                role="button"
-                tabIndex={0}
-                onClick={() => router.push(`/submissions/${row.uuid}`)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault()
-                    router.push(`/submissions/${row.uuid}`)
-                  }
-                }}
-              >
-                <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
-                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                    <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-                      <ScoreVideoPreview submissionUuid={row.uuid} />
-                    </div>
-
-                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                      <div className="w-full flex items-center justify-between gap-2">
-                        <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                          {row.trial_name} {formatTime(row.time)}
-                        </h3>
-                      </div>
-
-                      <div className="w-full flex flex-col gap-1.5 text-base">
-                        {row.state !== "denied" ? (
-                          <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
-                        ) : null}
-                        <Link
-                          href={`/players/${encodeURIComponent(player.uuid)}`}
-                          className="truncate text-muted-foreground underline underline-offset-4"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          {player.player_name}
-                        </Link>
-                        <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
-                      </div>
-
-                      <div className="flex items-end justify-between">
-                        <Badges badges={[row.state, wrSubmissionIds.has(row.uuid) ? "wr" : ""]} />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                submissionUuid={row.uuid}
+                trialName={row.trial_name}
+                timeText={formatTime(row.time)}
+                playerUuid={player.uuid}
+                playerName={player.player_name}
+                playerScore={player.score}
+                playerId={row.player_id ?? player.player_id}
+                playerDiscordAvatar={row.discord_avatar ?? player.discord_avatar}
+                playerDiscordDiscriminator={row.discord_discriminator ?? player.discord_discriminator}
+                dateText={formatDate(row.date)}
+                state={row.state}
+                isWr={wrSubmissionIds.has(row.uuid)}
+                scoreText={row.state !== "denied" ? row.score.toFixed(3) : undefined}
+                moderatorNote={row.moderator_note}
+                moderatorUsername={row.moderator_username}
+                onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
+              />
             ))
           ) : (
             <div className="rounded-2xl border border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground backdrop-blur-xl">
@@ -478,51 +467,23 @@ export default function PlayerProfilePage() {
           )
         ) : filteredPbs.length > 0 ? (
           filteredPbs.map((row) => (
-            <div
+            <SubmissionCard
               key={`${row.submission_uuid}-${row.trial_name}`}
-              className="submission-grid-item cursor-pointer"
-              role="button"
-              tabIndex={0}
-              onClick={() => router.push(`/submissions/${row.submission_uuid}`)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault()
-                  router.push(`/submissions/${row.submission_uuid}`)
-                }
-              }}
-            >
-              <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
-                <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                  <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-                    <ScoreVideoPreview submissionUuid={row.submission_uuid} />
-                  </div>
-
-                  <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                    <div className="w-full flex items-center justify-between gap-2">
-                      <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                        {row.trial_name} {formatTime(row.time)}
-                      </h3>
-                    </div>
-
-                    <div className="w-full flex flex-col gap-1.5 text-base">
-                      <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
-                      <Link
-                        href={`/players/${encodeURIComponent(player.uuid)}`}
-                        className="truncate text-muted-foreground underline underline-offset-4"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {player.player_name}
-                      </Link>
-                      <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
-                    </div>
-
-                    <div className="flex items-end justify-between">
-                      <Badges badges={["approved", wrSubmissionIds.has(row.submission_uuid) ? "wr" : ""]} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+              submissionUuid={row.submission_uuid}
+              trialName={row.trial_name}
+              timeText={formatTime(row.time)}
+              playerUuid={player.uuid}
+              playerName={player.player_name}
+              playerScore={player.score}
+              playerId={player.player_id}
+              playerDiscordAvatar={player.discord_avatar}
+              playerDiscordDiscriminator={player.discord_discriminator}
+              dateText={formatDate(row.date)}
+              state="approved"
+              isWr={wrSubmissionIds.has(row.submission_uuid)}
+              scoreText={row.score.toFixed(3)}
+              onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
+            />
           ))
         ) : (
           <div className="rounded-2xl border border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground backdrop-blur-xl">

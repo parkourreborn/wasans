@@ -372,6 +372,9 @@ export default function LogsPage() {
               const message = isError
                 ? details.message || details.name || "Site error"
                 : formatAction(log.action)
+              const pathText = details.path
+                ? `${details.method ? `${details.method} ` : ""}${String(details.path)}`
+                : null
 
               return (
                 <React.Fragment key={log.id}>
@@ -395,10 +398,10 @@ export default function LogsPage() {
                     </TableCell>
                     <TableCell className="capitalize">{sourceLabel(details.source as string | undefined)}</TableCell>
                     <TableCell className="min-w-64 max-w-xl">
-                      <div className="break-words font-medium">{String(message)}</div>
-                      {details.path && (
-                        <div className="break-words text-xs text-muted-foreground">
-                          {details.method ? `${details.method} ` : ""}{String(details.path)}
+                      <div className="truncate font-medium" title={String(message)}>{String(message)}</div>
+                      {pathText && (
+                        <div className="truncate text-xs text-muted-foreground" title={pathText}>
+                          {pathText}
                         </div>
                       )}
                     </TableCell>
@@ -412,7 +415,7 @@ export default function LogsPage() {
                     <TableRow>
                       <TableCell></TableCell>
                       <TableCell colSpan={6}>
-                        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs text-muted-foreground">
+                        <pre className="max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md bg-muted p-3 text-xs text-muted-foreground">
                           {formatDetails(log.details) || "No details"}
                         </pre>
                       </TableCell>
