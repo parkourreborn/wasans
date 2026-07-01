@@ -2,48 +2,43 @@
 
 import { usePathname, useRouter } from "next/navigation"
 import { AppSidebar } from "@/components/custom/app-sidebar"
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-
-const pageTitles: Record<string, string> = {
-  "/": "Home",
-  "/calculator": "Calculator",
-  "/compare": "Compare",
-  "/information": "Information",
-  "/logs": "Logs",
-  "/players": "Players",
-  "/rules": "Rules",
-  "/submissions": "Submissions",
-  "/wrs": "World Records",
-}
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { getRouteTheme } from "@/lib/route-theme"
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   const router = useRouter()
   const pathname = usePathname()
-  const currentTitle = pageTitles[pathname] || "Wasans"
+  const theme = getRouteTheme(pathname)
 
   return (
     <SidebarProvider>
       <AppSidebar />
-      <main className="min-h-svh min-w-0 flex-1 bg-transparent">
-        <div className="sticky top-0 z-40 border-b border-border/70 bg-background/95 md:hidden">
+      <main
+        className="relative min-h-svh min-w-0 flex-1 overflow-hidden bg-background"
+        style={{
+          ["--page-accent" as string]: theme.accent,
+          ["--page-accent-soft" as string]: theme.accentSoft,
+        }}
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-72"
+          style={{ background: theme.gradient }}
+        />
+        <div className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur md:hidden">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <SidebarTrigger className="p-2" />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">{currentTitle}</p>
-              </div>
-            </div>
+            <SidebarTrigger className="p-2" />
             <Button type="button" variant="outline" size="sm" onClick={() => router.back()}>
               Back
             </Button>
           </div>
         </div>
-        {children}
+        <div className="relative z-10">{children}</div>
       </main>
     </SidebarProvider>
   )

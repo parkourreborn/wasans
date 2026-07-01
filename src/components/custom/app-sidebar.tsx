@@ -1,5 +1,6 @@
 "use client"
 
+import type { CSSProperties, ComponentType, ReactNode } from "react"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -19,6 +20,7 @@ import {
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { apiV1 } from "@/lib/api"
+import { getRouteTheme, isRouteActive } from "@/lib/route-theme"
 import {
   ArrowRightLeftIcon,
   BookIcon,
@@ -76,6 +78,58 @@ const boardLinks = [
   { href: "/submissions", label: "Submissions", icon: TimerIcon },
   { href: "/players", label: "Leaderboard", icon: TrophyIcon },
 ]
+
+type SidebarLinkItem = {
+  href: string
+  label: string
+  icon: ComponentType<{ className?: string }>
+}
+
+function SidebarNavItem({
+  item,
+  pathname,
+  onClick,
+  leading,
+}: {
+  item: SidebarLinkItem
+  pathname: string
+  onClick?: () => void
+  leading?: ReactNode
+}) {
+  const Icon = item.icon
+  const theme = getRouteTheme(item.href)
+  const active = isRouteActive(pathname, item.href)
+
+  const content = (
+    <div className="relative flex min-w-0 items-center gap-2">
+      {leading ?? <Icon className="shrink-0" />}
+      <span className="truncate">{item.label}</span>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -bottom-1 h-0.5 origin-left scale-x-0 rounded-full bg-(--page-accent) transition-transform duration-200 ease-out group-hover/menu-button:scale-x-100 group-focus-visible/menu-button:scale-x-100 group-data-[active=true]/menu-button:scale-x-100"
+      />
+    </div>
+  )
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        isActive={active}
+        className="relative overflow-visible data-[active=true]:bg-[color-mix(in_oklab,var(--page-accent)_14%,transparent)] data-[active=true]:font-semibold data-[active=true]:text-(--page-accent)"
+        style={{ ["--page-accent" as string]: theme.accent } as CSSProperties}
+      >
+        {onClick ? (
+          <button type="button" className="flex w-full items-center gap-2 text-left cursor-pointer" onClick={onClick}>
+            {content}
+          </button>
+        ) : (
+          <Link href={item.href}>{content}</Link>
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+}
 
 export function AppSidebar() {
   const router = useRouter()
@@ -155,106 +209,53 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            {primaryLinks.map((item) => {
-              const Icon = item.icon
-              return (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild>
-                    <Link href={item.href}>
-                      <div className="flex items-center gap-2">
-                        <Icon />
-                        <span>{item.label}</span>
-                      </div>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )
-            })}
+            {primaryLinks.map((item) => (
+              <SidebarNavItem key={item.href} item={item} pathname={pathname} />
+            ))}
 
             <SidebarSeparator />
 
-            {toolLinks.map((item) => {
-              const Icon = item.icon
+            {toolLinks.map((item) => (
+              <SidebarNavItem
+                key={item.href}
+                item={item}
+                pathname={pathname}
+                onClick={() => {
+                  if (pathname === item.href) {
+                    window.history.replaceState(null, "", item.href)
+                    router.replace(item.href)
+                    router.refresh()
+                    return
+                  }
 
-              if (item.href === "/calculator" || item.href === "/compare") {
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild>
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 text-left"
-                        onClick={() => {
-                          if (pathname === item.href) {
-                            // Reset query params when re-opening calculator/compare from sidebar.
-                            window.history.replaceState(null, "", item.href)
-                            router.replace(item.href)
-                            router.refresh()
-                            return
-                          }
-
-                          router.push(item.href)
-                        }}
-                      >
-                        <Icon />
-                        <span>{item.label}</span>
-                      </button>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              }
-
-              return (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild>
-                    <Link href={item.href}>
-                      <div className="flex items-center gap-2">
-                        <Icon />
-                        <span>{item.label}</span>
-                      </div>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )
-            })}
+                  router.push(item.href)
+                }}
+              />
+            ))}
 
             <SidebarSeparator />
 
-            {boardLinks.map((item) => {
-              const Icon = item.icon
-              return (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild>
-                    <Link href={item.href}>
-                      <div className="flex items-center gap-2">
-                        <Icon />
-                        <span>{item.label}</span>
-                      </div>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )
-            })}
+            {boardLinks.map((item) => (
+              <SidebarNavItem key={item.href} item={item} pathname={pathname} />
+            ))}
 
             {(user?.permission ?? 0) >= 1 && (
               <>
                 <SidebarSeparator />
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/logs">
-                      <div className="flex w-full items-center gap-2">
-                        <div className="relative">
-                          <FileTextIcon />
-                          {hasNewErrors && (
-                            <span className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-destructive ring-2 ring-sidebar">
-                              <OctagonAlertIcon className="size-2 text-destructive-foreground" />
-                            </span>
-                          )}
-                        </div>
-                        <span>Logs</span>
-                      </div>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <SidebarNavItem
+                  item={{ href: "/logs", label: "Logs", icon: FileTextIcon }}
+                  pathname={pathname}
+                  leading={
+                    <div className="relative">
+                      <FileTextIcon className="shrink-0" />
+                      {hasNewErrors && (
+                        <span className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-destructive ring-2 ring-sidebar">
+                          <OctagonAlertIcon className="size-2 text-destructive-foreground" />
+                        </span>
+                      )}
+                    </div>
+                  }
+                />
               </>
             )}
           </SidebarMenu>
