@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Spinner } from "@/components/ui/spinner"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import {
   AlertDialog,
@@ -153,7 +153,7 @@ export default function Home() {
   const params = useParams<{ uuid: string }>()
   const router = useRouter()
   const uuid = params.uuid
-  const [submissionUuids] = useState<string[]>(getSubmissionUuids)
+  const [submissionUuids, setSubmissionUuids] = useState<string[]>([])
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [submission, setSubmission] = useState<SubmissionValue | null>(null)
   const [loading, setLoading] = useState(true)
@@ -166,6 +166,10 @@ export default function Home() {
   const [editTimeError, setEditTimeError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [worldRecords, setWorldRecords] = useState<WorldRecordValue[]>([])
+
+  useEffect(() => {
+    setSubmissionUuids(getSubmissionUuids())
+  }, [uuid])
 
   useEffect(() => {
     const fetchSubmission = async () => {
@@ -391,8 +395,43 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center p-4">
-        <Spinner className="size-8 text-muted-foreground" />
+      <div className="w-full min-h-screen p-4">
+        <Card className="w-full">
+          <CardHeader>
+            <div className="w-full flex flex-col gap-4">
+              <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)_2rem] items-start gap-3">
+                <Skeleton className="size-9 rounded-md" />
+
+                <div className="flex min-w-0 flex-col items-center gap-2 text-center">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <Skeleton className="h-8 w-56" />
+                    <Skeleton className="h-5 w-20" />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="hidden h-5 w-px sm:block" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="hidden h-5 w-px sm:block" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                </div>
+
+                <Skeleton className="size-9 rounded-md" />
+              </div>
+
+              <div className="flex flex-col justify-center gap-2 sm:flex-row">
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent>
+            <Skeleton className="h-[52vh] w-full rounded-md" />
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -439,10 +478,13 @@ export default function Home() {
   const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 1
   const canModerate = (authUser?.permission ?? 0) >= 1
   const currentSubmissionIndex = submissionUuids.findIndex((item) => item === uuid)
+  const canNavigate = currentSubmissionIndex >= 0 && submissionUuids.length > 1
   const previousSubmissionUuid =
-    currentSubmissionIndex > 0 ? submissionUuids[currentSubmissionIndex - 1] : null
+    canNavigate && currentSubmissionIndex > 0
+      ? submissionUuids[currentSubmissionIndex - 1]
+      : null
   const nextSubmissionUuid =
-    currentSubmissionIndex >= 0 && currentSubmissionIndex < submissionUuids.length - 1
+    canNavigate && currentSubmissionIndex < submissionUuids.length - 1
       ? submissionUuids[currentSubmissionIndex + 1]
       : null
 

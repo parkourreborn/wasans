@@ -282,13 +282,13 @@ export default function LogsPage() {
         </div>
       </div>
 
-      <div className="space-y-3 rounded-md border border-border p-4">
+      <div className="sticky top-14 z-30 space-y-3 rounded-md border border-border bg-background/85 p-4 backdrop-blur-xl md:top-0">
         <div className="flex items-center gap-2 text-sm font-medium">
           <FilterIcon className="size-4" />
           Diagnostics
         </div>
-        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_repeat(4,160px)]">
-          <div className="relative">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative w-full min-w-0 lg:flex-1">
             <SearchIcon className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground" />
             <Input
               value={query}
@@ -297,52 +297,54 @@ export default function LogsPage() {
               className="pl-8"
             />
           </div>
-          <Select value={kind} onValueChange={setKind}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All events</SelectItem>
-              <SelectItem value="errors">Errors only</SelectItem>
-              <SelectItem value="audit">Audit only</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={source} onValueChange={setSource}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All sources</SelectItem>
-              <SelectItem value="client">Client</SelectItem>
-              <SelectItem value="client_console">Client console</SelectItem>
-              <SelectItem value="server">Server</SelectItem>
-              <SelectItem value="server_console">Server console</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={action} onValueChange={setAction}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All actions</SelectItem>
-              {actions.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {formatAction(value)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Any time</SelectItem>
-              <SelectItem value="24h">Last 24h</SelectItem>
-              <SelectItem value="7d">Last 7d</SelectItem>
-              <SelectItem value="30d">Last 30d</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="grid gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-4 lg:shrink-0">
+            <Select value={kind} onValueChange={setKind}>
+              <SelectTrigger className="w-full lg:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All events</SelectItem>
+                <SelectItem value="errors">Errors only</SelectItem>
+                <SelectItem value="audit">Audit only</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={source} onValueChange={setSource}>
+              <SelectTrigger className="w-full lg:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sources</SelectItem>
+                <SelectItem value="client">Client</SelectItem>
+                <SelectItem value="client_console">Client console</SelectItem>
+                <SelectItem value="server">Server</SelectItem>
+                <SelectItem value="server_console">Server console</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={action} onValueChange={setAction}>
+              <SelectTrigger className="w-full lg:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All actions</SelectItem>
+                {actions.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {formatAction(value)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={timeRange} onValueChange={setTimeRange}>
+              <SelectTrigger className="w-full lg:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any time</SelectItem>
+                <SelectItem value="24h">Last 24h</SelectItem>
+                <SelectItem value="7d">Last 7d</SelectItem>
+                <SelectItem value="30d">Last 30d</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Showing {filteredLogs.length} of {total} matching rows. {visibleErrorCount} visible rows are errors.
@@ -370,6 +372,9 @@ export default function LogsPage() {
               const message = isError
                 ? details.message || details.name || "Site error"
                 : formatAction(log.action)
+              const pathText = details.path
+                ? `${details.method ? `${details.method} ` : ""}${String(details.path)}`
+                : null
 
               return (
                 <React.Fragment key={log.id}>
@@ -393,10 +398,10 @@ export default function LogsPage() {
                     </TableCell>
                     <TableCell className="capitalize">{sourceLabel(details.source as string | undefined)}</TableCell>
                     <TableCell className="min-w-64 max-w-xl">
-                      <div className="break-words font-medium">{String(message)}</div>
-                      {details.path && (
-                        <div className="break-words text-xs text-muted-foreground">
-                          {details.method ? `${details.method} ` : ""}{String(details.path)}
+                      <div className="truncate font-medium" title={String(message)}>{String(message)}</div>
+                      {pathText && (
+                        <div className="truncate text-xs text-muted-foreground" title={pathText}>
+                          {pathText}
                         </div>
                       )}
                     </TableCell>
@@ -410,7 +415,7 @@ export default function LogsPage() {
                     <TableRow>
                       <TableCell></TableCell>
                       <TableCell colSpan={6}>
-                        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs text-muted-foreground">
+                        <pre className="max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md bg-muted p-3 text-xs text-muted-foreground">
                           {formatDetails(log.details) || "No details"}
                         </pre>
                       </TableCell>

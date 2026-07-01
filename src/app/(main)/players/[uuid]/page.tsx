@@ -7,14 +7,14 @@ import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { TrialName, trials } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
+import { SubmissionCard } from "@/components/custom/submission-card"
+import { ErrorState, PageShell, SubmissionList } from "@/components/custom/page-shell"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
-import Badges from "@/components/custom/badges"
-import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Spinner } from "@/components/ui/spinner"
 
 function formatTime(rawTime: number | string) {
   const value = Number(rawTime)
@@ -62,10 +62,15 @@ type WorldRecordValue = {
 
 type SubmissionValue = {
   uuid: string
+  player_id?: string | null
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   trial_name: string
   time: number | string
   state: "approved" | "pending" | "denied"
   date: string
+  moderator_note?: string | null
+  moderator_username?: string | null
 }
 
 type PlayerDetailResponse = {
@@ -89,6 +94,7 @@ type SubmissionsResponse = {
 type ViewMode = "submissions" | "pbs"
 
 const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
+const submissionUuidListKey = "submission_uuids"
 
 function compareByTrialOrder(aTrialName: string, bTrialName: string) {
   const aOrder = trialOrderByName.get(String(aTrialName).toUpperCase())
@@ -183,7 +189,7 @@ export default function PlayerProfilePage() {
         setSubmissions(submissionRows)
       } catch (err) {
         console.error(err)
-        setError(err instanceof Error ? err.message : "Unable to load profile")
+        setError("We couldn't load this profile right now.")
       } finally {
         setLoading(false)
       }
@@ -277,201 +283,214 @@ export default function PlayerProfilePage() {
     })
   }, [orderedSubmissionRows, search])
 
+  React.useEffect(() => {
+    if (typeof window === "undefined" || loading || !player) {
+      return
+    }
+
+    const visibleSubmissionUuids = mode === "submissions"
+      ? filteredSubmissions.map((row) => row.uuid)
+      : filteredPbs.map((row) => row.submission_uuid)
+
+    window.localStorage.setItem(submissionUuidListKey, JSON.stringify(visibleSubmissionUuids))
+  }, [filteredPbs, filteredSubmissions, loading, mode, player])
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
+      <PageShell>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-10 w-56" />
+            <Skeleton className="h-4 w-full max-w-xl" />
+            <div className="flex gap-3 pt-2">
+              <Skeleton className="h-10 w-36" />
+            </div>
+          </div>
+          <Skeleton className="h-28 w-full" />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-28 w-full" />
+        </div>
+
+        <SubmissionList className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <Skeleton className="h-10 w-72" />
+            <Skeleton className="h-10 w-full lg:max-w-md" />
+          </div>
+          <div className="submissions-grid">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="submission-grid-item">
+                <Card className="h-full overflow-hidden border-border/60 bg-background/55">
+                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                    <Skeleton className="flex-1 rounded-lg" />
+                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                      <div className="space-y-2">
+                        <Skeleton className="h-7 w-32" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                      <Skeleton className="h-5 w-24" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ))}
+          </div>
+        </SubmissionList>
+      </PageShell>
     )
   }
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <p className="text-destructive">{error}</p>
-      </div>
+      <PageShell>
+        <ErrorState
+          title="Profile unavailable"
+          message={error}
+          actions={
+            <>
+              <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => router.push("/players")}>
+                Back to players
+              </Button>
+            </>
+          }
+        />
+      </PageShell>
     )
   }
 
   if (!player) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <p className="text-muted-foreground">Player not found.</p>
-      </div>
+      <PageShell>
+        <ErrorState
+          title="Player not found"
+          message="That profile does not exist or is no longer available."
+          actions={
+            <Button type="button" variant="outline" onClick={() => router.push("/players")}>
+              Back to players
+            </Button>
+          }
+        />
+      </PageShell>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="flex items-center gap-4">
-          <PlayerAvatar
-            playerName={player.player_name}
-            discordId={player.player_id}
-            discordAvatar={player.discord_avatar}
-            discordDiscriminator={player.discord_discriminator}
-            size="lg"
-          />
-          <div>
-            <h1 className="text-3xl font-bold">{player.player_name}</h1>
-            <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>
+    <PageShell>
+      <div className="space-y-4 rounded-3xl border border-border/60 bg-background/55 p-4 shadow-[0_24px_70px_-44px_rgba(0,0,0,0.72)] backdrop-blur-xl">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <PlayerAvatar
+              playerName={player.player_name}
+              discordId={player.player_id}
+              discordAvatar={player.discord_avatar}
+              discordDiscriminator={player.discord_discriminator}
+              size="lg"
+              className="size-20 shrink-0 lg:size-24"
+            />
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+                  {player.player_name} ({formatPlayerScore(player.score)})
+                </h1>
+              </div>
+              <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>
+              <div className="inline-flex items-center rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur-xl">
+                Rank #{player.rank}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <Button className="cursor-pointer" asChild>
+              <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`}>View in Calculator</Link>
+            </Button>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button className="cursor-pointer" asChild>
-            <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`}>View in Calculator</Link>
-          </Button>
-        </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardContent className="px-4 py-3 text-center">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Overall Rank</p>
-            <p className="text-4xl font-bold text-primary">#{player.rank}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="px-4 py-3 text-center">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Wasans Score</p>
-            <p className="text-4xl font-semibold">{formatPlayerScore(player.score)}</p>
-          </CardContent>
-        </Card>
-      </div>
+      <div className="sticky top-14 z-30 space-y-4 rounded-3xl border border-border/60 bg-background/80 p-4 backdrop-blur-xl md:top-0">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <Input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={mode === "submissions" ? "Search submissions by trial, state, time, date, uuid" : "Search PBs by trial, time, date"}
+            className="w-full min-w-0 lg:flex-1"
+          />
 
-      <Card>
-        <CardContent className="space-y-4 p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="w-full lg:w-auto lg:shrink-0">
             <Tabs value={mode} onValueChange={(value) => setMode(value as ViewMode)}>
               <TabsList>
                 <TabsTrigger className="cursor-pointer" value="submissions">All Submissions</TabsTrigger>
                 <TabsTrigger className="cursor-pointer" value="pbs">Personal Bests</TabsTrigger>
               </TabsList>
             </Tabs>
+          </div>
+        </div>
+      </div>
 
-            <Input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={mode === "submissions" ? "Search submissions by trial, state, time, date, uuid" : "Search PBs by trial, time, date"}
-              className="w-full lg:max-w-md"
+      <SubmissionList className="submissions-grid">
+        {mode === "submissions" ? (
+          filteredSubmissions.length > 0 ? (
+            filteredSubmissions.map((row) => (
+              <SubmissionCard
+                key={row.uuid}
+                submissionUuid={row.uuid}
+                trialName={row.trial_name}
+                timeText={formatTime(row.time)}
+                playerUuid={player.uuid}
+                playerName={player.player_name}
+                playerScore={player.score}
+                playerId={row.player_id ?? player.player_id}
+                playerDiscordAvatar={row.discord_avatar ?? player.discord_avatar}
+                playerDiscordDiscriminator={row.discord_discriminator ?? player.discord_discriminator}
+                dateText={formatDate(row.date)}
+                state={row.state}
+                isWr={wrSubmissionIds.has(row.uuid)}
+                scoreText={row.state !== "denied" ? row.score.toFixed(3) : undefined}
+                moderatorNote={row.moderator_note}
+                moderatorUsername={row.moderator_username}
+                onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
+              />
+            ))
+          ) : (
+            <div className="rounded-2xl border border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground backdrop-blur-xl">
+              No matching submissions.
+            </div>
+          )
+        ) : filteredPbs.length > 0 ? (
+          filteredPbs.map((row) => (
+            <SubmissionCard
+              key={`${row.submission_uuid}-${row.trial_name}`}
+              submissionUuid={row.submission_uuid}
+              trialName={row.trial_name}
+              timeText={formatTime(row.time)}
+              playerUuid={player.uuid}
+              playerName={player.player_name}
+              playerScore={player.score}
+              playerId={player.player_id}
+              playerDiscordAvatar={player.discord_avatar}
+              playerDiscordDiscriminator={player.discord_discriminator}
+              dateText={formatDate(row.date)}
+              state="approved"
+              isWr={wrSubmissionIds.has(row.submission_uuid)}
+              scoreText={row.score.toFixed(3)}
+              onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
             />
+          ))
+        ) : (
+          <div className="rounded-2xl border border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground backdrop-blur-xl">
+            No matching personal bests.
           </div>
-
-          <div className="submissions-grid">
-            {mode === "submissions" ? (
-              filteredSubmissions.length > 0 ? (
-                filteredSubmissions.map((row) => (
-                  <div
-                    key={row.uuid}
-                    className="submission-grid-item cursor-pointer"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => router.push(`/submissions/${row.uuid}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault()
-                        router.push(`/submissions/${row.uuid}`)
-                      }
-                    }}
-                  >
-                    <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
-                      <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                        <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-                          <ScoreVideoPreview submissionUuid={row.uuid} />
-                        </div>
-
-                        <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                          <div className="w-full flex items-center justify-between gap-2">
-                            <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                              {row.trial_name} {formatTime(row.time)}
-                            </h3>
-                          </div>
-
-                          <div className="w-full flex flex-col gap-1.5 text-base">
-                            {row.state !== "denied" ? (
-                              <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
-                            ) : null}
-                            <Link
-                              href={`/players/${encodeURIComponent(player.uuid)}`}
-                              className="truncate text-muted-foreground underline underline-offset-4"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              {player.player_name}
-                            </Link>
-                            <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
-                          </div>
-
-                          <div className="flex items-end justify-between">
-                            <Badges badges={[row.state, wrSubmissionIds.has(row.uuid) ? "wr" : ""]} />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-xl border border-border bg-muted p-6 text-center text-sm text-muted-foreground">
-                  No matching submissions.
-                </div>
-              )
-            ) : filteredPbs.length > 0 ? (
-              filteredPbs.map((row) => (
-                <div
-                  key={`${row.submission_uuid}-${row.trial_name}`}
-                  className="submission-grid-item cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => router.push(`/submissions/${row.submission_uuid}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault()
-                      router.push(`/submissions/${row.submission_uuid}`)
-                    }
-                  }}
-                >
-                  <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
-                    <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                      <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-                        <ScoreVideoPreview submissionUuid={row.submission_uuid} />
-                      </div>
-
-                      <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                        <div className="w-full flex items-center justify-between gap-2">
-                          <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                            {row.trial_name} {formatTime(row.time)}
-                          </h3>
-                        </div>
-
-                        <div className="w-full flex flex-col gap-1.5 text-base">
-                          <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
-                          <Link
-                            href={`/players/${encodeURIComponent(player.uuid)}`}
-                            className="truncate text-muted-foreground underline underline-offset-4"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            {player.player_name}
-                          </Link>
-                          <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
-                        </div>
-
-                        <div className="flex items-end justify-between">
-                          <Badges badges={["approved", wrSubmissionIds.has(row.submission_uuid) ? "wr" : ""]} />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-xl border border-border bg-muted p-6 text-center text-sm text-muted-foreground">
-                No matching personal bests.
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </SubmissionList>
+    </PageShell>
   )
 }
