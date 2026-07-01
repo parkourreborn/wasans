@@ -17,8 +17,10 @@ type PlayerRow = {
   uuid: string
 }
 
+type DiscordUpdateMode = "none" | "changed" | "all"
+
 type RefreshPlayerScoreOptions = {
-  skipDiscordUpdate?: boolean
+  discordUpdateMode?: DiscordUpdateMode
 }
 
 type PlayerScoreRow = {
@@ -35,6 +37,8 @@ export async function refreshPlayerScores(
   playerUuids: string[],
   options: RefreshPlayerScoreOptions = {}
 ) {
+    const discordUpdateMode = options.discordUpdateMode ?? "changed"
+
   const uniquePlayerUuids = [...new Set(playerUuids.filter(Boolean))]
 
   if (!uniquePlayerUuids.length) {
@@ -106,7 +110,7 @@ export async function refreshPlayerScores(
       currentScoresByPlayer.set(playerUuid, 0)
     }
 
-    if (!options.skipDiscordUpdate && oldScore !== score) {
+    if (discordUpdateMode === "all" || (discordUpdateMode === "changed" && oldScore !== score)) {
       discordUpdates.push({ playerUuid, oldScore })
     }
   }
@@ -137,9 +141,14 @@ export async function refreshPlayerScore(
   return refreshedPlayer?.score ?? 0
 }
 
-export async function refreshAllPlayerScores(db: D1Database) {
+export async function refreshAllPlayerScores(
+  db: D1Database,
+  options: { discordUpdateMode?: Extract<DiscordUpdateMode, "none" | "all"> } = {}
+) {
   const { results } = await db.prepare(`SELECT uuid FROM players`).all<PlayerRow>()
-  await refreshPlayerScores(db, results.map((player) => player.uuid), { skipDiscordUpdate: true })
+  await refreshPlayerScores(db, results.map((player) => player.uuid), {
+    discordUpdateMode: options.discordUpdateMode ?? "none",
+  })
 }
 
 export async function refreshScoresForTrial(db: D1Database, trialName: string) {
@@ -152,6 +161,6 @@ export async function refreshScoresForTrial(db: D1Database, trialName: string) {
     .all<{ player_uuid: string }>()
 
   for (const row of results) {
-    await refreshPlayerScore(db, row.player_uuid, { skipDiscordUpdate: true })
+    await refreshPlayerScore(db, row.player_uuid, { discordUpdateMode: "none" })
   }
 }

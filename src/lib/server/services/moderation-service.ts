@@ -311,7 +311,7 @@ export async function patchSubmission(
 
       if (scoreRecalculationNeeded) {
         if (shouldRefreshEveryone) {
-          await refreshAllPlayerScores(db)
+          await refreshAllPlayerScores(db, { discordUpdateMode: "all" })
         } else if (wasApproved || isApproved) {
           await refreshPlayerScore(db, submission.player_uuid)
         }
