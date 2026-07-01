@@ -8,102 +8,137 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { trials } from "@/lib/trials"
+import { TrialName } from "@/lib/trials"
 
-type Player = {
+type OverallPlayer = {
   uuid: string
   player_id: string
   player_name: string
   score: number
 }
 
+type TrialPlayer = {
+  player_uuid: string
+  player_name: string
+  time: number | null
+  submission_uuid: string | null
+  score: number
+  rank: number | null
+}
+
 type PlayersResponse = {
-  results?: Player[]
+  results?: OverallPlayer[]
   count?: number
-  page?: number
-  limit?: number
   error?: string
 }
 
+type TrialLeaderboardResponse = {
+  results?: TrialPlayer[]
+  total?: number
+  error?: string
+}
+
+type Mode = "overall" | "trial"
+
+type DisplayRow = {
+  playerUuid: string
+  playerName: string
+  playerId?: string
+  overallScore?: number
+  trialTime?: number | null
+  trialScore?: number
+  submissionUuid?: string | null
+  rank: number | null
+}
+
 export default function PlayersPage() {
-  const [players, setPlayers] = useState<Player[]>([])
+  const [mode, setMode] = useState<Mode>("overall")
+  const [trialName, setTrialName] = useState<TrialName>(trials[0])
+  const [rows, setRows] = useState<DisplayRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [totalCount, setTotalCount] = useState(0)
-  const [page, setPage] = useState(1)
 
-  const trimmedSearch = searchQuery.trim()
-  const hasMore = players.length < totalCount
+  const filteredRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) {
+      return rows
+    }
 
-  const filteredPlayers = useMemo(() => {
-    const normalizedQuery = trimmedSearch.toLowerCase()
-
-    return players.filter((player) => {
+    return rows.filter((row) => {
       return (
-        !normalizedQuery ||
-        player.player_name.toLowerCase().includes(normalizedQuery)
+        row.playerName.toLowerCase().includes(query)
+        || String(row.rank || "").includes(query)
+        || String(row.overallScore ?? "").includes(query)
+        || String(row.trialTime ?? "").includes(query)
       )
     })
-  }, [trimmedSearch, players])
-
-  const loadPlayersPage = async (nextPage: number, append: boolean) => {
-    const limit = 100
-    const params = new URLSearchParams({
-      page: String(nextPage),
-      limit: String(limit),
-    })
-
-    if (trimmedSearch) {
-      params.set("search", trimmedSearch)
-    }
-
-    const response = await fetch(`${apiV1("/players")}?${params.toString()}`, { cache: "no-store" })
-    const data = (await response.json()) as PlayersResponse
-
-    if (!response.ok) {
-      throw new Error(data.error || "Failed to load players")
-    }
-
-    const nextResults = data.results || []
-    setPlayers((current) => (append ? [...current, ...nextResults] : nextResults))
-    setTotalCount(Number(data.count || nextResults.length))
-    setPage(nextPage)
-  }
+  }, [rows, searchQuery])
 
   useEffect(() => {
-    const loadInitialPlayers = async () => {
+    const loadRows = async () => {
       setLoading(true)
       setError(null)
 
       try {
-        await loadPlayersPage(1, false)
+        if (mode === "overall") {
+          const response = await fetch(`${apiV1("/players")}?page=1&limit=500`, { cache: "no-store" })
+          const json = (await response.json()) as PlayersResponse
+
+          if (!response.ok) {
+            throw new Error(json.error || "Unable to load players")
+          }
+
+          const result = (json.results || []).map((row, index) => ({
+            playerUuid: row.uuid,
+            playerName: row.player_name,
+            playerId: row.player_id,
+            overallScore: Number(row.score),
+            rank: index + 1,
+          }))
+
+          setRows(result)
+          return
+        }
+
+        const response = await fetch(`${apiV1(`/leaderboards/trials/${encodeURIComponent(trialName)}`)}?page=1&limit=500`, {
+          cache: "no-store",
+        })
+        const json = (await response.json()) as TrialLeaderboardResponse
+
+        if (!response.ok) {
+          throw new Error(json.error || "Unable to load trial leaderboard")
+        }
+
+        const result = (json.results || []).map((row, index) => ({
+          playerUuid: row.player_uuid,
+          playerName: row.player_name,
+          trialTime: row.time,
+          trialScore: Number(row.score || 0),
+          submissionUuid: row.submission_uuid,
+          rank: row.rank ?? (row.time ? index + 1 : null),
+        }))
+
+        setRows(result)
       } catch (err) {
         console.error(err)
-        setError("Unable to load players")
+        setError(err instanceof Error ? err.message : "Unable to load players")
       } finally {
         setLoading(false)
       }
     }
 
-    loadInitialPlayers()
-  }, [trimmedSearch])
-
-  const handleLoadMore = async () => {
-    if (loadingMore || !hasMore) {
-      return
-    }
-
-    setLoadingMore(true)
-    try {
-      await loadPlayersPage(page + 1, true)
-    } catch (err) {
-      console.error(err)
-      setError("Unable to load more players")
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+    loadRows()
+  }, [mode, trialName])
 
   if (loading) {
     return (
@@ -126,74 +161,93 @@ export default function PlayersPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <h1 className="text-2xl font-bold">Players</h1>
 
-        <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center">
+        <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
+          <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
+            <TabsList>
+              <TabsTrigger className="cursor-pointer" value="overall">Overall</TabsTrigger>
+              <TabsTrigger className="cursor-pointer" value="trial">Specific Trial</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {mode === "trial" ? (
+            <div className="w-full lg:w-56">
+              <Select value={trialName} onValueChange={(value) => setTrialName(value as TrialName)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose trial" />
+                </SelectTrigger>
+                <SelectContent>
+                  {trials.map((trial) => (
+                    <SelectItem key={trial} value={trial}>
+                      {trial}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
           <Input
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search players by username"
-            aria-label="Search players by username"
-            className="h-10 flex-1"
+            placeholder="Search players"
+            aria-label="Search players"
+            className="h-10 w-full lg:max-w-xs"
           />
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {filteredPlayers.length === 0 ? (
+        {filteredRows.length === 0 ? (
           <div className="flex h-full w-full items-center justify-center">
-            <p className="text-muted-foreground">
-              {players.length === 0 ? "No players available" : "No matching players"}
-            </p>
+            <p className="text-muted-foreground">No matching players.</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredPlayers.map((player, index) => (
-              <Card key={player.uuid} className="overflow-hidden hover:shadow-lg transition-shadow">
+            {filteredRows.map((row) => (
+              <Card key={`${mode}-${row.playerUuid}`} className="overflow-hidden hover:shadow-lg transition-shadow">
                 <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <PlayerAvatar playerName={player.player_name} discordId={player.player_id} />
-                      <div className="min-w-0">
-                        <Link
-                          href={`/players/${player.uuid}`}
-                          className="text-lg font-semibold underline underline-offset-4"
-                        >
-                          {player.player_name}
-                        </Link>
-                        <p className="text-sm text-muted-foreground">
-                          #{index + 1} · Score {player.score.toFixed(3)}
-                        </p>
-                      </div>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <PlayerAvatar playerName={row.playerName} discordId={row.playerId} />
+                    <div className="min-w-0">
+                      <Link
+                        href={`/players/${row.playerUuid}`}
+                        className="text-lg font-semibold underline underline-offset-4"
+                      >
+                        {row.playerName}
+                      </Link>
+                      <p className="text-sm text-muted-foreground">
+                        #{row.rank ?? "—"} · {mode === "overall"
+                          ? `Score ${(row.overallScore || 0).toFixed(3)}`
+                          : row.trialTime != null
+                            ? `Time ${Number(row.trialTime).toFixed(3)} · Run score ${(row.trialScore || 0).toFixed(3)}`
+                            : "No submission"}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`}>
-                          View in Calculator
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="cursor-pointer" asChild>
+                      <Link href={`/calculator?player_uuid=${encodeURIComponent(row.playerUuid)}`}>
+                        View in Calculator
+                      </Link>
+                    </Button>
+                    {mode === "trial" && row.submissionUuid ? (
+                      <Button variant="outline" size="sm" className="cursor-pointer" asChild>
+                        <Link href={`/submissions/${encodeURIComponent(row.submissionUuid)}`}>
+                          View Trial Run
                         </Link>
                       </Button>
-                      <Button variant="default" size="sm" asChild>
-                        <Link href={`/players/${player.uuid}`}>
-                          View Profile
-                        </Link>
-                      </Button>
-                    </div>
+                    ) : null}
+                    <Button variant="default" size="sm" className="cursor-pointer" asChild>
+                      <Link href={`/players/${row.playerUuid}`}>
+                        View Profile
+                      </Link>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
-
-              {hasMore ? (
-                <div className="flex justify-center pt-2">
-                  <Button onClick={handleLoadMore} variant="outline" disabled={loadingMore}>
-                    {loadingMore ? (
-                      <>
-                        <Spinner className="size-4" />
-                        Loading
-                      </>
-                    ) : (
-                      "Load More"
-                    )}
-                  </Button>
-                </div>
-              ) : null}
           </div>
         )}
       </div>
