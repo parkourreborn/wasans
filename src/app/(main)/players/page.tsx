@@ -171,7 +171,7 @@ export default function PlayersPage() {
         <PageHeader title="Players" />
 
         <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="rounded-2xl border border-border/70 bg-card px-3 py-2.5">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Skeleton className="h-9 w-36" />
@@ -181,7 +181,7 @@ export default function PlayersPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/70 bg-card px-3 py-2.5">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
             <Skeleton className="h-5 w-24" />
             <Skeleton className="mt-1 h-8 w-20" />
           </div>
@@ -189,7 +189,7 @@ export default function PlayersPage() {
 
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, index) => (
-            <Card key={index} className="overflow-hidden border-border/70 bg-card/80">
+            <Card key={index} className="overflow-hidden border-border/60 bg-background/55">
               <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   <Skeleton className="size-10 rounded-full" />
@@ -231,7 +231,7 @@ export default function PlayersPage() {
       <PageHeader title="Players" />
 
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="rounded-2xl border border-border/70 bg-card px-3 py-2.5">
+        <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
           <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
               <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
@@ -270,7 +270,7 @@ export default function PlayersPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border/70 bg-card px-3 py-2.5">
+        <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
           <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
             {mode === "overall" ? "Overall board" : "Trial board"}
           </p>
@@ -302,7 +302,7 @@ export default function PlayersPage() {
       ) : (
         <div className="space-y-2">
           {filteredRows.map((row) => (
-            <Card key={`${mode}-${row.playerUuid}`} className="overflow-hidden border-border/70 bg-card/80 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]">
+            <Card key={`${mode}-${row.playerUuid}`} className="overflow-hidden border-border/60 bg-background/55 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]">
               <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   <PlayerAvatar

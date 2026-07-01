@@ -170,7 +170,7 @@ export default function SubmissionsPage() {
           <div className="submissions-grid">
             {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="submission-grid-item">
-                <Card className="h-full overflow-hidden border-border/70 bg-card/80">
+                <Card className="h-full overflow-hidden border-border/60 bg-background/55">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
                     <Skeleton className="flex-1 rounded-lg" />
                     <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
@@ -252,7 +252,7 @@ export default function SubmissionsPage() {
                   }
                 }}
               >
-                <Card className="h-full cursor-pointer overflow-hidden border-border/70 bg-card/80 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]">
+                <Card className="h-full cursor-pointer overflow-hidden border-border/60 bg-background/55 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
                     <div className="flex min-w-0 flex-1 items-center justify-center">
                       <ScoreVideoPreview submissionUuid={submission.submission_uuid} />

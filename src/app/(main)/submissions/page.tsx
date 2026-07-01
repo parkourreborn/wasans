@@ -594,7 +594,7 @@ function SubmissionsPage() {
           <div className="submissions-grid">
             {Array.from({ length: 6 }).map((_, index) => (
               <div key={index} className="submission-grid-item">
-                <Card className="h-full overflow-hidden border-border/70 bg-card/80">
+                <Card className="h-full overflow-hidden border-border/60 bg-background/55">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
                     <Skeleton className="flex-1 rounded-lg" />
                     <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">

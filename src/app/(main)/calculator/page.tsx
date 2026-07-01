@@ -327,7 +327,7 @@ export default function Home() {
         ) : null}
 
         <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="rounded-2xl border border-border/70 bg-card px-3 py-2.5">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Filter</p>
@@ -356,7 +356,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/70 bg-card px-3 py-2.5">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Final score</p>
             <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{averageScore.toFixed(3)}</p>
           </div>

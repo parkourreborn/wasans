@@ -7,7 +7,7 @@ import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { TrialName, trials } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
-import { ErrorState, PageHeader, PageShell, SectionCard, StatCard } from "@/components/custom/page-shell"
+import { ErrorState, PageShell, SectionCard, StatCard } from "@/components/custom/page-shell"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
@@ -306,7 +306,7 @@ export default function PlayerProfilePage() {
           <div className="submissions-grid">
             {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="submission-grid-item">
-                <Card className="h-full overflow-hidden border-border/70 bg-card">
+                <Card className="h-full overflow-hidden border-border/60 bg-background/55">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
                     <Skeleton className="flex-1 rounded-lg" />
                     <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
@@ -366,33 +366,33 @@ export default function PlayerProfilePage() {
 
   return (
     <PageShell>
-      <PageHeader
-        title={player.player_name}
-        description={`Joined ${formatDate(player.date_joined)}`}
-        actions={
-          <Button className="cursor-pointer" asChild>
-            <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`}>View in Calculator</Link>
-          </Button>
-        }
-      />
+      <div className="space-y-4 rounded-3xl border border-border/60 bg-background/55 p-4 shadow-[0_24px_70px_-44px_rgba(0,0,0,0.72)] backdrop-blur-xl">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <PlayerAvatar
+              playerName={player.player_name}
+              discordId={player.player_id}
+              discordAvatar={player.discord_avatar}
+              discordDiscriminator={player.discord_discriminator}
+              size="lg"
+              className="size-20 shrink-0 lg:size-24"
+            />
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+                  {player.player_name} ({formatPlayerScore(player.score)})
+                </h1>
+              </div>
+              <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>
+            </div>
+          </div>
 
-      <div className="flex items-center gap-4 rounded-2xl border border-border/70 bg-card p-4">
-        <PlayerAvatar
-          playerName={player.player_name}
-          discordId={player.player_id}
-          discordAvatar={player.discord_avatar}
-          discordDiscriminator={player.discord_discriminator}
-          size="lg"
-        />
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{player.player_name}</p>
-          <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <Button className="cursor-pointer" asChild>
+              <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`}>View in Calculator</Link>
+            </Button>
+          </div>
         </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <StatCard label="Overall rank" value={`#${player.rank}`} />
-        <StatCard label="Wasans score" value={formatPlayerScore(player.score)} />
       </div>
 
       <SectionCard>
