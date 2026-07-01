@@ -455,7 +455,10 @@ export default function Home() {
               <SubmissionNavButton direction="previous" submissionUuid={previousSubmissionUuid} />
 
               <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-                <h2 className="text-2xl font-bold lg:text-3xl">{trial_name} {time}</h2>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <h2 className="text-2xl font-bold lg:text-3xl">{trial_name} {time}</h2>
+                  <Badges badges={badges} />
+                </div>
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <Link
                     href={`/players/${submission.player_uuid}`}
@@ -473,9 +476,6 @@ export default function Home() {
                       <p className="text-muted-foreground">Moderated by {moderator_username}</p>
                     </>
                   )}
-                </div>
-                <div className="flex justify-center">
-                  <Badges badges={badges} />
                 </div>
                 {storedModeratorNote && (
                   <p className="max-w-2xl text-sm text-muted-foreground">

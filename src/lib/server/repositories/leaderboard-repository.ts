@@ -26,6 +26,7 @@ export async function listTrialLeaderboard(db: D1Database, trialName: string, li
 
   const rows = await db.prepare(
     `SELECT players.uuid AS player_uuid,
+            players.player_id,
             players.player_name,
             pbs.time,
             pbs.submission_uuid
@@ -35,7 +36,7 @@ export async function listTrialLeaderboard(db: D1Database, trialName: string, li
      LIMIT ? OFFSET ?`
   )
     .bind(trialName, limit, offset)
-    .all<{ player_uuid: string; player_name: string; time: number | null; submission_uuid: string | null }>()
+    .all<{ player_uuid: string; player_id: string; player_name: string; time: number | null; submission_uuid: string | null }>()
 
   const results = (rows.results || []).map((row, index) => ({
     ...row,
