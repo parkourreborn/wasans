@@ -32,6 +32,8 @@ type CachedWrs = {
   timestamp: number
 }
 
+const WR_CACHE_KEY = "wasans_wrs_cache"
+
 const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
 
 function compareByTrialOrder(aTrialName: string, bTrialName: string) {
@@ -78,11 +80,29 @@ function formatDate(timestamp: string) {
   return `${month}-${day}-${year}`
 }
 
+function loadCachedSubmissions() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  try {
+    const raw = window.localStorage.getItem(WR_CACHE_KEY)
+    if (!raw) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw) as CachedWrs
+    return Array.isArray(parsed?.results) ? parsed.results : null
+  } catch {
+    return null
+  }
+}
+
 export default function SubmissionsPage() {
   const router = useRouter()
-  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [submissions, setSubmissions] = useState<Submission[]>(() => loadCachedSubmissions() || [])
   const [searchQuery, setSearchQuery] = useState("")
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !loadCachedSubmissions()?.length)
   const [error, setError] = useState<string | null>(null)
 
   const orderedSubmissions = useMemo(() => {
@@ -102,31 +122,7 @@ export default function SubmissionsPage() {
   }, [searchQuery, orderedSubmissions])
 
   useEffect(() => {
-    const CACHE_KEY = "wasans_wrs_cache"
-
-    const loadCachedSubmissions = () => {
-      if (typeof window === "undefined") {
-        return null
-      }
-
-      try {
-        const raw = window.localStorage.getItem(CACHE_KEY)
-        if (!raw) {
-          return null
-        }
-
-        const parsed = JSON.parse(raw) as CachedWrs
-        return Array.isArray(parsed?.results) ? parsed.results : null
-      } catch {
-        return null
-      }
-    }
-
     const cachedResults = loadCachedSubmissions()
-    if (cachedResults?.length) {
-      setSubmissions(cachedResults)
-      setLoading(false)
-    }
 
     const fetchSubmissions = async () => {
       try {
@@ -144,7 +140,7 @@ export default function SubmissionsPage() {
 
         if (typeof window !== "undefined") {
           window.localStorage.setItem(
-            CACHE_KEY,
+            WR_CACHE_KEY,
             JSON.stringify({ results, timestamp: Date.now() })
           )
         }
@@ -154,9 +150,7 @@ export default function SubmissionsPage() {
         }
         console.error(err)
       } finally {
-        if (!cachedResults) {
-          setLoading(false)
-        }
+        setLoading(false)
       }
     }
 
