@@ -9,6 +9,7 @@ import { TrialName } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import Badges from "@/components/custom/badges"
+import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -54,6 +55,7 @@ type PlayerInfo = {
 type WorldRecordValue = {
   trial_name: string
   time: number | string
+  submission_uuid: string
 }
 
 type SubmissionValue = {
@@ -170,6 +172,14 @@ export default function PlayerProfilePage() {
     return new Map(worldRecords.map((wr) => [wr.trial_name.toUpperCase(), Number(wr.time)]))
   }, [worldRecords])
 
+  const wrSubmissionIds = React.useMemo(() => {
+    return new Set(
+      worldRecords
+        .map((wr) => wr.submission_uuid)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  }, [worldRecords])
+
   const pbRows = React.useMemo(() => {
     const pbs = player?.pbs || []
     return pbs.map((pb) => {
@@ -271,10 +281,7 @@ export default function PlayerProfilePage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/leaderboard">View Rank</Link>
-          </Button>
-          <Button asChild>
+          <Button className="cursor-pointer" asChild>
             <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`}>View in Calculator</Link>
           </Button>
         </div>
@@ -300,8 +307,8 @@ export default function PlayerProfilePage() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <Tabs value={mode} onValueChange={(value) => setMode(value as ViewMode)}>
               <TabsList>
-                <TabsTrigger value="submissions">All Submissions</TabsTrigger>
-                <TabsTrigger value="pbs">Personal Bests</TabsTrigger>
+                <TabsTrigger className="cursor-pointer" value="submissions">All Submissions</TabsTrigger>
+                <TabsTrigger className="cursor-pointer" value="pbs">Personal Bests</TabsTrigger>
               </TabsList>
             </Tabs>
 
@@ -318,20 +325,32 @@ export default function PlayerProfilePage() {
             {mode === "submissions" ? (
               filteredSubmissions.length > 0 ? (
                 filteredSubmissions.map((row) => (
-                  <Card key={row.uuid} className="overflow-hidden">
-                    <CardContent className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-                      <div className="space-y-1">
-                        <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">{row.trial_name}</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-2xl font-semibold">{formatTime(row.time)}</p>
-                          <Badges badges={[row.state]} className="gap-2" />
-                        </div>
-                        <p className="text-sm text-muted-foreground">Date: {formatDate(row.date)} · Score: {row.score.toFixed(3)}</p>
+                  <Card key={row.uuid} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                      <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
+                        <ScoreVideoPreview submissionUuid={row.uuid} />
                       </div>
 
-                      <Button variant="outline" asChild>
-                        <Link href={`/submissions/${encodeURIComponent(row.uuid)}`}>View submission</Link>
-                      </Button>
+                      <div className="flex w-44 shrink-0 flex-col justify-between gap-3 py-1 xl:w-56">
+                        <div className="w-full flex items-center justify-between gap-2">
+                          <h3 className="text-xl font-bold leading-tight xl:text-2xl">
+                            {row.trial_name} {formatTime(row.time)}
+                          </h3>
+                        </div>
+
+                        <div className="w-full flex flex-col gap-1.5 text-base">
+                          <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
+                          <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
+                        </div>
+
+                        <div className="flex items-end justify-between">
+                          <Badges badges={[row.state, wrSubmissionIds.has(row.uuid) ? "wr" : ""]} />
+                        </div>
+
+                        <Button variant="outline" className="cursor-pointer" asChild>
+                          <Link href={`/submissions/${encodeURIComponent(row.uuid)}`}>View submission</Link>
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))
@@ -342,17 +361,32 @@ export default function PlayerProfilePage() {
               )
             ) : filteredPbs.length > 0 ? (
               filteredPbs.map((row) => (
-                <Card key={`${row.submission_uuid}-${row.trial_name}`} className="overflow-hidden">
-                  <CardContent className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-                    <div className="space-y-1">
-                      <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">{row.trial_name}</p>
-                      <p className="text-2xl font-semibold">{formatTime(row.time)}</p>
-                      <p className="text-sm text-muted-foreground">Date: {formatDate(row.date)} · Score: {row.score.toFixed(3)}</p>
+                <Card key={`${row.submission_uuid}-${row.trial_name}`} className="overflow-hidden hover:shadow-lg transition-shadow">
+                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                    <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
+                      <ScoreVideoPreview submissionUuid={row.submission_uuid} />
                     </div>
 
-                    <Button variant="outline" asChild>
-                      <Link href={`/submissions/${encodeURIComponent(row.submission_uuid)}`}>View submission</Link>
-                    </Button>
+                    <div className="flex w-44 shrink-0 flex-col justify-between gap-3 py-1 xl:w-56">
+                      <div className="w-full flex items-center justify-between gap-2">
+                        <h3 className="text-xl font-bold leading-tight xl:text-2xl">
+                          {row.trial_name} {formatTime(row.time)}
+                        </h3>
+                      </div>
+
+                      <div className="w-full flex flex-col gap-1.5 text-base">
+                        <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
+                        <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
+                      </div>
+
+                      <div className="flex items-end justify-between">
+                        <Badges badges={["approved", wrSubmissionIds.has(row.submission_uuid) ? "wr" : ""]} />
+                      </div>
+
+                      <Button variant="outline" className="cursor-pointer" asChild>
+                        <Link href={`/submissions/${encodeURIComponent(row.submission_uuid)}`}>View submission</Link>
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))

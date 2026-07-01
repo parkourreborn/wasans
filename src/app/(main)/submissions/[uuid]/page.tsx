@@ -3,6 +3,8 @@
 import { useEffect, useState, type MouseEvent } from "react"
 import Badges from "@/components/custom/badges"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
+import calculateScore from "@/lib/calc-score"
+import { TrialName } from "@/lib/trials"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,6 +49,17 @@ type SubmissionValue = {
 
 type SubmissionResponse = {
   results: SubmissionValue[]
+}
+
+type WorldRecordValue = {
+  trial_name: string
+  time: number | string
+  submission_uuid: string
+}
+
+type WorldRecordsResponse = {
+  results?: WorldRecordValue[]
+  error?: string
 }
 
 type AuthUser = {
@@ -152,6 +165,7 @@ export default function Home() {
   const [editTimeValue, setEditTimeValue] = useState("")
   const [editTimeError, setEditTimeError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [worldRecords, setWorldRecords] = useState<WorldRecordValue[]>([])
 
   useEffect(() => {
     const fetchSubmission = async () => {
@@ -159,15 +173,24 @@ export default function Home() {
       setError(null)
 
       try {
-        const response = await fetch(apiV1(`/submissions/${uuid}`))
-        const json: unknown = await response.json().catch(() => null)
+        const [submissionResponse, wrResponse] = await Promise.all([
+          fetch(apiV1(`/submissions/${uuid}`)),
+          fetch(apiV1("/records/world"), { cache: "force-cache" }),
+        ])
 
-        if (!response.ok) {
+        const submissionJson: unknown = await submissionResponse.json().catch(() => null)
+        const wrJson = (await wrResponse.json().catch(() => null)) as WorldRecordsResponse | null
+
+        if (!submissionResponse.ok) {
           setError("Unable to load submission data.")
           return
         }
 
-        const responseData = json as SubmissionResponse
+        if (wrResponse.ok) {
+          setWorldRecords(wrJson?.results || [])
+        }
+
+        const responseData = submissionJson as SubmissionResponse
         setSubmission(responseData.results?.[0] ?? null)
       } catch (err) {
         setError("Unable to load submission data.")
@@ -403,8 +426,14 @@ export default function Home() {
   const rawTimeString = String(rawTimeValue)
   const time = formatTime(rawTimeString)
   const formattedDate = formatDate(date)
+  const wrForTrial = worldRecords.find((record) => record.trial_name === trial_name)
+  const isWrSubmission = wrForTrial?.submission_uuid === uuid
+  const runScore = wrForTrial
+    ? Number(calculateScore(Number(wrForTrial.time), Number(rawTimeValue), trial_name as TrialName).toFixed(3))
+    : 0
   const badges = [
     state === "approved" ? "approved" : state === "denied" ? "denied" : "pending",
+    isWrSubmission ? "wr" : "",
   ]
   const videoSrc = `https://assets.wasans.tully.sh/scores/${uuid}.mp4`
   const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 1
@@ -436,6 +465,8 @@ export default function Home() {
                   </Link>
                   <Separator orientation="vertical" className="hidden h-5 sm:block" />
                   <p className="text-muted-foreground">{formattedDate}</p>
+                  <Separator orientation="vertical" className="hidden h-5 sm:block" />
+                  <p className="text-muted-foreground">Run score: {runScore.toFixed(3)}</p>
                   {moderator_username && (
                     <>
                       <Separator orientation="vertical" className="hidden h-5 sm:block" />
