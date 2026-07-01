@@ -141,7 +141,6 @@ function SubmissionsPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const playerUuidFromParams = searchParams.get("player_uuid") || ""
   const [playerFilter, setPlayerFilter] = useState(playerUuidFromParams)
-  const [authLabel, setAuthLabel] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [signInDialogOpen, setSignInDialogOpen] = useState(false)
   const [loadingSubmissions, setLoadingSubmissions] = useState(true)
@@ -241,11 +240,6 @@ function SubmissionsPage() {
 
           if (authJson.user) {
             window.localStorage.setItem("player_uuid", authJson.user.uuid)
-            setAuthLabel(
-              `${formatPlayerNameWithScore(authJson.user.player_name, authJson.user.score)}${
-                authJson.user.permission >= 1 ? " (admin)" : ""
-              }`
-            )
             setIsAuthenticated(true)
           } else {
             setIsAuthenticated(false)
@@ -587,9 +581,6 @@ function SubmissionsPage() {
           </AlertDialog>
         </div>
       </div>
-
-      {authLabel && <p className="text-sm text-muted-foreground">Logged in as {authLabel}</p>}
-
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
           <div className="flex h-full w-full items-center justify-center">
