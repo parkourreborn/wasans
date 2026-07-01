@@ -171,7 +171,7 @@ export default function PlayersPage() {
         <PageHeader title="Players" />
 
         <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Skeleton className="h-9 w-36" />
@@ -181,7 +181,7 @@ export default function PlayersPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
             <Skeleton className="h-5 w-24" />
             <Skeleton className="mt-1 h-8 w-20" />
           </div>
@@ -230,56 +230,42 @@ export default function PlayersPage() {
     <PageShell>
       <PageHeader title="Players" />
 
-      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
-          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
-              <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
-                <TabsList>
-                  <TabsTrigger className="cursor-pointer" value="overall">Overall</TabsTrigger>
-                  <TabsTrigger className="cursor-pointer" value="trial">Trial</TabsTrigger>
-                </TabsList>
-              </Tabs>
+      <div className="sticky top-14 z-30 rounded-2xl border border-border/60 bg-background/80 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/60 md:top-0">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search players"
+            aria-label="Search players"
+            className="h-9 w-full min-w-0 xl:flex-1"
+          />
 
-              {mode === "trial" ? (
-                <div className="w-full sm:min-w-56 sm:max-w-56">
-                  <Select value={trialName} onValueChange={(value) => setTrialName(value as TrialName)}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Choose trial" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {trials.map((trial) => (
-                        <SelectItem key={trial} value={trial}>
-                          {trial}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-            </div>
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center xl:w-auto xl:shrink-0">
+            <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
+              <TabsList>
+                <TabsTrigger className="cursor-pointer" value="overall">Overall</TabsTrigger>
+                <TabsTrigger className="cursor-pointer" value="trial">Trial</TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-            <Input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search players"
-              aria-label="Search players"
-              className="h-9 w-full xl:max-w-sm"
-            />
+            {mode === "trial" ? (
+              <div className="w-full sm:w-56 sm:min-w-56 sm:max-w-56">
+                <Select value={trialName} onValueChange={(value) => setTrialName(value as TrialName)}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Choose trial" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {trials.map((trial) => (
+                      <SelectItem key={trial} value={trial}>
+                        {trial}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </div>
-        </div>
-
-        <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
-          <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            {mode === "overall" ? "Overall board" : "Trial board"}
-          </p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-            {mode === "overall" ? String(rows.length) : trialName}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {mode === "overall" ? "Ranked players loaded" : `${populatedRows.length} visible rows`}
-          </p>
         </div>
       </div>
 
