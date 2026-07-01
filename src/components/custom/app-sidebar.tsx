@@ -212,21 +212,10 @@ export function AppSidebar() {
 
                     <SidebarMenuItem>
                         <SidebarMenuButton asChild>
-                            <Link href="/leaderboard">
-                                <div className="flex items-center gap-2">
-                                    <TrophyIcon />
-                                    <span>Leaderboard</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
                             <Link href="/players">
                                 <div className="flex items-center gap-2">
                                     <UserSearchIcon />
-                                    <span>Player Search</span>
+                                    <span>Leaderboard</span>
                                 </div>
                             </Link>
                         </SidebarMenuButton>

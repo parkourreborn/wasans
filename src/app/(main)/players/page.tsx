@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { apiV1 } from "@/lib/api"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
@@ -69,6 +69,7 @@ export default function PlayersPage() {
   const [isFetching, setIsFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const hasLoadedRowsRef = useRef(false)
 
   const filteredRows = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -88,7 +89,7 @@ export default function PlayersPage() {
 
   useEffect(() => {
     const loadRows = async () => {
-      if (rows.length === 0) {
+      if (!hasLoadedRowsRef.current) {
         setLoading(true)
       } else {
         setIsFetching(true)
@@ -136,6 +137,7 @@ export default function PlayersPage() {
         }))
 
         setRows(result)
+        hasLoadedRowsRef.current = true
       } catch (err) {
         console.error(err)
         setError(err instanceof Error ? err.message : "Unable to load players")
@@ -170,29 +172,31 @@ export default function PlayersPage() {
         <h1 className="text-2xl font-bold">Players</h1>
 
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
-          <div className={mode === "trial" ? "w-full lg:w-56" : "hidden lg:block lg:w-56"}>
+          <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
+            <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
+              <TabsList>
+                <TabsTrigger className="cursor-pointer" value="overall">Overall</TabsTrigger>
+                <TabsTrigger className="cursor-pointer" value="trial">Specific Trial</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
             {mode === "trial" ? (
-              <Select value={trialName} onValueChange={(value) => setTrialName(value as TrialName)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose trial" />
-                </SelectTrigger>
-                <SelectContent>
-                  {trials.map((trial) => (
-                    <SelectItem key={trial} value={trial}>
-                      {trial}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="w-full lg:w-56">
+                <Select value={trialName} onValueChange={(value) => setTrialName(value as TrialName)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose trial" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {trials.map((trial) => (
+                      <SelectItem key={trial} value={trial}>
+                        {trial}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             ) : null}
           </div>
-
-          <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
-            <TabsList>
-              <TabsTrigger className="cursor-pointer" value="overall">Overall</TabsTrigger>
-              <TabsTrigger className="cursor-pointer" value="trial">Specific Trial</TabsTrigger>
-            </TabsList>
-          </Tabs>
 
           <Input
             type="search"
@@ -241,15 +245,10 @@ export default function PlayersPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="cursor-pointer" asChild>
-                      <Link href={`/calculator?player_uuid=${encodeURIComponent(row.playerUuid)}`}>
-                        View in Calculator
-                      </Link>
-                    </Button>
                     {mode === "trial" && row.submissionUuid ? (
                       <Button variant="outline" size="sm" className="cursor-pointer" asChild>
                         <Link href={`/submissions/${encodeURIComponent(row.submissionUuid)}`}>
-                          View Trial Run
+                          View Submission
                         </Link>
                       </Button>
                     ) : null}
