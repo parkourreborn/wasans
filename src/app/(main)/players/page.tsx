@@ -28,6 +28,7 @@ type OverallPlayer = {
 
 type TrialPlayer = {
   player_uuid: string
+  player_id: string
   player_name: string
   time: number | null
   submission_uuid: string | null
@@ -65,6 +66,7 @@ export default function PlayersPage() {
   const [trialName, setTrialName] = useState<TrialName>(trials[0])
   const [rows, setRows] = useState<DisplayRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [isFetching, setIsFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -86,7 +88,11 @@ export default function PlayersPage() {
 
   useEffect(() => {
     const loadRows = async () => {
-      setLoading(true)
+      if (rows.length === 0) {
+        setLoading(true)
+      } else {
+        setIsFetching(true)
+      }
       setError(null)
 
       try {
@@ -121,6 +127,7 @@ export default function PlayersPage() {
 
         const result = (json.results || []).map((row, index) => ({
           playerUuid: row.player_uuid,
+          playerId: row.player_id,
           playerName: row.player_name,
           trialTime: row.time,
           trialScore: Number(row.score || 0),
@@ -134,6 +141,7 @@ export default function PlayersPage() {
         setError(err instanceof Error ? err.message : "Unable to load players")
       } finally {
         setLoading(false)
+        setIsFetching(false)
       }
     }
 
@@ -162,15 +170,8 @@ export default function PlayersPage() {
         <h1 className="text-2xl font-bold">Players</h1>
 
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
-          <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
-            <TabsList>
-              <TabsTrigger className="cursor-pointer" value="overall">Overall</TabsTrigger>
-              <TabsTrigger className="cursor-pointer" value="trial">Specific Trial</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {mode === "trial" ? (
-            <div className="w-full lg:w-56">
+          <div className={mode === "trial" ? "w-full lg:w-56" : "hidden lg:block lg:w-56"}>
+            {mode === "trial" ? (
               <Select value={trialName} onValueChange={(value) => setTrialName(value as TrialName)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choose trial" />
@@ -183,8 +184,15 @@ export default function PlayersPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
+
+          <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
+            <TabsList>
+              <TabsTrigger className="cursor-pointer" value="overall">Overall</TabsTrigger>
+              <TabsTrigger className="cursor-pointer" value="trial">Specific Trial</TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           <Input
             type="search"
@@ -198,6 +206,12 @@ export default function PlayersPage() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {isFetching ? (
+          <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner className="size-4" /> Updating results...
+          </div>
+        ) : null}
+
         {filteredRows.length === 0 ? (
           <div className="flex h-full w-full items-center justify-center">
             <p className="text-muted-foreground">No matching players.</p>

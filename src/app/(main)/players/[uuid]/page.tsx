@@ -321,11 +321,11 @@ export default function PlayerProfilePage() {
             />
           </div>
 
-          <div className="grid gap-3">
+          <div className="grid gap-3 xl:grid-cols-2">
             {mode === "submissions" ? (
               filteredSubmissions.length > 0 ? (
                 filteredSubmissions.map((row) => (
-                  <Card key={row.uuid} className="overflow-hidden hover:shadow-lg transition-shadow">
+                  <Card key={row.uuid} className="h-full overflow-hidden transition-shadow hover:shadow-lg">
                     <CardContent className="flex h-full min-h-0 gap-4 p-4">
                       <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
                         <ScoreVideoPreview submissionUuid={row.uuid} />
@@ -361,7 +361,7 @@ export default function PlayerProfilePage() {
               )
             ) : filteredPbs.length > 0 ? (
               filteredPbs.map((row) => (
-                <Card key={`${row.submission_uuid}-${row.trial_name}`} className="overflow-hidden hover:shadow-lg transition-shadow">
+                <Card key={`${row.submission_uuid}-${row.trial_name}`} className="h-full overflow-hidden transition-shadow hover:shadow-lg">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
                     <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
                       <ScoreVideoPreview submissionUuid={row.submission_uuid} />
