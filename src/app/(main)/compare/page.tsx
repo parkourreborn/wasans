@@ -313,7 +313,7 @@ function ComparePageClient() {
         </div>
       ) : (
         <SectionCard contentClassName="p-0">
-          <Card className="overflow-hidden border-border/70 bg-card/70">
+          <Card className="overflow-hidden border-border/60 bg-background/55">
           <CardContent className="overflow-x-auto p-0">
             <Table>
               <TableHeader>

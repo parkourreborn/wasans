@@ -43,7 +43,7 @@ type SectionCardProps = {
 
 export function SectionCard({ title, description, action, children, className, contentClassName }: SectionCardProps) {
   return (
-    <Card className={cn("animate-subtle-in overflow-hidden border-border/70 bg-card", className)}>
+    <Card className={cn("animate-subtle-in overflow-hidden border-border/70 bg-background/55", className)}>
       {title || description || action ? (
         <CardHeader className="flex flex-col gap-4 border-b border-border/60 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
@@ -67,7 +67,7 @@ type StatCardProps = {
 
 export function StatCard({ label, value, meta, className }: StatCardProps) {
   return (
-    <Card className={cn("border-border/70 bg-card", className)}>
+    <Card className={cn("border-border/70 bg-background/55", className)}>
       <CardContent className="space-y-2 p-4 md:p-5">
         <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
         <div className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">{value}</div>
@@ -86,7 +86,7 @@ type ErrorStateProps = {
 
 export function ErrorState({ title = "Something went wrong", message, actions, className }: ErrorStateProps) {
   return (
-    <Card className={cn("border-border/70 bg-card", className)}>
+    <Card className={cn("border-border/70 bg-background/55", className)}>
       <CardContent className="flex min-h-48 flex-col items-center justify-center gap-3 p-6 text-center">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
