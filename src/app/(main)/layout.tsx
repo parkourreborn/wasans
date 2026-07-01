@@ -19,7 +19,7 @@ export default function RootLayout({
     <SidebarProvider>
       <AppSidebar />
       <main
-        className="relative min-h-svh min-w-0 flex-1 overflow-hidden bg-background"
+        className="relative min-h-svh min-w-0 flex-1 overflow-x-hidden bg-background"
         style={{
           ["--page-accent" as string]: theme.accent,
           ["--page-accent-soft" as string]: theme.accentSoft,

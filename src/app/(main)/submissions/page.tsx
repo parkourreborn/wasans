@@ -3,10 +3,8 @@
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { apiV1 } from "@/lib/api"
-import Badges from "@/components/custom/badges"
-import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
+import { SubmissionCard } from "@/components/custom/submission-card"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
-import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -25,10 +23,9 @@ import { Spinner } from "@/components/ui/spinner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
-import Link from "next/link"
 import { TrialName, trials } from "@/lib/trials"
 import calculateScore from "@/lib/calc-score"
-import { PageShell, SectionCard } from "@/components/custom/page-shell"
+import { PageShell, SubmissionList } from "@/components/custom/page-shell"
 
 type Submission = {
   uuid: string
@@ -425,10 +422,10 @@ function SubmissionsPage() {
           </div>
         </div>
       )}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Submissions</h1>
-          {filteredPlayerName && (
+      <div className="sticky top-14 z-30 space-y-3 rounded-3xl border border-border/60 bg-background/80 p-4 backdrop-blur-xl md:top-0">
+      <div className="flex flex-col gap-3">
+        {filteredPlayerName && (
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-1 text-sm">
               <span>Filtering by: {filteredPlayerName}</span>
               <Button
@@ -440,10 +437,10 @@ function SubmissionsPage() {
                 <X className="h-3 w-3" />
               </Button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center">
           <Input
             type="search"
             value={searchQuery}
@@ -453,38 +450,40 @@ function SubmissionsPage() {
             }}
             placeholder="Search submissions by trial or player name"
             aria-label="Search submissions by trial or player name"
-            className="h-10 flex-1"
+            className="h-10 w-full min-w-0 lg:flex-1"
           />
 
-          <Select value={statusFilter} onValueChange={(value) => {
-              setStatusFilter(value)
-              setCurrentPage(1)
-            }}>
-            <SelectTrigger className="w-full lg:w-40">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="denied">Denied</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto lg:shrink-0">
+            <Select value={statusFilter} onValueChange={(value) => {
+                setStatusFilter(value)
+                setCurrentPage(1)
+              }}>
+              <SelectTrigger className="w-full sm:w-40">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="denied">Denied</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Button
-            type="button"
-            className="h-10 w-full cursor-pointer sm:w-auto"
-            onClick={() => {
-              if (isAuthenticated) {
-                router.push("/submissions/new")
-              } else {
-                setSignInDialogOpen(true)
-              }
-            }}
-          >
-            <PlusCircleIcon />
-            New submission
-          </Button>
+            <Button
+              type="button"
+              className="h-10 w-full cursor-pointer sm:w-auto"
+              onClick={() => {
+                if (isAuthenticated) {
+                  router.push("/submissions/new")
+                } else {
+                  setSignInDialogOpen(true)
+                }
+              }}
+            >
+              <PlusCircleIcon />
+              New submission
+            </Button>
+          </div>
 
           <AlertDialog
             open={signInDialogOpen}
@@ -584,14 +583,14 @@ function SubmissionsPage() {
           </AlertDialog>
         </div>
       </div>
-      <SectionCard contentClassName="min-h-0 p-0 md:p-0">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-5">
+      </div>
+      <div className="py-4">
         {error ? (
           <div className="flex h-full w-full items-center justify-center">
             <p className="text-destructive">{error}</p>
           </div>
         ) : loadingSubmissions ? (
-          <div className="submissions-grid">
+          <SubmissionList className="submissions-grid">
             {Array.from({ length: 6 }).map((_, index) => (
               <div key={index} className="submission-grid-item">
                 <Card className="h-full overflow-hidden border-border/60 bg-background/55">
@@ -615,7 +614,7 @@ function SubmissionsPage() {
                 </Card>
               </div>
             ))}
-          </div>
+          </SubmissionList>
         ) : submissions.length === 0 ? (
           <div className="flex h-full w-full items-center justify-center">
             <p className="text-muted-foreground">
@@ -624,87 +623,27 @@ function SubmissionsPage() {
           </div>
         ) : (
           <>
-            <div className="submissions-grid">
+            <SubmissionList className="submissions-grid">
               {submissions.map((submission) => (
-                <div
+                <SubmissionCard
                   key={submission.uuid}
-                  className="submission-grid-item cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => router.push(`/submissions/${submission.uuid}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault()
-                      router.push(`/submissions/${submission.uuid}`)
-                    }
-                  }}
-                >
-                  <Card className="h-full hover:shadow-lg transition-shadow overflow-hidden">
-                    <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                      <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-                        <ScoreVideoPreview submissionUuid={submission.uuid} />
-                        
-                      </div>
-
-                      <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                        <div className="w-full flex items-center justify-between gap-2">
-                          <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                            {submission.trial_name} {formatTime(submission.time)}
-                          </h3>
-                        </div>
-
-                        <div className="w-full flex flex-col gap-1.5 text-base">
-                          {submission.state !== "denied" ? (
-                            <p className="text-sm font-semibold">
-                              Score {scoreFor(worldRecordTimes[submission.trial_name], submission.time, submission.trial_name as TrialName)}
-                            </p>
-                          ) : null}
-                          <Link
-                            href={`/players/${submission.player_uuid}`}
-                            className="text-muted-foreground truncate underline underline-offset-4"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            {formatPlayerNameWithScore(
-                              submission.player_name,
-                              submission.player_score
-                            )}
-                          </Link>
-                          <p className="text-sm text-muted-foreground">
-                            {formatDate(submission.date)}
-                          </p>
-                        </div>
-
-                        <div className="flex items-end justify-between">
-                          <Badges
-                            badges={[
-                              submission.state === "approved"
-                                ? "approved"
-                                : submission.state === "denied"
-                                  ? "denied"
-                                  : "pending",
-                              wrSubmissionIds.has(submission.uuid) ? "wr" : "",
-                            ]}
-                          />
-                          
-                        </div>
-                      </div>
-                    </CardContent>
-                    <CardFooter>
-                      <div className="w-full flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground max-w-full wrap-break-word text-center">
-                          Moderator Note: {submission.moderator_note}
-                        </p>
-                      {submission.moderator_username && (
-                        <p className="text-xs text-muted-foreground">
-                          Mod: {submission.moderator_username}
-                        </p>
-                      )}
-                      </div>
-                    </CardFooter>
-                  </Card>
-                </div>
+                  submissionUuid={submission.uuid}
+                  trialName={submission.trial_name}
+                  timeText={formatTime(submission.time)}
+                  playerUuid={submission.player_uuid}
+                  playerName={submission.player_name}
+                  playerScore={submission.player_score}
+                  dateText={formatDate(submission.date)}
+                  state={submission.state}
+                  isWr={wrSubmissionIds.has(submission.uuid)}
+                  scoreText={scoreFor(worldRecordTimes[submission.trial_name], submission.time, submission.trial_name as TrialName)}
+                  moderatorNote={submission.moderator_note}
+                  moderatorUsername={submission.moderator_username}
+                  className="h-full hover:shadow-lg transition-shadow overflow-hidden"
+                  onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
+                />
               ))}
-            </div>
+            </SubmissionList>
             <div className="flex flex-col items-center gap-3 py-4">
               <p className="text-sm text-muted-foreground">
                 Showing {submissions.length} of {resultCount} submission{resultCount === 1 ? "" : "s"}
@@ -838,7 +777,6 @@ function SubmissionsPage() {
           </>
         )}
       </div>
-      </SectionCard>
     </div>
     </PageShell>
   )

@@ -2,13 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { apiV1 } from "@/lib/api"
 import { trials } from "@/lib/trials"
-import Badges from "@/components/custom/badges"
-import { PageHeader, PageShell, SectionCard, StatCard } from "@/components/custom/page-shell"
-import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
-import { formatPlayerNameWithScore } from "@/lib/player-score"
+import { SubmissionCard } from "@/components/custom/submission-card"
+import { PageHeader, PageShell, SubmissionList } from "@/components/custom/page-shell"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -22,6 +19,8 @@ type Submission = {
   time: number
   date: string
   state: string
+  moderator_note?: string | null
+  moderator_username?: string | null
 }
 
 type SubmissionsResponse = {
@@ -164,29 +163,29 @@ export default function SubmissionsPage() {
         <PageHeader
           title="World Records"
         />
-
-        <SectionCard title="Record board" contentClassName="space-y-4">
+        <div className="rounded-3xl border border-border/60 bg-background/55 p-4 backdrop-blur-xl">
           <Skeleton className="h-10 w-full md:w-72" />
-          <div className="submissions-grid">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="submission-grid-item">
-                <Card className="h-full overflow-hidden border-border/60 bg-background/55">
-                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                    <Skeleton className="flex-1 rounded-lg" />
-                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                      <div className="space-y-2">
-                        <Skeleton className="h-7 w-32" />
-                        <Skeleton className="h-4 w-24" />
-                        <Skeleton className="h-4 w-20" />
-                      </div>
-                      <Skeleton className="h-5 w-24" />
+        </div>
+
+        <SubmissionList className="submissions-grid">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="submission-grid-item">
+              <Card className="h-full overflow-hidden border-border/60 bg-background/55">
+                <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                  <Skeleton className="flex-1 rounded-lg" />
+                  <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                    <div className="space-y-2">
+                      <Skeleton className="h-7 w-32" />
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-20" />
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ))}
+        </SubmissionList>
       </PageShell>
     )
   }
@@ -194,9 +193,10 @@ export default function SubmissionsPage() {
   if (error) {
     return (
       <PageShell>
-        <SectionCard title="World records" description="Unable to load the record board right now.">
-          <p className="text-destructive">{error}</p>
-        </SectionCard>
+        <div className="rounded-3xl border border-border/60 bg-background/55 p-6 text-sm text-destructive backdrop-blur-xl">
+          Unable to load the record board right now.
+          <div className="mt-2">{error}</div>
+        </div>
       </PageShell>
     )
   }
@@ -204,92 +204,54 @@ export default function SubmissionsPage() {
   if (submissions.length === 0) {
     return (
       <PageShell>
-        <SectionCard title="World records" description="No approved world records are available yet.">
-          <p className="text-muted-foreground">No submissions yet</p>
-        </SectionCard>
+        <div className="rounded-3xl border border-border/60 bg-background/55 p-6 text-sm text-muted-foreground backdrop-blur-xl">
+          No approved world records are available yet.
+        </div>
       </PageShell>
     )
   }
 
   return (
     <PageShell>
-      <PageHeader
-        title="World Records"
-       />
+      <PageHeader title="World Records" />
 
-      <SectionCard
-        title="Record board"
-        description="Filter by trial name or jump straight into the run proof."
-        action={
-          <Input
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search by trial name"
-            aria-label="Search world records by trial name"
-            className="h-10 min-w-0 md:w-72"
-          />
-        }
-        contentClassName="min-h-0"
-      >
+      <div className="sticky top-14 z-30 rounded-3xl border border-border/60 bg-background/80 p-4 backdrop-blur-xl md:top-0">
+        <Input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by trial name"
+          aria-label="Search world records by trial name"
+          className="h-10 w-full min-w-0"
+        />
+      </div>
+
+      <SubmissionList className="submissions-grid">
         {filteredSubmissions.length === 0 ? (
-          <div className="flex min-h-48 w-full items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/15">
+          <div className="flex min-h-48 w-full items-center justify-center rounded-2xl border border-dashed border-border/70 bg-background/40 backdrop-blur-xl">
             <p className="text-muted-foreground">No matching world records</p>
           </div>
         ) : (
-          <div className="submissions-grid">
-            {filteredSubmissions.map((submission) => (
-              <div
-                key={submission.submission_uuid}
-                className="submission-grid-item cursor-pointer"
-                role="button"
-                tabIndex={0}
-                onClick={() => router.push(`/submissions/${submission.submission_uuid}`)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault()
-                    router.push(`/submissions/${submission.submission_uuid}`)
-                  }
-                }}
-              >
-                <Card className="h-full cursor-pointer overflow-hidden border-border/60 bg-background/55 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]">
-                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                    <div className="flex min-w-0 flex-1 items-center justify-center">
-                      <ScoreVideoPreview submissionUuid={submission.submission_uuid} />
-                    </div>
-
-                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                      <div className="w-full flex items-center justify-between gap-2">
-                        <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                          {submission.trial_name} {formatTime(submission.time)}
-                        </h3>
-                      </div>
-
-                      <div className="w-full flex flex-col gap-1.5 text-base">
-                        <Link
-                          href={`/players/${submission.player_uuid}`}
-                          className="text-muted-foreground truncate underline underline-offset-4"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          {formatPlayerNameWithScore(
-                            submission.player_name,
-                            submission.player_score
-                          )}
-                        </Link>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(submission.date)}
-                        </p>
-                      </div>
-
-                      <Badges badges={["wr", "approved"]} />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            ))}
-          </div>
+          filteredSubmissions.map((submission) => (
+            <SubmissionCard
+              key={submission.submission_uuid}
+              submissionUuid={submission.submission_uuid}
+              trialName={submission.trial_name}
+              timeText={formatTime(submission.time)}
+              playerUuid={submission.player_uuid}
+              playerName={submission.player_name}
+              playerScore={submission.player_score}
+              dateText={formatDate(submission.date)}
+              state="approved"
+              isWr
+              moderatorNote={submission.moderator_note}
+              moderatorUsername={submission.moderator_username}
+              className="h-full cursor-pointer overflow-hidden border-border/60 bg-background/55 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]"
+              onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
+            />
+          ))
         )}
-      </SectionCard>
+      </SubmissionList>
     </PageShell>
   )
 }

@@ -205,6 +205,11 @@ body {
   animation-delay: 120ms;
 }
 
+/* Sticky elements should not be animated with transforms; this breaks sticky in some browsers. */
+.stagger-in > .sticky {
+  animation: none;
+}
+
 .submissions-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

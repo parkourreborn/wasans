@@ -84,6 +84,15 @@ type ErrorStateProps = {
   className?: string
 }
 
+type SubmissionListProps = {
+  children: React.ReactNode
+  className?: string
+}
+
+export function SubmissionList({ children, className }: SubmissionListProps) {
+  return <div className={cn("min-w-0", className)}>{children}</div>
+}
+
 export function ErrorState({ title = "Something went wrong", message, actions, className }: ErrorStateProps) {
   return (
     <Card className={cn("border-border/70 bg-background/55", className)}>

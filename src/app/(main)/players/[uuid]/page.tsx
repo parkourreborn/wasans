@@ -7,7 +7,7 @@ import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { TrialName, trials } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
-import { ErrorState, PageShell, SectionCard, StatCard } from "@/components/custom/page-shell"
+import { ErrorState, PageShell, SubmissionList } from "@/components/custom/page-shell"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
@@ -298,7 +298,7 @@ export default function PlayerProfilePage() {
           <Skeleton className="h-28 w-full" />
         </div>
 
-        <SectionCard contentClassName="space-y-4">
+        <SubmissionList className="space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <Skeleton className="h-10 w-72" />
             <Skeleton className="h-10 w-full lg:max-w-md" />
@@ -322,7 +322,7 @@ export default function PlayerProfilePage() {
               </div>
             ))}
           </div>
-        </SectionCard>
+        </SubmissionList>
       </PageShell>
     )
   }
@@ -384,6 +384,9 @@ export default function PlayerProfilePage() {
                 </h1>
               </div>
               <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>
+              <div className="inline-flex items-center rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur-xl">
+                Rank #{player.rank}
+              </div>
             </div>
           </div>
 
@@ -395,138 +398,138 @@ export default function PlayerProfilePage() {
         </div>
       </div>
 
-      <SectionCard>
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="sticky top-14 z-30 space-y-4 rounded-3xl border border-border/60 bg-background/80 p-4 backdrop-blur-xl md:top-0">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <Input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={mode === "submissions" ? "Search submissions by trial, state, time, date, uuid" : "Search PBs by trial, time, date"}
+            className="w-full min-w-0 lg:flex-1"
+          />
+
+          <div className="w-full lg:w-auto lg:shrink-0">
             <Tabs value={mode} onValueChange={(value) => setMode(value as ViewMode)}>
               <TabsList>
                 <TabsTrigger className="cursor-pointer" value="submissions">All Submissions</TabsTrigger>
                 <TabsTrigger className="cursor-pointer" value="pbs">Personal Bests</TabsTrigger>
               </TabsList>
             </Tabs>
-
-            <Input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={mode === "submissions" ? "Search submissions by trial, state, time, date, uuid" : "Search PBs by trial, time, date"}
-              className="w-full lg:max-w-md"
-            />
-          </div>
-
-          <div className="submissions-grid">
-            {mode === "submissions" ? (
-              filteredSubmissions.length > 0 ? (
-                filteredSubmissions.map((row) => (
-                  <div
-                    key={row.uuid}
-                    className="submission-grid-item cursor-pointer"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => router.push(`/submissions/${row.uuid}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault()
-                        router.push(`/submissions/${row.uuid}`)
-                      }
-                    }}
-                  >
-                    <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
-                      <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                        <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-                          <ScoreVideoPreview submissionUuid={row.uuid} />
-                        </div>
-
-                        <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                          <div className="w-full flex items-center justify-between gap-2">
-                            <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                              {row.trial_name} {formatTime(row.time)}
-                            </h3>
-                          </div>
-
-                          <div className="w-full flex flex-col gap-1.5 text-base">
-                            {row.state !== "denied" ? (
-                              <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
-                            ) : null}
-                            <Link
-                              href={`/players/${encodeURIComponent(player.uuid)}`}
-                              className="truncate text-muted-foreground underline underline-offset-4"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              {player.player_name}
-                            </Link>
-                            <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
-                          </div>
-
-                          <div className="flex items-end justify-between">
-                            <Badges badges={[row.state, wrSubmissionIds.has(row.uuid) ? "wr" : ""]} />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-xl border border-border bg-muted p-6 text-center text-sm text-muted-foreground">
-                  No matching submissions.
-                </div>
-              )
-            ) : filteredPbs.length > 0 ? (
-              filteredPbs.map((row) => (
-                <div
-                  key={`${row.submission_uuid}-${row.trial_name}`}
-                  className="submission-grid-item cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => router.push(`/submissions/${row.submission_uuid}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault()
-                      router.push(`/submissions/${row.submission_uuid}`)
-                    }
-                  }}
-                >
-                  <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
-                    <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                      <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-                        <ScoreVideoPreview submissionUuid={row.submission_uuid} />
-                      </div>
-
-                      <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                        <div className="w-full flex items-center justify-between gap-2">
-                          <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                            {row.trial_name} {formatTime(row.time)}
-                          </h3>
-                        </div>
-
-                        <div className="w-full flex flex-col gap-1.5 text-base">
-                          <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
-                          <Link
-                            href={`/players/${encodeURIComponent(player.uuid)}`}
-                            className="truncate text-muted-foreground underline underline-offset-4"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            {player.player_name}
-                          </Link>
-                          <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
-                        </div>
-
-                        <div className="flex items-end justify-between">
-                          <Badges badges={["approved", wrSubmissionIds.has(row.submission_uuid) ? "wr" : ""]} />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-xl border border-border bg-muted p-6 text-center text-sm text-muted-foreground">
-                No matching personal bests.
-              </div>
-            )}
           </div>
         </div>
-      </SectionCard>
+      </div>
+
+      <SubmissionList className="submissions-grid">
+        {mode === "submissions" ? (
+          filteredSubmissions.length > 0 ? (
+            filteredSubmissions.map((row) => (
+              <div
+                key={row.uuid}
+                className="submission-grid-item cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => router.push(`/submissions/${row.uuid}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    router.push(`/submissions/${row.uuid}`)
+                  }
+                }}
+              >
+                <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
+                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                    <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
+                      <ScoreVideoPreview submissionUuid={row.uuid} />
+                    </div>
+
+                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                      <div className="w-full flex items-center justify-between gap-2">
+                        <h3 className="text-xl font-bold leading-tight xl:text-2xl">
+                          {row.trial_name} {formatTime(row.time)}
+                        </h3>
+                      </div>
+
+                      <div className="w-full flex flex-col gap-1.5 text-base">
+                        {row.state !== "denied" ? (
+                          <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
+                        ) : null}
+                        <Link
+                          href={`/players/${encodeURIComponent(player.uuid)}`}
+                          className="truncate text-muted-foreground underline underline-offset-4"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {player.player_name}
+                        </Link>
+                        <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
+                      </div>
+
+                      <div className="flex items-end justify-between">
+                        <Badges badges={[row.state, wrSubmissionIds.has(row.uuid) ? "wr" : ""]} />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground backdrop-blur-xl">
+              No matching submissions.
+            </div>
+          )
+        ) : filteredPbs.length > 0 ? (
+          filteredPbs.map((row) => (
+            <div
+              key={`${row.submission_uuid}-${row.trial_name}`}
+              className="submission-grid-item cursor-pointer"
+              role="button"
+              tabIndex={0}
+              onClick={() => router.push(`/submissions/${row.submission_uuid}`)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault()
+                  router.push(`/submissions/${row.submission_uuid}`)
+                }
+              }}
+            >
+              <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
+                <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                  <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
+                    <ScoreVideoPreview submissionUuid={row.submission_uuid} />
+                  </div>
+
+                  <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                    <div className="w-full flex items-center justify-between gap-2">
+                      <h3 className="text-xl font-bold leading-tight xl:text-2xl">
+                        {row.trial_name} {formatTime(row.time)}
+                      </h3>
+                    </div>
+
+                    <div className="w-full flex flex-col gap-1.5 text-base">
+                      <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
+                      <Link
+                        href={`/players/${encodeURIComponent(player.uuid)}`}
+                        className="truncate text-muted-foreground underline underline-offset-4"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {player.player_name}
+                      </Link>
+                      <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
+                    </div>
+
+                    <div className="flex items-end justify-between">
+                      <Badges badges={["approved", wrSubmissionIds.has(row.submission_uuid) ? "wr" : ""]} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ))
+        ) : (
+          <div className="rounded-2xl border border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground backdrop-blur-xl">
+            No matching personal bests.
+          </div>
+        )}
+      </SubmissionList>
     </PageShell>
   )
 }
