@@ -1,4 +1,5 @@
 import "server-only"
+import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 type PlayerListOptions = {
   limit: number
@@ -9,6 +10,8 @@ type PlayerListOptions = {
 export type PlayerWithRankRow = {
   uuid: string
   player_id: string
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   player_name: string
   score: number
   permission: number
@@ -17,6 +20,8 @@ export type PlayerWithRankRow = {
 }
 
 export async function listPlayers(db: D1Database, options: PlayerListOptions) {
+  await ensurePlayerAvatarColumns(db)
+
   const filters: string[] = []
   const bindings: Array<string | number> = []
 
@@ -32,7 +37,7 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
     .first<{ count: number }>()
 
   const rows = await db.prepare(
-    `SELECT uuid, player_id, player_name, score, permission, date_joined
+    `SELECT uuid, player_id, discord_avatar, discord_discriminator, player_name, score, permission, date_joined
      FROM players
      ${whereSql}
      ORDER BY score DESC, player_name ASC
@@ -48,13 +53,24 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
 }
 
 export async function getPlayerByUuid(db: D1Database, uuid: string) {
+  await ensurePlayerAvatarColumns(db)
+
   return db.prepare(
-    `SELECT uuid, player_id, player_name, score, permission, date_joined
+    `SELECT uuid, player_id, discord_avatar, discord_discriminator, player_name, score, permission, date_joined
      FROM players
      WHERE uuid = ?`
   )
     .bind(uuid)
-    .first<{ uuid: string; player_id: string; player_name: string; score: number; permission: number; date_joined: string }>()
+    .first<{
+      uuid: string
+      player_id: string
+      discord_avatar?: string | null
+      discord_discriminator?: string | null
+      player_name: string
+      score: number
+      permission: number
+      date_joined: string
+    }>()
 }
 
 export async function getPlayerRank(db: D1Database, score: number) {

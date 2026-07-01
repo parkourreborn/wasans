@@ -1,11 +1,14 @@
 import "server-only"
 import { getPlayerByUuid, getPlayerPbs, getPlayerRank, getPlayerSubmissions } from "@/lib/server/repositories/player-repository"
+import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 export async function buildPlayerDetail(
   db: D1Database,
   uuid: string,
   options: { includePbs: boolean; includeRecentSubmissions: boolean; submissionsLimit: number }
 ) {
+  await ensurePlayerAvatarColumns(db)
+
   const player = await getPlayerByUuid(db, uuid)
 
   if (!player) {

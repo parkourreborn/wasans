@@ -12,6 +12,8 @@ DROP TABLE IF EXISTS api_rate_limits;
 CREATE TABLE players (
   uuid TEXT PRIMARY KEY,
   player_id TEXT NOT NULL,
+  discord_avatar TEXT,
+  discord_discriminator TEXT,
   player_name TEXT NOT NULL,
   date_joined TEXT NOT NULL,
   permission INTEGER NOT NULL DEFAULT 0,
