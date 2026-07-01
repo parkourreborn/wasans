@@ -183,13 +183,6 @@ export default function PlayersPage() {
 
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
           <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
-            <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
-              <TabsList>
-                <TabsTrigger className="cursor-pointer" value="overall">Overall</TabsTrigger>
-                <TabsTrigger className="cursor-pointer" value="trial">Specific Trial</TabsTrigger>
-              </TabsList>
-            </Tabs>
-
             {mode === "trial" ? (
               <div className="w-full lg:w-56">
                 <Select value={trialName} onValueChange={(value) => setTrialName(value as TrialName)}>
@@ -206,6 +199,13 @@ export default function PlayersPage() {
                 </Select>
               </div>
             ) : null}
+            <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
+              <TabsList>
+                <TabsTrigger className="cursor-pointer" value="overall">Overall</TabsTrigger>
+                <TabsTrigger className="cursor-pointer" value="trial">Specific Trial</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
           </div>
 
           <Input
