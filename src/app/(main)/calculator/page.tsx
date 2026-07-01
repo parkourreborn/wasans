@@ -4,8 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { apiV1 } from "@/lib/api";
 import { TrialName, trials as trialNames } from "@/lib/trials";
-import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader, PageShell } from "@/components/custom/page-shell";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -25,47 +26,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import calculateScore from "@/lib/calc-score";
-
-type Trial = {
-  district: string;
-};
-
-const trials: Record<string, Trial> = {
-  CRYSTAL: { district: "DOWNTOWN" },
-  GENESIS: { district: "DOWNTOWN" },
-  GLASS: { district: "DOWNTOWN" },
-  RISER: { district: "DOWNTOWN" },
-  SOLAR: { district: "DOWNTOWN" },
-  VESTIBULE: { district: "DOWNTOWN" },
-
-  CELSIUS: { district: "DIRWIK" },
-  CIRCULATION: { district: "DIRWIK" },
-  FLOW: { district: "DIRWIK" },
-  MARTYR: { district: "DIRWIK" },
-  "NEON BOLD": { district: "DIRWIK" },
-  SAWDUST: { district: "DIRWIK" },
-
-  ASCENSION: { district: "FRAGMENT" },
-  FAITH: { district: "FRAGMENT" },
-  GALE: { district: "FRAGMENT" },
-  GRIP: { district: "FRAGMENT" },
-  THREAD: { district: "FRAGMENT" },
-  UMBREL: { district: "FRAGMENT" },
-
-  DEPOT: { district: "STACK" },
-  FLAME: { district: "STACK" },
-  IRONSING: { district: "STACK" },
-  MONOXIDE: { district: "STACK" },
-  "RUST BELT": { district: "STACK" },
-  WISP: { district: "STACK" },
-};
-
-const districtStyles: Record<string, string> = {
-  DOWNTOWN: "bg-sky-600 text-white",
-  DIRWIK: "bg-violet-600 text-white",
-  FRAGMENT: "bg-emerald-600 text-white",
-  STACK: "bg-fuchsia-600 text-white",
-};
 
 const scoreFor = (wr: number, your_time: number, trial: TrialName) => {
   if (your_time < wr) return 0;
@@ -306,7 +266,6 @@ export default function Home() {
     () =>
       trialNames.map((trialName) => {
         const trial = trialKey(trialName);
-        const data = trials[trial];
         const wrEntry = worldRecords.find((u) => trialKey(u.trial_name) === trial);
         const wr = Number(wrEntry?.time || 0);
         const your_time_value = times[trial] ?? "";
@@ -321,7 +280,6 @@ export default function Home() {
 
         return {
           trial,
-          district: data.district,
           wr,
           wrSubmissionUuid: wrEntry?.submission_uuid || "",
           your_time_value,
@@ -349,90 +307,76 @@ export default function Home() {
     setTimes((current) => ({ ...current, [trial]: value }));
   };
 
+  const statusMessage = worldRecordError
+    ? worldRecordError
+    : loadingWorldRecords
+      ? "Loading world records."
+      : userTimesError
+        ? userTimesError
+        : loadingUserTimes
+          ? "Loading your approved times."
+          : "Scores are calculated using a weighted curve: platinum times begin at 0.300, then scale upward toward the live WR table."
+
   return (
-    <div className="w-full min-h-screen">
-      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="mx-auto max-w-7xl px-4 py-4 md:px-6 md:py-6 lg:px-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">Score Calculator</h2>
-              <p className="text-sm text-muted-foreground">
-                {worldRecordError
-                  ? worldRecordError
-                  : loadingWorldRecords
-                    ? "Loading world records."
-                    : userTimesError
-                      ? userTimesError
-                      : loadingUserTimes
-                        ? "Loading your approved times."
-                        : "Scores are calculated using a weighted curve: Platinum times are 0.3, times higher are cubed with a cap of 1."}
-              </p>
-              <div className="mt-3 max-w-xs">
-                <Select value={selectedPlayerUuid} onValueChange={(value) => setSelectedPlayerUuid(value)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Your player or select one" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {players.map((player) => (
-                      <SelectItem key={player.uuid} value={player.uuid}>
-                        {player.player_name} ({player.score.toFixed(3)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+    <PageShell className="lg:max-w-[95vw]">
+      <PageHeader title="Score Calculator" />
+
+      <div className="space-y-2">
+        {(worldRecordError || loadingWorldRecords || userTimesError || loadingUserTimes) ? (
+          <p className="text-xs text-muted-foreground">{statusMessage}</p>
+        ) : null}
+
+        <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Filter</p>
+                <div className="mt-1 w-full">
+                  <Select value={selectedPlayerUuid} onValueChange={(value) => setSelectedPlayerUuid(value)}>
+                    <SelectTrigger className="h-8 w-full text-xs">
+                      <SelectValue placeholder="Select player" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {players.map((player) => (
+                        <SelectItem key={player.uuid} value={player.uuid}>
+                          {player.player_name} ({player.score.toFixed(3)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
-            <div className="rounded-3xl border border-border bg-muted px-4 py-3 text-right">
-              <div className="w-full h-full text-center">
-                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Your score</p>
-                <p className="text-3xl font-semibold">{averageScore.toFixed(3)}</p>
-              </div>
+
               {authChecked && !authUser ? (
-                <div className="mt-3 flex flex-col items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleSaveTimes}
-                    className="inline-flex items-center rounded-full bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-                  >
-                    Save times
-                  </button>
-                  {saveMessage ? (
-                    <p className="text-xs text-muted-foreground">{saveMessage}</p>
-                  ) : null}
+                <div className="flex items-center gap-2">
+                  <Button type="button" size="sm" onClick={handleSaveTimes}>Save times</Button>
+                  {saveMessage ? <p className="text-xs text-muted-foreground">{saveMessage}</p> : null}
                 </div>
               ) : null}
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="p-4 md:p-6 lg:p-8">
-        <Card className="mx-auto max-w-7xl">
-          <CardContent className="overflow-x-auto px-0">
-            <Table className="min-w-full border-separate border-spacing-0">
-              <TableHeader>
-                <TableRow className="bg-muted">
-                  <TableHead className="rounded-tl-xl px-3 py-2">District</TableHead>
-                  <TableHead className="px-3 py-2">Trial</TableHead>
-                  <TableHead className="px-3 py-2">WR</TableHead>
-                  <TableHead className="px-3 py-2">Time</TableHead>
-                  <TableHead className="rounded-tr-xl px-3 py-2">Score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.trial} className="bg-background">
-                    <TableCell className="px-3 py-2">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] ${
-                          districtStyles[row.district] ?? "bg-muted text-foreground"
-                        }`}
-                      >
-                        {row.district}
-                      </span>
-                    </TableCell>
-                    <TableCell className="px-3 py-2 font-semibold">{row.trial}</TableCell>
-                  <TableCell className="px-3 py-2 text-left text-sm font-medium text-sky-600">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
+            <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Final score</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{averageScore.toFixed(3)}</p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <Table className="min-w-full border-separate border-spacing-0">
+            <TableHeader>
+              <TableRow className="bg-muted/70">
+                <TableHead className="rounded-tl-xl px-2 py-1.5">Trial</TableHead>
+                <TableHead className="px-2 py-1.5">WR</TableHead>
+                <TableHead className="px-2 py-1.5">Time</TableHead>
+                <TableHead className="rounded-tr-xl px-2 py-1.5 text-right">Score</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.trial} className="bg-background">
+                  <TableCell className="px-2 py-1 text-xs font-semibold leading-none">{row.trial}</TableCell>
+                  <TableCell className="px-2 py-1 text-left text-xs font-medium text-sky-600">
                     {row.wrSubmissionUuid ? (
                       <Link
                         href={`/submissions/${encodeURIComponent(row.wrSubmissionUuid)}`}
@@ -444,39 +388,38 @@ export default function Home() {
                       <span>{row.wr ? row.wr.toFixed(3) : "0.000"}</span>
                     )}
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-left text-sm font-medium">
-                    <div className="flex items-center gap-2">
+                  <TableCell className="px-2 py-1">
+                    <div className="flex items-center gap-1.5 text-xs">
                       <Input
                         type="text"
                         inputMode="decimal"
                         value={row.your_time_value}
                         onChange={(event) => handleTimeChange(row.trial, event.target.value)}
-                        className="w-28"
+                        className="h-4 w-20 rounded-none border-0 border-b border-border bg-transparent px-0 text-2xs shadow-none focus-visible:ring-0"
                       />
                       <button
                         type="button"
                         onClick={() => resetTimes(row.trial)}
-                        className={`inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition ${
-                          row.your_time_value !== "0.000"
-                            ? "hover:bg-background opacity-100"
-                            : "opacity-0 pointer-events-none"
+                        className={`inline-flex h-4 w-4 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition hover:bg-background ${
+                          row.your_time_value !== (pbs[row.trial] ?? "0.000")
+                            ? "opacity-100"
+                            : "pointer-events-none opacity-0"
                         }`}
                         aria-label={`Reset ${row.trial} time`}
                       >
-                        <RefreshCcw className="h-4 w-4" />
+                        <RefreshCcw className="h-2.5 w-2.5" />
                       </button>
                     </div>
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-left font-semibold text-emerald-600">
+                  <TableCell className="px-2 py-1 text-right text-xs font-semibold text-emerald-600">
                     {row.score.toFixed(3)}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

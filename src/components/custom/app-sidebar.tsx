@@ -1,6 +1,9 @@
 "use client"
 
+import type { CSSProperties, ComponentType, ReactNode } from "react"
 import { useEffect, useState } from "react"
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
@@ -10,26 +13,28 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { apiV1 } from "@/lib/api"
+import { getRouteTheme, isRouteActive } from "@/lib/route-theme"
 import {
-    ArrowRightLeftIcon,
+  ArrowRightLeftIcon,
   BookIcon,
   CalculatorIcon,
-  ExternalLinkIcon,  FileTextIcon,  HelpCircleIcon,
+  ExternalLinkIcon,
+  FileTextIcon,
+  HelpCircleIcon,
   HomeIcon,
   LogInIcon,
   MedalIcon,
   OctagonAlertIcon,
   TimerIcon,
   TrophyIcon,
-  UserSearchIcon
 } from "lucide-react"
-import Link from "next/link"
 
 type AuthUser = {
   uuid: string
@@ -57,7 +62,78 @@ type AuditSummaryResponse = {
 const discordInviteUrl = "https://discord.gg/9pnRYDU6wg"
 const lastSeenErrorStorageKey = "wasans:last-seen-error-at"
 
+const primaryLinks = [
+  { href: "/", label: "Overview", icon: HomeIcon },
+  { href: "/rules", label: "Rules", icon: BookIcon },
+  { href: "/information", label: "Information", icon: HelpCircleIcon },
+]
+
+const toolLinks = [
+  { href: "/calculator", label: "Calculator", icon: CalculatorIcon },
+  { href: "/compare", label: "Compare", icon: ArrowRightLeftIcon },
+]
+
+const boardLinks = [
+  { href: "/wrs", label: "World Records", icon: MedalIcon },
+  { href: "/submissions", label: "Submissions", icon: TimerIcon },
+  { href: "/players", label: "Leaderboard", icon: TrophyIcon },
+]
+
+type SidebarLinkItem = {
+  href: string
+  label: string
+  icon: ComponentType<{ className?: string }>
+}
+
+function SidebarNavItem({
+  item,
+  pathname,
+  onClick,
+  leading,
+}: {
+  item: SidebarLinkItem
+  pathname: string
+  onClick?: () => void
+  leading?: ReactNode
+}) {
+  const Icon = item.icon
+  const theme = getRouteTheme(item.href)
+  const active = isRouteActive(pathname, item.href)
+
+  const content = (
+    <div className="relative flex min-w-0 items-center gap-2">
+      {leading ?? <Icon className="shrink-0" />}
+      <span className="truncate">{item.label}</span>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -bottom-1 h-0.5 origin-left scale-x-0 rounded-full bg-(--page-accent) transition-transform duration-200 ease-out group-hover/menu-button:scale-x-100 group-focus-visible/menu-button:scale-x-100 group-data-[active=true]/menu-button:scale-x-100"
+      />
+    </div>
+  )
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        isActive={active}
+        className="relative overflow-visible data-[active=true]:bg-[color-mix(in_oklab,var(--page-accent)_14%,transparent)] data-[active=true]:font-semibold data-[active=true]:text-(--page-accent)"
+        style={{ ["--page-accent" as string]: theme.accent } as CSSProperties}
+      >
+        {onClick ? (
+          <button type="button" className="flex w-full items-center gap-2 text-left cursor-pointer" onClick={onClick}>
+            {content}
+          </button>
+        ) : (
+          <Link href={item.href}>{content}</Link>
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+}
+
 export function AppSidebar() {
+  const router = useRouter()
+  const pathname = usePathname()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [latestErrorAt, setLatestErrorAt] = useState<string | null>(null)
   const [lastSeenErrorAt, setLastSeenErrorAt] = useState<string | null>(() =>
@@ -123,175 +199,114 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-        <SidebarHeader className="flex items-center justify-between gap-2">
-            <h2 className="text-2xl font-semibold italic group-data-[collapsible=icon]:hidden">hi i wasans</h2>
-            <SidebarTrigger className="p-2" />
-        </SidebarHeader>
-        <SidebarContent>
-            <SidebarGroup>
+      <SidebarHeader className="border-b border-sidebar-border/70 px-3 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="truncate text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">Wasans</h2>
+          <SidebarTrigger className="p-2" />
+        </div>
+      </SidebarHeader>
 
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/">
-                                <div className="flex items-center gap-2">
-                                    <HomeIcon />
-                                    <span>Home</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarMenu>
+            {primaryLinks.map((item) => (
+              <SidebarNavItem key={item.href} item={item} pathname={pathname} />
+            ))}
 
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/rules">
-                                <div className="flex items-center gap-2">
-                                    <BookIcon />
-                                    <span>Rules</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
+            <SidebarSeparator />
 
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/information">
-                                <div className="flex items-center gap-2">
-                                    <HelpCircleIcon />
-                                    <span>Information</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
+            {toolLinks.map((item) => (
+              <SidebarNavItem
+                key={item.href}
+                item={item}
+                pathname={pathname}
+                onClick={() => {
+                  if (pathname === item.href) {
+                    window.history.replaceState(null, "", item.href)
+                    router.replace(item.href)
+                    router.refresh()
+                    return
+                  }
 
-                    <SidebarSeparator />
+                  router.push(item.href)
+                }}
+              />
+            ))}
 
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/calculator">
-                                <div className="flex items-center gap-2">
-                                    <CalculatorIcon />
-                                    <span>Calculator</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
+            <SidebarSeparator />
 
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/compare">
-                                <div className="flex items-center gap-2">
-                                    <ArrowRightLeftIcon />
-                                    <span>Compare</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
+            {boardLinks.map((item) => (
+              <SidebarNavItem key={item.href} item={item} pathname={pathname} />
+            ))}
 
-                    <SidebarSeparator />
-
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/wrs">
-                                <div className="flex items-center gap-2">
-                                    <MedalIcon />
-                                    <span>WRs</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/submissions">
-                                <div className="flex items-center gap-2">
-                                    <TimerIcon />
-                                    <span>Submissions</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <Link href="/players">
-                                <div className="flex items-center gap-2">
-                                    <UserSearchIcon />
-                                    <span>Leaderboard</span>
-                                </div>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    {(user?.permission ?? 0) >= 1 && (
-                      <>
-                        <SidebarSeparator />
-                        <SidebarMenuItem>
-                          <SidebarMenuButton asChild>
-                            <Link href="/logs">
-                              <div className="flex w-full items-center gap-2">
-                                <div className="relative">
-                                  <FileTextIcon />
-                                  {hasNewErrors && (
-                                    <span className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-destructive ring-2 ring-sidebar">
-                                      <OctagonAlertIcon className="size-2 text-destructive-foreground" />
-                                    </span>
-                                  )}
-                                </div>
-                                <span>Logs</span>
-                              </div>
-                            </Link>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      </>
-                    )}
-
-                </SidebarMenu>
-
-            </SidebarGroup>
-
-        </SidebarContent>
-        <SidebarFooter className="gap-3">
-            {user && (
-                <div className="flex min-w-0 items-center gap-2 rounded-md border border-sidebar-border p-2">
-                <PlayerAvatar
-                  playerName={user.player_name}
-                  discordId={user.player_id}
-                  discordAvatar={user.discord_avatar}
-                  discordDiscriminator={user.discord_discriminator}
-                />
-                    <div className="min-w-0">
-                        <Link
-                            href={`/players/${encodeURIComponent(user.uuid)}`}
-                            className="truncate text-sm font-medium text-sky-600 underline underline-offset-2"
-                        >
-                            {formatPlayerNameWithScore(user.player_name, user.score)}
-                        </Link>
-                        <p className="truncate text-xs text-muted-foreground">
-                            {user.permission >= 1 ? "Moderator" : "Member"}
-                        </p>
+            {(user?.permission ?? 0) >= 1 && (
+              <>
+                <SidebarSeparator />
+                <SidebarNavItem
+                  item={{ href: "/logs", label: "Logs", icon: FileTextIcon }}
+                  pathname={pathname}
+                  leading={
+                    <div className="relative">
+                      <FileTextIcon className="shrink-0" />
+                      {hasNewErrors && (
+                        <span className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-destructive ring-2 ring-sidebar">
+                          <OctagonAlertIcon className="size-2 text-destructive-foreground" />
+                        </span>
+                      )}
                     </div>
-                </div>
+                  }
+                />
+              </>
             )}
-            {!user && (
-                <a
-                    href={apiV1("/auth/discord/start")}
-                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
-                    target="_blank"
-                >
-                    <LogInIcon className="size-4" />
-                    <span>Login with Discord</span>
-                </a>
-            )}
-            <Link
-                href={discordInviteUrl}
-                rel="noreferrer"
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
-            >
-                <ExternalLinkIcon className="size-4" />
-                <span>Discord</span>
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter className="gap-2">
+        {user ? (
+          <div className="flex min-w-0 items-center gap-3 rounded-lg border border-sidebar-border/70 p-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1.5">
+            <Link href={`/players/${encodeURIComponent(user.uuid)}`} aria-label={`Open ${user.player_name} profile`}>
+              <PlayerAvatar
+                playerName={user.player_name}
+                discordId={user.player_id}
+                discordAvatar={user.discord_avatar}
+                discordDiscriminator={user.discord_discriminator}
+              />
             </Link>
-        </SidebarFooter>
+            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+              <Link
+                href={`/players/${encodeURIComponent(user.uuid)}`}
+                className="truncate text-sm font-medium text-primary underline underline-offset-2"
+              >
+                {formatPlayerNameWithScore(user.player_name, user.score)}
+              </Link>
+              <p className="truncate text-xs text-muted-foreground">
+                {user.permission >= 1 ? "Moderator" : "Member"}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <a
+            href={apiV1("/auth/discord/start")}
+            target="_blank"
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
+          >
+            <LogInIcon className="size-4" />
+            <span>Login with Discord</span>
+          </a>
+        )}
+
+        <Link
+          href={discordInviteUrl}
+          rel="noreferrer"
+          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
+        >
+          <ExternalLinkIcon className="size-4" />
+          <span>Discord</span>
+        </Link>
+      </SidebarFooter>
+
+      <SidebarRail />
     </Sidebar>
   )
 }

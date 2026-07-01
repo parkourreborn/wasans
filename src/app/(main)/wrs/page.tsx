@@ -2,25 +2,28 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { apiV1 } from "@/lib/api"
 import { trials } from "@/lib/trials"
-import Badges from "@/components/custom/badges"
-import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
-import { formatPlayerNameWithScore } from "@/lib/player-score"
+import { SubmissionCard } from "@/components/custom/submission-card"
+import { PageHeader, PageShell, SubmissionList } from "@/components/custom/page-shell"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type Submission = {
   submission_uuid: string
   player_uuid: string
+  player_id?: string | null
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   trial_name: string
   player_name: string
   player_score: number
   time: number
   date: string
   state: string
+  moderator_note?: string | null
+  moderator_username?: string | null
 }
 
 type SubmissionsResponse = {
@@ -33,6 +36,7 @@ type CachedWrs = {
 }
 
 const WR_CACHE_KEY = "wasans_wrs_cache"
+const submissionUuidListKey = "submission_uuids"
 
 const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
 
@@ -100,9 +104,9 @@ function loadCachedSubmissions() {
 
 export default function SubmissionsPage() {
   const router = useRouter()
-  const [submissions, setSubmissions] = useState<Submission[]>(() => loadCachedSubmissions() || [])
+  const [submissions, setSubmissions] = useState<Submission[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [loading, setLoading] = useState(() => !loadCachedSubmissions()?.length)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const orderedSubmissions = useMemo(() => {
@@ -122,7 +126,23 @@ export default function SubmissionsPage() {
   }, [searchQuery, orderedSubmissions])
 
   useEffect(() => {
+    if (typeof window === "undefined" || loading) {
+      return
+    }
+
+    window.localStorage.setItem(
+      submissionUuidListKey,
+      JSON.stringify(filteredSubmissions.map((submission) => submission.submission_uuid))
+    )
+  }, [filteredSubmissions, loading])
+
+  useEffect(() => {
     const cachedResults = loadCachedSubmissions()
+
+    if (cachedResults?.length) {
+      setSubmissions(cachedResults)
+      setLoading(false)
+    }
 
     const fetchSubmissions = async () => {
       try {
@@ -150,7 +170,9 @@ export default function SubmissionsPage() {
         }
         console.error(err)
       } finally {
-        setLoading(false)
+        if (!cachedResults) {
+          setLoading(false)
+        }
       }
     }
 
@@ -159,98 +181,102 @@ export default function SubmissionsPage() {
 
   if (loading) {
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
+      <PageShell>
+        <PageHeader
+          title="World Records"
+        />
+        <div className="rounded-3xl border border-border/60 bg-background/55 p-4 backdrop-blur-xl">
+          <Skeleton className="h-10 w-full md:w-72" />
+        </div>
+
+        <SubmissionList className="submissions-grid">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="submission-grid-item">
+              <Card className="h-full overflow-hidden border-border/60 bg-background/55">
+                <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                  <Skeleton className="flex-1 rounded-lg" />
+                  <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                    <div className="space-y-2">
+                      <Skeleton className="h-7 w-32" />
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-20" />
+                    </div>
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ))}
+        </SubmissionList>
+      </PageShell>
     )
   }
 
   if (error) {
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-destructive">{error}</p>
-      </div>
+      <PageShell>
+        <div className="rounded-3xl border border-border/60 bg-background/55 p-6 text-sm text-destructive backdrop-blur-xl">
+          Unable to load the record board right now.
+          <div className="mt-2">{error}</div>
+        </div>
+      </PageShell>
     )
   }
 
   if (submissions.length === 0) {
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-muted-foreground">No submissions yet</p>
-      </div>
+      <PageShell>
+        <div className="rounded-3xl border border-border/60 bg-background/55 p-6 text-sm text-muted-foreground backdrop-blur-xl">
+          No approved world records are available yet.
+        </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="flex h-full w-full flex-col gap-4">
-      <Input
-        type="search"
-        value={searchQuery}
-        onChange={(event) => setSearchQuery(event.target.value)}
-        placeholder="Search by trial name"
-        aria-label="Search world records by trial name"
-        className="h-10"
-      />
+    <PageShell>
+      <PageHeader title="World Records" />
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="sticky top-14 z-30 rounded-3xl border border-border/60 bg-background/80 p-4 backdrop-blur-xl md:top-0">
+        <Input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by trial name"
+          aria-label="Search world records by trial name"
+          className="h-10 w-full min-w-0"
+        />
+      </div>
+
+      <SubmissionList className="submissions-grid">
         {filteredSubmissions.length === 0 ? (
-          <div className="flex h-full w-full items-center justify-center">
+          <div className="flex min-h-48 w-full items-center justify-center rounded-2xl border border-dashed border-border/70 bg-background/40 backdrop-blur-xl">
             <p className="text-muted-foreground">No matching world records</p>
           </div>
         ) : (
-          <div className="submissions-grid">
-            {filteredSubmissions.map((submission) => (
-              <div
-                key={submission.submission_uuid}
-                className="submission-grid-item cursor-pointer"
-                role="button"
-                tabIndex={0}
-                onClick={() => router.push(`/submissions/${submission.submission_uuid}`)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault()
-                    router.push(`/submissions/${submission.submission_uuid}`)
-                  }
-                }}
-              >
-                <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer overflow-hidden">
-                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                    <div className="flex min-w-0 flex-1 items-center justify-center">
-                      <ScoreVideoPreview submissionUuid={submission.submission_uuid} />
-                    </div>
-
-                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
-                      <div className="w-full flex items-center justify-between gap-2">
-                        <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                          {submission.trial_name} {formatTime(submission.time)}
-                        </h3>
-                      </div>
-
-                      <div className="w-full flex flex-col gap-1.5 text-base">
-                        <Link
-                          href={`/players/${submission.player_uuid}`}
-                          className="text-muted-foreground truncate underline underline-offset-4"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          {formatPlayerNameWithScore(
-                            submission.player_name,
-                            submission.player_score
-                          )}
-                        </Link>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(submission.date)}
-                        </p>
-                      </div>
-
-                      <Badges badges={["wr", "approved"]} />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            ))}
-          </div>
+          filteredSubmissions.map((submission) => (
+            <SubmissionCard
+              key={submission.submission_uuid}
+              submissionUuid={submission.submission_uuid}
+              trialName={submission.trial_name}
+              timeText={formatTime(submission.time)}
+              playerUuid={submission.player_uuid}
+              playerName={submission.player_name}
+              playerScore={submission.player_score}
+              playerId={submission.player_id}
+              playerDiscordAvatar={submission.discord_avatar}
+              playerDiscordDiscriminator={submission.discord_discriminator}
+              dateText={formatDate(submission.date)}
+              state="approved"
+              isWr
+              moderatorNote={submission.moderator_note}
+              moderatorUsername={submission.moderator_username}
+              className="h-full cursor-pointer overflow-hidden border-border/60 bg-background/55 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]"
+              onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
+            />
+          ))
         )}
-      </div>
-    </div>
+      </SubmissionList>
+    </PageShell>
   )
 }
