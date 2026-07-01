@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
-import { TrialName } from "@/lib/trials"
+import { TrialName, trials } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import Badges from "@/components/custom/badges"
@@ -87,6 +87,27 @@ type SubmissionsResponse = {
 }
 
 type ViewMode = "submissions" | "pbs"
+
+const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
+
+function compareByTrialOrder(aTrialName: string, bTrialName: string) {
+  const aOrder = trialOrderByName.get(String(aTrialName).toUpperCase())
+  const bOrder = trialOrderByName.get(String(bTrialName).toUpperCase())
+
+  if (aOrder == null && bOrder == null) {
+    return aTrialName.localeCompare(bTrialName)
+  }
+
+  if (aOrder == null) {
+    return 1
+  }
+
+  if (bOrder == null) {
+    return -1
+  }
+
+  return aOrder - bOrder
+}
 
 async function fetchAllPlayerSubmissions(playerUuid: string) {
   const limit = 100
@@ -216,28 +237,36 @@ export default function PlayerProfilePage() {
     })
   }, [submissions, wrByTrial])
 
+  const orderedPbRows = React.useMemo(() => {
+    return [...pbRows].sort((a, b) => compareByTrialOrder(a.trial_name, b.trial_name))
+  }, [pbRows])
+
   const filteredPbs = React.useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) {
-      return pbRows
+      return orderedPbRows
     }
 
-    return pbRows.filter((row) => {
+    return orderedPbRows.filter((row) => {
       return (
         row.trial_name.toLowerCase().includes(query)
         || String(row.time).includes(query)
         || formatDate(row.date).toLowerCase().includes(query)
       )
     })
-  }, [pbRows, search])
+  }, [orderedPbRows, search])
+
+  const orderedSubmissionRows = React.useMemo(() => {
+    return [...submissionRows].sort((a, b) => compareByTrialOrder(a.trial_name, b.trial_name))
+  }, [submissionRows])
 
   const filteredSubmissions = React.useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) {
-      return submissionRows
+      return orderedSubmissionRows
     }
 
-    return submissionRows.filter((row) => {
+    return orderedSubmissionRows.filter((row) => {
       return (
         row.trial_name.toLowerCase().includes(query)
         || row.state.toLowerCase().includes(query)
@@ -246,7 +275,7 @@ export default function PlayerProfilePage() {
         || formatDate(row.date).toLowerCase().includes(query)
       )
     })
-  }, [search, submissionRows])
+  }, [orderedSubmissionRows, search])
 
   if (loading) {
     return (
