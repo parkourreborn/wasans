@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Sidebar,
   SidebarContent,
@@ -13,7 +13,7 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { apiV1 } from "@/lib/api"
 import {
@@ -61,7 +61,6 @@ export function AppSidebar() {
   const [lastSeenErrorAt, setLastSeenErrorAt] = useState<string | null>(() =>
     typeof window === "undefined" ? null : window.localStorage.getItem(lastSeenErrorStorageKey)
   )
-  const playerId = user?.player_id || ""
 
   useEffect(() => {
     const loadUser = async () => {
@@ -118,16 +117,6 @@ export function AppSidebar() {
     return () => window.clearInterval(interval)
   }, [user])
 
-  const avatarUrl = useMemo(() => {
-    if (!playerId || !/^\d+$/.test(playerId)) {
-      return ""
-    }
-
-    const lastDigit = Number(playerId.slice(-1))
-    return `https://cdn.discordapp.com/embed/avatars/${lastDigit % 5}.png`
-  }, [playerId])
-
-  const fallback = user?.player_name?.slice(0, 2).toUpperCase() || "WA"
   const hasNewErrors = Boolean(latestErrorAt && (!lastSeenErrorAt || latestErrorAt > lastSeenErrorAt))
 
   return (
@@ -274,10 +263,7 @@ export function AppSidebar() {
         <SidebarFooter className="gap-3">
             {user && (
                 <div className="flex min-w-0 items-center gap-2 rounded-md border border-sidebar-border p-2">
-                    <Avatar>
-                        {avatarUrl && <AvatarImage src={avatarUrl} alt={`${user.player_name} avatar`} />}
-                        <AvatarFallback>{fallback}</AvatarFallback>
-                    </Avatar>
+                <PlayerAvatar playerName={user.player_name} discordId={user.player_id} />
                     <div className="min-w-0">
                         <Link
                             href={`/players/${encodeURIComponent(user.uuid)}`}
