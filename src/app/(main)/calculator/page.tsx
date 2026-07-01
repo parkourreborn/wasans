@@ -307,7 +307,8 @@ export default function Home() {
       trialNames.map((trialName) => {
         const trial = trialKey(trialName);
         const data = trials[trial];
-        const wr = Number(worldRecords.find((u) => trialKey(u.trial_name) === trial)?.time || 0);
+        const wrEntry = worldRecords.find((u) => trialKey(u.trial_name) === trial);
+        const wr = Number(wrEntry?.time || 0);
         const your_time_value = times[trial] ?? "";
         const your_time = Number(your_time_value);
         const isValidTime =
@@ -322,6 +323,7 @@ export default function Home() {
           trial,
           district: data.district,
           wr,
+          wrSubmissionUuid: wrEntry?.submission_uuid || "",
           your_time_value,
           score: isValidTime ? scoreFor(wr, your_time, trialName) : 0,
         };
@@ -431,12 +433,16 @@ export default function Home() {
                     </TableCell>
                     <TableCell className="px-3 py-2 font-semibold">{row.trial}</TableCell>
                   <TableCell className="px-3 py-2 text-left text-sm font-medium text-sky-600">
-                    <Link
-                      href={`/submissions/${encodeURIComponent(worldRecords.find(u=>u.trial_name === row.trial)?.submission_uuid || "")}`}
-                      className="underline underline-offset-4 transition hover:text-sky-700"
-                    >
-                      {row.wr ? row.wr.toFixed(3) : "0.000"}
-                    </Link>
+                    {row.wrSubmissionUuid ? (
+                      <Link
+                        href={`/submissions/${encodeURIComponent(row.wrSubmissionUuid)}`}
+                        className="underline underline-offset-4 transition hover:text-sky-700"
+                      >
+                        {row.wr ? row.wr.toFixed(3) : "0.000"}
+                      </Link>
+                    ) : (
+                      <span>{row.wr ? row.wr.toFixed(3) : "0.000"}</span>
+                    )}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-left text-sm font-medium">
                     <div className="flex items-center gap-2">

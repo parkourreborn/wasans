@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { TrialName } from "@/lib/trials"
@@ -119,6 +119,7 @@ async function fetchAllPlayerSubmissions(playerUuid: string) {
 
 export default function PlayerProfilePage() {
   const { uuid } = useParams()
+  const router = useRouter()
   const [player, setPlayer] = React.useState<PlayerInfo | null>(null)
   const [worldRecords, setWorldRecords] = React.useState<WorldRecordValue[]>([])
   const [submissions, setSubmissions] = React.useState<SubmissionValue[]>([])
@@ -321,38 +322,57 @@ export default function PlayerProfilePage() {
             />
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-2">
+          <div className="submissions-grid">
             {mode === "submissions" ? (
               filteredSubmissions.length > 0 ? (
                 filteredSubmissions.map((row) => (
-                  <Card key={row.uuid} className="h-full overflow-hidden transition-shadow hover:shadow-lg">
-                    <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                      <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-                        <ScoreVideoPreview submissionUuid={row.uuid} />
-                      </div>
-
-                      <div className="flex w-44 shrink-0 flex-col justify-between gap-3 py-1 xl:w-56">
-                        <div className="w-full flex items-center justify-between gap-2">
-                          <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                            {row.trial_name} {formatTime(row.time)}
-                          </h3>
+                  <div
+                    key={row.uuid}
+                    className="submission-grid-item cursor-pointer"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => router.push(`/submissions/${row.uuid}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        router.push(`/submissions/${row.uuid}`)
+                      }
+                    }}
+                  >
+                    <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
+                      <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                        <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
+                          <ScoreVideoPreview submissionUuid={row.uuid} />
                         </div>
 
-                        <div className="w-full flex flex-col gap-1.5 text-base">
-                          <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
-                          <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
-                        </div>
+                        <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                          <div className="w-full flex items-center justify-between gap-2">
+                            <h3 className="text-xl font-bold leading-tight xl:text-2xl">
+                              {row.trial_name} {formatTime(row.time)}
+                            </h3>
+                          </div>
 
-                        <div className="flex items-end justify-between">
-                          <Badges badges={[row.state, wrSubmissionIds.has(row.uuid) ? "wr" : ""]} />
-                        </div>
+                          <div className="w-full flex flex-col gap-1.5 text-base">
+                            {row.state !== "denied" ? (
+                              <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
+                            ) : null}
+                            <Link
+                              href={`/players/${encodeURIComponent(player.uuid)}`}
+                              className="truncate text-muted-foreground underline underline-offset-4"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              {player.player_name}
+                            </Link>
+                            <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
+                          </div>
 
-                        <Button variant="outline" className="cursor-pointer" asChild>
-                          <Link href={`/submissions/${encodeURIComponent(row.uuid)}`}>View submission</Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                          <div className="flex items-end justify-between">
+                            <Badges badges={[row.state, wrSubmissionIds.has(row.uuid) ? "wr" : ""]} />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 ))
               ) : (
                 <div className="rounded-xl border border-border bg-muted p-6 text-center text-sm text-muted-foreground">
@@ -361,34 +381,51 @@ export default function PlayerProfilePage() {
               )
             ) : filteredPbs.length > 0 ? (
               filteredPbs.map((row) => (
-                <Card key={`${row.submission_uuid}-${row.trial_name}`} className="h-full overflow-hidden transition-shadow hover:shadow-lg">
-                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
-                    <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-                      <ScoreVideoPreview submissionUuid={row.submission_uuid} />
-                    </div>
-
-                    <div className="flex w-44 shrink-0 flex-col justify-between gap-3 py-1 xl:w-56">
-                      <div className="w-full flex items-center justify-between gap-2">
-                        <h3 className="text-xl font-bold leading-tight xl:text-2xl">
-                          {row.trial_name} {formatTime(row.time)}
-                        </h3>
+                <div
+                  key={`${row.submission_uuid}-${row.trial_name}`}
+                  className="submission-grid-item cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/submissions/${row.submission_uuid}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      router.push(`/submissions/${row.submission_uuid}`)
+                    }
+                  }}
+                >
+                  <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
+                    <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                      <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
+                        <ScoreVideoPreview submissionUuid={row.submission_uuid} />
                       </div>
 
-                      <div className="w-full flex flex-col gap-1.5 text-base">
-                        <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
-                        <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
-                      </div>
+                      <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                        <div className="w-full flex items-center justify-between gap-2">
+                          <h3 className="text-xl font-bold leading-tight xl:text-2xl">
+                            {row.trial_name} {formatTime(row.time)}
+                          </h3>
+                        </div>
 
-                      <div className="flex items-end justify-between">
-                        <Badges badges={["approved", wrSubmissionIds.has(row.submission_uuid) ? "wr" : ""]} />
-                      </div>
+                        <div className="w-full flex flex-col gap-1.5 text-base">
+                          <p className="text-sm font-semibold">Score {row.score.toFixed(3)}</p>
+                          <Link
+                            href={`/players/${encodeURIComponent(player.uuid)}`}
+                            className="truncate text-muted-foreground underline underline-offset-4"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {player.player_name}
+                          </Link>
+                          <p className="text-sm text-muted-foreground">{formatDate(row.date)}</p>
+                        </div>
 
-                      <Button variant="outline" className="cursor-pointer" asChild>
-                        <Link href={`/submissions/${encodeURIComponent(row.submission_uuid)}`}>View submission</Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                        <div className="flex items-end justify-between">
+                          <Badges badges={["approved", wrSubmissionIds.has(row.submission_uuid) ? "wr" : ""]} />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               ))
             ) : (
               <div className="rounded-xl border border-border bg-muted p-6 text-center text-sm text-muted-foreground">

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { trials as trialNames, TrialName } from "@/lib/trials"
@@ -108,18 +109,53 @@ type ListResponse<T> = {
   error?: string
 }
 
-export default function ComparePage() {
+function ComparePageClient() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [players, setPlayers] = React.useState<PlayerItem[]>([])
   const [worldRecords, setWorldRecords] = React.useState<WorldRecordValue[]>([])
   const [loadingPlayers, setLoadingPlayers] = React.useState(true)
   const [loadingTimes, setLoadingTimes] = React.useState(false)
-  const [playerAUuid, setPlayerAUuid] = React.useState("")
-  const [playerBUuid, setPlayerBUuid] = React.useState("")
+  const [playerAUuid, setPlayerAUuid] = React.useState(() => searchParams.get("a") || "")
+  const [playerBUuid, setPlayerBUuid] = React.useState(() => searchParams.get("b") || "")
   const [playerATimes, setPlayerATimes] = React.useState<Record<string, PlayerTrialTime>>(zeroTimes)
   const [playerBTimes, setPlayerBTimes] = React.useState<Record<string, PlayerTrialTime>>(zeroTimes)
   const [playerAName, setPlayerAName] = React.useState("")
   const [playerBName, setPlayerBName] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    const paramA = searchParams.get("a") || ""
+    const paramB = searchParams.get("b") || ""
+    setPlayerAUuid((current) => (current === paramA ? current : paramA))
+    setPlayerBUuid((current) => (current === paramB ? current : paramB))
+  }, [searchParams])
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+
+    if (playerAUuid) {
+      params.set("a", playerAUuid)
+    } else {
+      params.delete("a")
+    }
+
+    if (playerBUuid) {
+      params.set("b", playerBUuid)
+    } else {
+      params.delete("b")
+    }
+
+    const nextQuery = params.toString()
+    const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname
+    const currentQuery = searchParams.toString()
+    const currentUrl = currentQuery ? `${pathname}?${currentQuery}` : pathname
+
+    if (nextUrl !== currentUrl) {
+      router.replace(nextUrl, { scroll: false })
+    }
+  }, [pathname, playerAUuid, playerBUuid, router, searchParams])
 
   React.useEffect(() => {
     const loadPlayers = async () => {
@@ -363,5 +399,19 @@ export default function ComparePage() {
         </Card>
       )}
     </div>
+  )
+}
+
+export default function ComparePage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex items-center justify-center py-12">
+          <Spinner className="size-8 text-muted-foreground" />
+        </div>
+      }
+    >
+      <ComparePageClient />
+    </React.Suspense>
   )
 }
