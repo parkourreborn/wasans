@@ -45,6 +45,8 @@ type PlayerPb = {
 type PlayerInfo = {
   uuid: string
   player_id: string
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   player_name: string
   score: number
   date_joined: string
@@ -274,7 +276,13 @@ export default function PlayerProfilePage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="flex items-center gap-4">
-          <PlayerAvatar playerName={player.player_name} discordId={player.player_id} size="lg" />
+          <PlayerAvatar
+            playerName={player.player_name}
+            discordId={player.player_id}
+            discordAvatar={player.discord_avatar}
+            discordDiscriminator={player.discord_discriminator}
+            size="lg"
+          />
           <div>
             <h1 className="text-3xl font-bold">{player.player_name}</h1>
             <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>

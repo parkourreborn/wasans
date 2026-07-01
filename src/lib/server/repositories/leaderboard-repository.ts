@@ -1,9 +1,12 @@
 import "server-only"
+import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 export async function listOverallLeaderboard(db: D1Database, limit: number, offset: number) {
+  await ensurePlayerAvatarColumns(db)
+
   const count = await db.prepare(`SELECT COUNT(*) AS count FROM players`).first<{ count: number }>()
   const rows = await db.prepare(
-    `SELECT uuid AS player_uuid, player_name, score AS overall_score, date_joined
+    `SELECT uuid AS player_uuid, player_id, discord_avatar, discord_discriminator, player_name, score AS overall_score, date_joined
      FROM players
      ORDER BY score DESC, player_name ASC
      LIMIT ? OFFSET ?`
@@ -18,6 +21,8 @@ export async function listOverallLeaderboard(db: D1Database, limit: number, offs
 }
 
 export async function listTrialLeaderboard(db: D1Database, trialName: string, limit: number, offset: number) {
+  await ensurePlayerAvatarColumns(db)
+
   const wr = await db.prepare(`SELECT submission_uuid, time FROM wrs WHERE trial_name = ?`)
     .bind(trialName)
     .first<{ submission_uuid: string; time: number }>()
@@ -27,6 +32,8 @@ export async function listTrialLeaderboard(db: D1Database, trialName: string, li
   const rows = await db.prepare(
     `SELECT players.uuid AS player_uuid,
             players.player_id,
+            players.discord_avatar,
+            players.discord_discriminator,
             players.player_name,
             pbs.time,
             pbs.submission_uuid
@@ -36,7 +43,15 @@ export async function listTrialLeaderboard(db: D1Database, trialName: string, li
      LIMIT ? OFFSET ?`
   )
     .bind(trialName, limit, offset)
-    .all<{ player_uuid: string; player_id: string; player_name: string; time: number | null; submission_uuid: string | null }>()
+    .all<{
+      player_uuid: string
+      player_id: string
+      discord_avatar?: string | null
+      discord_discriminator?: string | null
+      player_name: string
+      time: number | null
+      submission_uuid: string | null
+    }>()
 
   const results = (rows.results || []).map((row, index) => ({
     ...row,

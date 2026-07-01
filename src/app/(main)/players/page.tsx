@@ -22,6 +22,8 @@ import { TrialName } from "@/lib/trials"
 type OverallPlayer = {
   uuid: string
   player_id: string
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   player_name: string
   score: number
 }
@@ -29,6 +31,8 @@ type OverallPlayer = {
 type TrialPlayer = {
   player_uuid: string
   player_id: string
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   player_name: string
   time: number | null
   submission_uuid: string | null
@@ -54,6 +58,8 @@ type DisplayRow = {
   playerUuid: string
   playerName: string
   playerId?: string
+  playerAvatar?: string | null
+  playerDiscriminator?: string | null
   overallScore?: number
   trialTime?: number | null
   trialScore?: number
@@ -109,6 +115,8 @@ export default function PlayersPage() {
             playerUuid: row.uuid,
             playerName: row.player_name,
             playerId: row.player_id,
+            playerAvatar: row.discord_avatar,
+            playerDiscriminator: row.discord_discriminator,
             overallScore: Number(row.score),
             rank: index + 1,
           }))
@@ -129,6 +137,8 @@ export default function PlayersPage() {
         const result = (json.results || []).map((row, index) => ({
           playerUuid: row.player_uuid,
           playerId: row.player_id,
+          playerAvatar: row.discord_avatar,
+          playerDiscriminator: row.discord_discriminator,
           playerName: row.player_name,
           trialTime: row.time,
           trialScore: Number(row.score || 0),
@@ -226,7 +236,12 @@ export default function PlayersPage() {
               <Card key={`${mode}-${row.playerUuid}`} className="overflow-hidden hover:shadow-lg transition-shadow">
                 <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
-                    <PlayerAvatar playerName={row.playerName} discordId={row.playerId} />
+                    <PlayerAvatar
+                      playerName={row.playerName}
+                      discordId={row.playerId}
+                      discordAvatar={row.playerAvatar}
+                      discordDiscriminator={row.playerDiscriminator}
+                    />
                     <div className="min-w-0">
                       <Link
                         href={`/players/${row.playerUuid}`}

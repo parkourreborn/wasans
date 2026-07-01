@@ -4,6 +4,7 @@ import {
   getDiscordClientSecret,
   getDiscordRedirectUri,
 } from "@/lib/server/discord-oauth"
+import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 import { generateUUID } from "@/lib/utils"
 
 type DiscordTokenResponse = {
@@ -17,11 +18,15 @@ type DiscordUserResponse = {
   id: string
   username: string
   global_name?: string | null
+  avatar?: string | null
+  discriminator?: string | null
 }
 
 type PlayerAuthRow = {
   uuid: string
   player_id: string
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   player_name: string
   score: number
   permission: number
@@ -114,8 +119,10 @@ async function getDiscordUser(accessToken: string, tokenType: string) {
 }
 
 async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUserResponse, token: DiscordTokenResponse) {
+  await ensurePlayerAvatarColumns(db)
+
   const linkedPlayer = await db.prepare(
-    `SELECT players.uuid, players.player_id, players.player_name, players.score, players.permission
+    `SELECT players.uuid, players.player_id, players.discord_avatar, players.discord_discriminator, players.player_name, players.score, players.permission
      FROM oauth_accounts
      JOIN players ON players.uuid = oauth_accounts.player_uuid
      WHERE oauth_accounts.provider = 'discord'
@@ -125,7 +132,7 @@ async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUserRespon
     .first<PlayerAuthRow>()
 
   let player = linkedPlayer ?? await db.prepare(
-    `SELECT uuid, player_id, player_name, score, permission
+    `SELECT uuid, player_id, discord_avatar, discord_discriminator, player_name, score, permission
      FROM players
      WHERE player_id = ?`
   )
@@ -143,19 +150,33 @@ async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUserRespon
 
     const playerUuid = generateUUID()
     await db.prepare(
-      `INSERT INTO players (uuid, player_id, player_name, date_joined, permission)
-       VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO players (uuid, player_id, discord_avatar, discord_discriminator, player_name, date_joined, permission)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(playerUuid, discordUser.id, playerName, String(now), 0)
+      .bind(playerUuid, discordUser.id, discordUser.avatar || null, discordUser.discriminator || null, playerName, String(now), 0)
       .run()
 
     player = {
       uuid: playerUuid,
       player_id: discordUser.id,
+      discord_avatar: discordUser.avatar || null,
+      discord_discriminator: discordUser.discriminator || null,
       player_name: playerName,
       score: 0,
       permission: 0,
     }
+  } else {
+    await db.prepare(
+      `UPDATE players
+       SET discord_avatar = ?,
+           discord_discriminator = ?
+       WHERE uuid = ?`
+    )
+      .bind(discordUser.avatar || null, discordUser.discriminator || null, player.uuid)
+      .run()
+
+    player.discord_avatar = discordUser.avatar || null
+    player.discord_discriminator = discordUser.discriminator || null
   }
 
   await db.prepare(
@@ -239,6 +260,8 @@ export async function completeDiscordOAuth(request: Request, env: CloudflareEnv)
   }
 
   try {
+    await ensurePlayerAvatarColumns(env.wasans)
+
     const token = await exchangeCodeForToken(code, getDiscordRedirectUri(), getDiscordClientId(env), getDiscordClientSecret(env))
     const discordUser = await getDiscordUser(token.access_token, token.token_type)
     const player = await findOrCreatePlayer(env.wasans, discordUser, token)

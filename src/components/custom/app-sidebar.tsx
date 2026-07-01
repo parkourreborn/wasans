@@ -34,6 +34,8 @@ import Link from "next/link"
 type AuthUser = {
   uuid: string
   player_id: string
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   player_name: string
   score: number
   permission: number
@@ -252,7 +254,12 @@ export function AppSidebar() {
         <SidebarFooter className="gap-3">
             {user && (
                 <div className="flex min-w-0 items-center gap-2 rounded-md border border-sidebar-border p-2">
-                <PlayerAvatar playerName={user.player_name} discordId={user.player_id} />
+                <PlayerAvatar
+                  playerName={user.player_name}
+                  discordId={user.player_id}
+                  discordAvatar={user.discord_avatar}
+                  discordDiscriminator={user.discord_discriminator}
+                />
                     <div className="min-w-0">
                         <Link
                             href={`/players/${encodeURIComponent(user.uuid)}`}

@@ -1,8 +1,11 @@
 import "server-only"
+import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 export type AuthUser = {
   uuid: string
   player_id: string
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   player_name: string
   score: number
   permission: number
@@ -32,6 +35,8 @@ function getCookie(request: Request, name: string) {
 }
 
 export async function getAuthUser(request: Request, db: D1Database) {
+  await ensurePlayerAvatarColumns(db)
+
   const sessionToken = getCookie(request, "wasans_session")
   let playerUuid: string | null = null
 
@@ -54,6 +59,8 @@ export async function getAuthUser(request: Request, db: D1Database) {
   return db.prepare(
     `SELECT players.uuid,
             COALESCE(oauth_accounts.provider_account_id, players.player_id) AS player_id,
+            players.discord_avatar,
+            players.discord_discriminator,
             players.player_name,
             players.score,
             players.permission
