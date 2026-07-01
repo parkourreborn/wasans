@@ -25,22 +25,11 @@ type PageHeaderProps = {
 }
 
 export function PageHeader({ title, description, eyebrow, actions, className }: PageHeaderProps) {
-  return (
-    <section className={cn("animate-subtle-in grid gap-4", className)}>
-      <div className="space-y-3">
-        {eyebrow ? (
-          <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">{eyebrow}</p>
-        ) : null}
-        <div className="space-y-3">
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">{title}</h1>
-          {description ? (
-            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p>
-          ) : null}
-        </div>
-        {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
-      </div>
+  return actions ? (
+    <section className={cn("animate-subtle-in flex flex-wrap items-center gap-3", className)}>
+      {actions}
     </section>
-  )
+  ) : null
 }
 
 type SectionCardProps = {

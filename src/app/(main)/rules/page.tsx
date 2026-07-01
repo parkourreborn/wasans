@@ -68,7 +68,6 @@ export default function RulesPage() {
   return (
     <PageShell className="max-w-6xl">
       <PageHeader
-        eyebrow="Policy"
         title="Rules"
         description="One clean reference for run validity, submission expectations, and member application requirements."
         aside={<StatCard label="Sections" value="4 blocks" meta="Run rules, submissions, applications, and FAQ." />}

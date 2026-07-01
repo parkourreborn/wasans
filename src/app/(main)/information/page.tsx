@@ -56,7 +56,6 @@ export default function InformationPage() {
   return (
     <PageShell className="max-w-6xl">
       <PageHeader
-        eyebrow="Reference"
         title="Information"
         description="Score explanation, role thresholds, frequently asked questions, and the short version of the Wasans lore in a single readable reference page."
         aside={<StatCard label="Reference blocks" value="3 sections" meta="Score model, FAQ, and Discord role thresholds." />}
