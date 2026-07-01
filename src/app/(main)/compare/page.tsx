@@ -4,10 +4,9 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { apiV1 } from "@/lib/api"
-import { PageHeader, PageShell, SectionCard } from "@/components/custom/page-shell"
+import { PageHeader, PageShell } from "@/components/custom/page-shell"
 import calculateScore from "@/lib/calc-score"
 import { trials as trialNames, TrialName } from "@/lib/trials"
-import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Spinner } from "@/components/ui/spinner"
@@ -126,13 +125,6 @@ function ComparePageClient() {
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    const paramA = searchParams.get("a") || ""
-    const paramB = searchParams.get("b") || ""
-    setPlayerAUuid((current) => (current === paramA ? current : paramA))
-    setPlayerBUuid((current) => (current === paramB ? current : paramB))
-  }, [searchParams])
-
-  React.useEffect(() => {
     const params = new URLSearchParams(searchParams.toString())
 
     if (playerAUuid) {
@@ -243,8 +235,10 @@ function ComparePageClient() {
         const bTime = Number(playerBTimes[trial].time)
         const wr = worldRecords.find((record) => record.trial_name.toUpperCase() === trial)
         const wrTime = wr?.time ?? 0
+
         return {
           trial: trialName,
+          wrTime,
           playerA: {
             time: playerATimes[trial].time,
             submissionUuid: playerATimes[trial].submissionUuid,
@@ -268,133 +262,142 @@ function ComparePageClient() {
 
   return (
     <PageShell className="lg:max-w-[95vw]">
-      <PageHeader
-        title="Compare Players"
-      />
+      <PageHeader title="Compare Players" />
 
-      <div className="grid gap-2 md:grid-cols-2">
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Player A</p>
-          <Select value={playerAUuid} onValueChange={setPlayerAUuid}>
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select player A" />
-            </SelectTrigger>
-            <SelectContent>
-              {players.map((player) => (
-                <SelectItem key={player.uuid} value={player.uuid}>
-                  {player.player_name} ({player.score.toFixed(3)})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Player B</p>
-          <Select value={playerBUuid} onValueChange={setPlayerBUuid}>
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select player B" />
-            </SelectTrigger>
-            <SelectContent>
-              {players.map((player) => (
-                <SelectItem key={player.uuid} value={player.uuid}>
-                  {player.player_name} ({player.score.toFixed(3)})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <div className="space-y-2">
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        {!error && (loadingPlayers || loadingTimes) ? (
+          <p className="text-xs text-muted-foreground">Loading comparison data.</p>
+        ) : null}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+        <div className="grid gap-2">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Players</p>
+                <div className="mt-1 grid gap-2 md:grid-cols-2">
+                  <Select value={playerAUuid} onValueChange={setPlayerAUuid}>
+                    <SelectTrigger className="h-8 w-full text-xs">
+                      <SelectValue placeholder="Select player A" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {players.map((player) => (
+                        <SelectItem key={player.uuid} value={player.uuid}>
+                          {player.player_name} ({player.score.toFixed(3)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-      {loadingPlayers || loadingTimes ? (
-        <div className="flex items-center justify-center py-6 lg:py-2">
-          <Spinner className="size-8 text-muted-foreground" />
+                  <Select value={playerBUuid} onValueChange={setPlayerBUuid}>
+                    <SelectTrigger className="h-8 w-full text-xs">
+                      <SelectValue placeholder="Select player B" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {players.map((player) => (
+                        <SelectItem key={player.uuid} value={player.uuid}>
+                          {player.player_name} ({player.score.toFixed(3)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      ) : (
-        <SectionCard contentClassName="p-0">
-          <Card className="overflow-hidden border-border/60 bg-background/55">
-          <CardContent className="overflow-x-auto p-0">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/25">
-                  <TableHead className="py-1.5">Trial</TableHead>
-                  <TableHead className="py-1.5">{playerAName || "Player A"}</TableHead>
-                  <TableHead className="py-1.5">{playerBName || "Player B"}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.trial}>
-                    <TableCell className="py-1.5 text-xs font-medium">{row.trial}</TableCell>
-                    <TableCell className="py-1.5">
-                      <div className="text-xs">
-                        {row.playerA.submissionUuid ? (
-                          <Link
-                            href={`/submissions/${encodeURIComponent(row.playerA.submissionUuid)}`}
-                            className={`inline-flex items-center gap-2 ${timeIndicatorClass(
-                              Number(row.playerA.time),
-                              Number(row.playerB.time)
-                            )} underline underline-offset-4`}
-                          >
-                            <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
-                              Number(row.playerA.time),
-                              Number(row.playerB.time)
-                            )}`} />
-                            {row.playerA.time} <span className="text-muted-foreground">({row.playerA.score.toFixed(3)})</span>
-                          </Link>
-                        ) : (
-                          <p className={`inline-flex items-center gap-2 text-sm ${timeIndicatorClass(
-                            Number(row.playerA.time),
-                            Number(row.playerB.time)
-                          )}`}>
-                            <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
-                              Number(row.playerA.time),
-                              Number(row.playerB.time)
-                            )}`} />
-                              {row.playerA.time} <span className="text-muted-foreground">({row.playerA.score.toFixed(3)})</span>
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                      <TableCell className="py-1.5">
-                        <div className="text-xs">
-                        {row.playerB.submissionUuid ? (
-                          <Link
-                            href={`/submissions/${encodeURIComponent(row.playerB.submissionUuid)}`}
-                            className={`inline-flex items-center gap-2 ${timeIndicatorClass(
-                              Number(row.playerB.time),
-                              Number(row.playerA.time)
-                            )} underline underline-offset-4`}
-                          >
-                            <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
-                              Number(row.playerB.time),
-                              Number(row.playerA.time)
-                            )}`} />
-                            {row.playerB.time} <span className="text-muted-foreground">({row.playerB.score.toFixed(3)})</span>
-                          </Link>
-                        ) : (
-                          <p className={`inline-flex items-center gap-2 text-sm ${timeIndicatorClass(
-                            Number(row.playerB.time),
-                            Number(row.playerA.time)
-                          )}`}>
-                            <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
-                              Number(row.playerB.time),
-                              Number(row.playerA.time)
-                            )}`} />
-                              {row.playerB.time} <span className="text-muted-foreground">({row.playerB.score.toFixed(3)})</span>
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
+
+        {loadingPlayers || loadingTimes ? (
+          <div className="flex items-center justify-center py-6 lg:py-2">
+            <Spinner className="size-8 text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table className="min-w-full border-separate border-spacing-0">
+                  <TableHeader>
+                    <TableRow className="bg-muted/70">
+                      <TableHead className="rounded-tl-xl px-2 py-1.5">Trial</TableHead>
+                      <TableHead className="px-2 py-1.5">WR</TableHead>
+                      <TableHead className="px-2 py-1.5">{playerAName || "Player A"}</TableHead>
+                      <TableHead className="rounded-tr-xl px-2 py-1.5">{playerBName || "Player B"}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={row.trial} className="bg-background">
+                        <TableCell className="px-2 py-1 text-xs font-semibold leading-none uppercase">{row.trial}</TableCell>
+                        <TableCell className="px-2 py-1 text-left text-xs font-medium text-sky-600">
+                          {row.wrTime > 0 ? formatTime(row.wrTime) : "0.000"}
+                        </TableCell>
+
+                        <TableCell className="px-2 py-1">
+                          <div className="text-xs">
+                            {row.playerA.submissionUuid ? (
+                              <Link
+                                href={`/submissions/${encodeURIComponent(row.playerA.submissionUuid)}`}
+                                className={`inline-flex items-center gap-2 ${timeIndicatorClass(
+                                  Number(row.playerA.time),
+                                  Number(row.playerB.time)
+                                )} underline underline-offset-4`}
+                              >
+                                <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
+                                  Number(row.playerA.time),
+                                  Number(row.playerB.time)
+                                )}`} />
+                                {row.playerA.time} <span className="text-muted-foreground">({row.playerA.score.toFixed(3)})</span>
+                              </Link>
+                            ) : (
+                              <p className={`inline-flex items-center gap-2 text-xs ${timeIndicatorClass(
+                                Number(row.playerA.time),
+                                Number(row.playerB.time)
+                              )}`}>
+                                <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
+                                  Number(row.playerA.time),
+                                  Number(row.playerB.time)
+                                )}`} />
+                                {row.playerA.time} <span className="text-muted-foreground">({row.playerA.score.toFixed(3)})</span>
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="px-2 py-1">
+                          <div className="text-xs">
+                            {row.playerB.submissionUuid ? (
+                              <Link
+                                href={`/submissions/${encodeURIComponent(row.playerB.submissionUuid)}`}
+                                className={`inline-flex items-center gap-2 ${timeIndicatorClass(
+                                  Number(row.playerB.time),
+                                  Number(row.playerA.time)
+                                )} underline underline-offset-4`}
+                              >
+                                <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
+                                  Number(row.playerB.time),
+                                  Number(row.playerA.time)
+                                )}`} />
+                                {row.playerB.time} <span className="text-muted-foreground">({row.playerB.score.toFixed(3)})</span>
+                              </Link>
+                            ) : (
+                              <p className={`inline-flex items-center gap-2 text-xs ${timeIndicatorClass(
+                                Number(row.playerB.time),
+                                Number(row.playerA.time)
+                              )}`}>
+                                <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${timeIndicatorDotClass(
+                                  Number(row.playerB.time),
+                                  Number(row.playerA.time)
+                                )}`} />
+                                {row.playerB.time} <span className="text-muted-foreground">({row.playerB.score.toFixed(3)})</span>
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-        </SectionCard>
-      )}
+          </div>
+        )}
+      </div>
     </PageShell>
   )
 }

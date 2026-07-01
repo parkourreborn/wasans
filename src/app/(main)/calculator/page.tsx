@@ -327,11 +327,11 @@ export default function Home() {
         ) : null}
 
         <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Filter</p>
-                <div className="mt-1 w-full max-w-md">
+                <div className="mt-1 w-full">
                   <Select value={selectedPlayerUuid} onValueChange={(value) => setSelectedPlayerUuid(value)}>
                     <SelectTrigger className="h-8 w-full text-xs">
                       <SelectValue placeholder="Select player" />
@@ -356,69 +356,69 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/45">
+          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Final score</p>
             <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{averageScore.toFixed(3)}</p>
           </div>
         </div>
 
-        <Table className="min-w-full border-separate border-spacing-0">
-          <TableHeader>
-            <TableRow className="bg-muted/70">
-              <TableHead className="rounded-tl-xl px-2 py-1.5">Trial</TableHead>
-              <TableHead className="px-2 py-1.5">WR</TableHead>
-              <TableHead className="px-2 py-1.5">Time</TableHead>
-              <TableHead className="rounded-tr-xl px-2 py-1.5 text-right">Score</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.trial} className="bg-background">
-                <TableCell className="px-2 py-1">
-                  <div className="text-xs font-semibold leading-none">{row.trial}</div>
-                </TableCell>
-                <TableCell className="px-2 py-1 text-left text-xs font-medium text-sky-600">
-                  {row.wrSubmissionUuid ? (
-                    <Link
-                      href={`/submissions/${encodeURIComponent(row.wrSubmissionUuid)}`}
-                      className="underline underline-offset-4 transition hover:text-sky-700"
-                    >
-                      {row.wr ? row.wr.toFixed(3) : "0.000"}
-                    </Link>
-                  ) : (
-                    <span>{row.wr ? row.wr.toFixed(3) : "0.000"}</span>
-                  )}
-                </TableCell>
-                <TableCell className="px-2 py-1 text-left text-xs font-medium">
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      value={row.your_time_value}
-                      onChange={(event) => handleTimeChange(row.trial, event.target.value)}
-                      className="h-7 w-20 text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => resetTimes(row.trial)}
-                      className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition ${
-                        row.your_time_value !== "0.000"
-                          ? "hover:bg-background opacity-100"
-                          : "opacity-0 pointer-events-none"
-                      }`}
-                      aria-label={`Reset ${row.trial} time`}
-                    >
-                      <RefreshCcw className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </TableCell>
-                <TableCell className="px-2 py-1 text-right text-xs font-semibold text-emerald-600">
-                  {row.score.toFixed(3)}
-                </TableCell>
+        <div className="overflow-x-auto">
+          <Table className="min-w-full border-separate border-spacing-0">
+            <TableHeader>
+              <TableRow className="bg-muted/70">
+                <TableHead className="rounded-tl-xl px-2 py-1.5">Trial</TableHead>
+                <TableHead className="px-2 py-1.5">WR</TableHead>
+                <TableHead className="px-2 py-1.5">Time</TableHead>
+                <TableHead className="rounded-tr-xl px-2 py-1.5 text-right">Score</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.trial} className="bg-background">
+                  <TableCell className="px-2 py-1 text-xs font-semibold leading-none">{row.trial}</TableCell>
+                  <TableCell className="px-2 py-1 text-left text-xs font-medium text-sky-600">
+                    {row.wrSubmissionUuid ? (
+                      <Link
+                        href={`/submissions/${encodeURIComponent(row.wrSubmissionUuid)}`}
+                        className="underline underline-offset-4 transition hover:text-sky-700"
+                      >
+                        {row.wr ? row.wr.toFixed(3) : "0.000"}
+                      </Link>
+                    ) : (
+                      <span>{row.wr ? row.wr.toFixed(3) : "0.000"}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="px-2 py-1">
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={row.your_time_value}
+                        onChange={(event) => handleTimeChange(row.trial, event.target.value)}
+                        className="h-4 w-20 rounded-none border-0 border-b border-border bg-transparent px-0 text-2xs shadow-none focus-visible:ring-0"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => resetTimes(row.trial)}
+                        className={`inline-flex h-4 w-4 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition hover:bg-background ${
+                          row.your_time_value !== (pbs[row.trial] ?? "0.000")
+                            ? "opacity-100"
+                            : "pointer-events-none opacity-0"
+                        }`}
+                        aria-label={`Reset ${row.trial} time`}
+                      >
+                        <RefreshCcw className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-2 py-1 text-right text-xs font-semibold text-emerald-600">
+                    {row.score.toFixed(3)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </PageShell>
   );
