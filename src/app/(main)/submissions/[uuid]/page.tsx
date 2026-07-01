@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Spinner } from "@/components/ui/spinner"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import {
   AlertDialog,
@@ -391,8 +391,43 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center p-4">
-        <Spinner className="size-8 text-muted-foreground" />
+      <div className="w-full min-h-screen p-4">
+        <Card className="w-full">
+          <CardHeader>
+            <div className="w-full flex flex-col gap-4">
+              <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)_2rem] items-start gap-3">
+                <Skeleton className="size-9 rounded-md" />
+
+                <div className="flex min-w-0 flex-col items-center gap-2 text-center">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <Skeleton className="h-8 w-56" />
+                    <Skeleton className="h-5 w-20" />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="hidden h-5 w-px sm:block" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="hidden h-5 w-px sm:block" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                </div>
+
+                <Skeleton className="size-9 rounded-md" />
+              </div>
+
+              <div className="flex flex-col justify-center gap-2 sm:flex-row">
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent>
+            <Skeleton className="h-[52vh] w-full rounded-md" />
+          </CardContent>
+        </Card>
       </div>
     )
   }

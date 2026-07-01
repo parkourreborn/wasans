@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageHeader, PageShell, SectionCard, StatCard } from "@/components/custom/page-shell"
 
 const runRules = [
   "Any glitches are prohibited. Banned glitches include: teleportation glitches, double vaulting, coil slide on a slope, impossible moves, and velocity-overriding moves (drophop).",
@@ -65,39 +66,39 @@ function RuleSection({
 
 export default function RulesPage() {
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 md:p-6">
-      <div>
-        <h1 className="text-3xl font-bold">Rules</h1>
-        <p className="text-muted-foreground">
-          One place for server conduct, run validity, submissions, and score applications.
-        </p>
-      </div>
+    <PageShell className="max-w-6xl">
+      <PageHeader
+        eyebrow="Policy"
+        title="Rules"
+        description="One clean reference for run validity, submission expectations, and member application requirements."
+        aside={<StatCard label="Sections" value="4 blocks" meta="Run rules, submissions, applications, and FAQ." />}
+      />
 
-      <RuleSection title="Score And Run Rules">
+      <SectionCard title="Score and run rules" description="What makes a run valid and what automatically invalidates it.">
         <ul className="list-disc space-y-2 pl-5">
           {runRules.map((rule) => (
             <li key={rule}>{rule}</li>
           ))}
         </ul>
-      </RuleSection>
+      </SectionCard>
 
-      <RuleSection title="Submission Rules">
+      <SectionCard title="Submission rules" description="Requirements for proof, time entry, and moderation flow.">
         <ul className="list-disc space-y-2 pl-5">
           {submissionRules.map((rule) => (
             <li key={rule}>{rule}</li>
           ))}
         </ul>
-      </RuleSection>
+      </SectionCard>
 
-      <RuleSection title="Member Applications">
+      <SectionCard title="Member applications" description="What a player needs before staff can review a score-based application.">
         <ul className="list-disc space-y-2 pl-5">
           {applicationRules.map((rule) => (
             <li key={rule}>{rule}</li>
           ))}
         </ul>
-      </RuleSection>
+      </SectionCard>
 
-      <RuleSection title="Frequently Asked Questions">
+      <SectionCard title="Frequently asked questions" description="The practical edge cases players most often need clarified.">
         <div className="space-y-4">
           {faqItems.map((item) => (
             <div key={item.question}>
@@ -106,7 +107,7 @@ export default function RulesPage() {
             </div>
           ))}
         </div>
-      </RuleSection>
-    </div>
+      </SectionCard>
+    </PageShell>
   )
 }

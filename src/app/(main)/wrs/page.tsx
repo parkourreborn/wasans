@@ -6,11 +6,12 @@ import Link from "next/link"
 import { apiV1 } from "@/lib/api"
 import { trials } from "@/lib/trials"
 import Badges from "@/components/custom/badges"
+import { PageHeader, PageShell, SectionCard, StatCard } from "@/components/custom/page-shell"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type Submission = {
   submission_uuid: string
@@ -159,42 +160,80 @@ export default function SubmissionsPage() {
 
   if (loading) {
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
+      <PageShell>
+        <PageHeader
+          title="World Records"
+        />
+
+        <SectionCard title="Record board" contentClassName="space-y-4">
+          <Skeleton className="h-10 w-full md:w-72" />
+          <div className="submissions-grid">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="submission-grid-item">
+                <Card className="h-full overflow-hidden border-border/70 bg-card/80">
+                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                    <Skeleton className="flex-1 rounded-lg" />
+                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                      <div className="space-y-2">
+                        <Skeleton className="h-7 w-32" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                      <Skeleton className="h-5 w-24" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </PageShell>
     )
   }
 
   if (error) {
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-destructive">{error}</p>
-      </div>
+      <PageShell>
+        <SectionCard title="World records" description="Unable to load the record board right now.">
+          <p className="text-destructive">{error}</p>
+        </SectionCard>
+      </PageShell>
     )
   }
 
   if (submissions.length === 0) {
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-muted-foreground">No submissions yet</p>
-      </div>
+      <PageShell>
+        <SectionCard title="World records" description="No approved world records are available yet.">
+          <p className="text-muted-foreground">No submissions yet</p>
+        </SectionCard>
+      </PageShell>
     )
   }
 
   return (
-    <div className="flex h-full w-full flex-col gap-4">
-      <Input
-        type="search"
-        value={searchQuery}
-        onChange={(event) => setSearchQuery(event.target.value)}
-        placeholder="Search by trial name"
-        aria-label="Search world records by trial name"
-        className="h-10"
-      />
+    <PageShell>
+      <PageHeader
+        title="World Records"
+       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <SectionCard
+        title="Record board"
+        description="Filter by trial name or jump straight into the run proof."
+        action={
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search by trial name"
+            aria-label="Search world records by trial name"
+            className="h-10 min-w-0 md:w-72"
+          />
+        }
+        contentClassName="min-h-0"
+      >
         {filteredSubmissions.length === 0 ? (
-          <div className="flex h-full w-full items-center justify-center">
+          <div className="flex min-h-48 w-full items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/15">
             <p className="text-muted-foreground">No matching world records</p>
           </div>
         ) : (
@@ -213,7 +252,7 @@ export default function SubmissionsPage() {
                   }
                 }}
               >
-                <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer overflow-hidden">
+                <Card className="h-full cursor-pointer overflow-hidden border-border/70 bg-card/80 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
                     <div className="flex min-w-0 flex-1 items-center justify-center">
                       <ScoreVideoPreview submissionUuid={submission.submission_uuid} />
@@ -250,7 +289,7 @@ export default function SubmissionsPage() {
             ))}
           </div>
         )}
-      </div>
-    </div>
+      </SectionCard>
+    </PageShell>
   )
 }

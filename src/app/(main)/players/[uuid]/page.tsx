@@ -7,14 +7,15 @@ import { apiV1 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { TrialName, trials } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
+import { ErrorState, PageHeader, PageShell, SectionCard, StatCard } from "@/components/custom/page-shell"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Spinner } from "@/components/ui/spinner"
 
 function formatTime(rawTime: number | string) {
   const value = Number(rawTime)
@@ -183,7 +184,7 @@ export default function PlayerProfilePage() {
         setSubmissions(submissionRows)
       } catch (err) {
         console.error(err)
-        setError(err instanceof Error ? err.message : "Unable to load profile")
+        setError("We couldn't load this profile right now.")
       } finally {
         setLoading(false)
       }
@@ -279,69 +280,123 @@ export default function PlayerProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
+      <PageShell>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-10 w-56" />
+            <Skeleton className="h-4 w-full max-w-xl" />
+            <div className="flex gap-3 pt-2">
+              <Skeleton className="h-10 w-36" />
+            </div>
+          </div>
+          <Skeleton className="h-28 w-full" />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-28 w-full" />
+        </div>
+
+        <SectionCard contentClassName="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <Skeleton className="h-10 w-72" />
+            <Skeleton className="h-10 w-full lg:max-w-md" />
+          </div>
+          <div className="submissions-grid">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="submission-grid-item">
+                <Card className="h-full overflow-hidden border-border/70 bg-card">
+                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                    <Skeleton className="flex-1 rounded-lg" />
+                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                      <div className="space-y-2">
+                        <Skeleton className="h-7 w-32" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                      <Skeleton className="h-5 w-24" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </PageShell>
     )
   }
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <p className="text-destructive">{error}</p>
-      </div>
+      <PageShell>
+        <ErrorState
+          title="Profile unavailable"
+          message={error}
+          actions={
+            <>
+              <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => router.push("/players")}>
+                Back to players
+              </Button>
+            </>
+          }
+        />
+      </PageShell>
     )
   }
 
   if (!player) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <p className="text-muted-foreground">Player not found.</p>
-      </div>
+      <PageShell>
+        <ErrorState
+          title="Player not found"
+          message="That profile does not exist or is no longer available."
+          actions={
+            <Button type="button" variant="outline" onClick={() => router.push("/players")}>
+              Back to players
+            </Button>
+          }
+        />
+      </PageShell>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="flex items-center gap-4">
-          <PlayerAvatar
-            playerName={player.player_name}
-            discordId={player.player_id}
-            discordAvatar={player.discord_avatar}
-            discordDiscriminator={player.discord_discriminator}
-            size="lg"
-          />
-          <div>
-            <h1 className="text-3xl font-bold">{player.player_name}</h1>
-            <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+    <PageShell>
+      <PageHeader
+        title={player.player_name}
+        description={`Joined ${formatDate(player.date_joined)}`}
+        actions={
           <Button className="cursor-pointer" asChild>
             <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`}>View in Calculator</Link>
           </Button>
+        }
+      />
+
+      <div className="flex items-center gap-4 rounded-2xl border border-border/70 bg-card p-4">
+        <PlayerAvatar
+          playerName={player.player_name}
+          discordId={player.player_id}
+          discordAvatar={player.discord_avatar}
+          discordDiscriminator={player.discord_discriminator}
+          size="lg"
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">{player.player_name}</p>
+          <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardContent className="px-4 py-3 text-center">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Overall Rank</p>
-            <p className="text-4xl font-bold text-primary">#{player.rank}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="px-4 py-3 text-center">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Wasans Score</p>
-            <p className="text-4xl font-semibold">{formatPlayerScore(player.score)}</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <StatCard label="Overall rank" value={`#${player.rank}`} />
+        <StatCard label="Wasans score" value={formatPlayerScore(player.score)} />
       </div>
 
-      <Card>
-        <CardContent className="space-y-4 p-4">
+      <SectionCard>
+        <div className="space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <Tabs value={mode} onValueChange={(value) => setMode(value as ViewMode)}>
               <TabsList>
@@ -470,8 +525,8 @@ export default function PlayerProfilePage() {
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </SectionCard>
+    </PageShell>
   )
 }

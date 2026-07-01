@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/.copilot
 
 # next.js
 /.next/
@@ -19,6 +20,7 @@
 
 # production
 /build
+prod-backup.sql
 
 # misc
 .DS_Store

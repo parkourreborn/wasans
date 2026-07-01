@@ -4,9 +4,9 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { apiV1 } from "@/lib/api"
+import { PageHeader, PageShell, SectionCard } from "@/components/custom/page-shell"
 import calculateScore from "@/lib/calc-score"
 import { trials as trialNames, TrialName } from "@/lib/trials"
-import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -267,19 +267,16 @@ function ComparePageClient() {
   )
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Compare Players</h1>
-          <p className="text-sm text-muted-foreground">Select two players and compare their approved times side by side.</p>
-        </div>
-      </div>
+    <PageShell className="lg:max-w-[95vw]">
+      <PageHeader
+        title="Compare Players"
+      />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2 rounded-xl border border-border bg-background p-4">
-          <p className="text-sm font-semibold">Player A</p>
+      <div className="grid gap-2 md:grid-cols-2">
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Player A</p>
           <Select value={playerAUuid} onValueChange={setPlayerAUuid}>
-            <SelectTrigger>
+            <SelectTrigger className="h-9">
               <SelectValue placeholder="Select player A" />
             </SelectTrigger>
             <SelectContent>
@@ -291,10 +288,10 @@ function ComparePageClient() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2 rounded-xl border border-border bg-background p-4">
-          <p className="text-sm font-semibold">Player B</p>
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Player B</p>
           <Select value={playerBUuid} onValueChange={setPlayerBUuid}>
-            <SelectTrigger>
+            <SelectTrigger className="h-9">
               <SelectValue placeholder="Select player B" />
             </SelectTrigger>
             <SelectContent>
@@ -311,26 +308,27 @@ function ComparePageClient() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {loadingPlayers || loadingTimes ? (
-        <div className="flex items-center justify-center py-12">
+        <div className="flex items-center justify-center py-6 lg:py-2">
           <Spinner className="size-8 text-muted-foreground" />
         </div>
       ) : (
-        <Card>
-          <CardContent className="overflow-x-auto">
+        <SectionCard contentClassName="p-0">
+          <Card className="overflow-hidden border-border/70 bg-card/70">
+          <CardContent className="overflow-x-auto p-0">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Trial</TableHead>
-                  <TableHead>{playerAName || "Player A"}</TableHead>
-                  <TableHead>{playerBName || "Player B"}</TableHead>
+                <TableRow className="bg-muted/25">
+                  <TableHead className="py-1.5">Trial</TableHead>
+                  <TableHead className="py-1.5">{playerAName || "Player A"}</TableHead>
+                  <TableHead className="py-1.5">{playerBName || "Player B"}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((row) => (
                   <TableRow key={row.trial}>
-                    <TableCell>{row.trial}</TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
+                    <TableCell className="py-1.5 text-xs font-medium">{row.trial}</TableCell>
+                    <TableCell className="py-1.5">
+                      <div className="text-xs">
                         {row.playerA.submissionUuid ? (
                           <Link
                             href={`/submissions/${encodeURIComponent(row.playerA.submissionUuid)}`}
@@ -343,10 +341,10 @@ function ComparePageClient() {
                               Number(row.playerA.time),
                               Number(row.playerB.time)
                             )}`} />
-                            {row.playerA.time}
+                            {row.playerA.time} <span className="text-muted-foreground">({row.playerA.score.toFixed(3)})</span>
                           </Link>
                         ) : (
-                          <p className={`inline-flex items-center gap-2 ${timeIndicatorClass(
+                          <p className={`inline-flex items-center gap-2 text-sm ${timeIndicatorClass(
                             Number(row.playerA.time),
                             Number(row.playerB.time)
                           )}`}>
@@ -354,14 +352,13 @@ function ComparePageClient() {
                               Number(row.playerA.time),
                               Number(row.playerB.time)
                             )}`} />
-                            {row.playerA.time}
+                              {row.playerA.time} <span className="text-muted-foreground">({row.playerA.score.toFixed(3)})</span>
                           </p>
                         )}
-                        <p className="text-sm text-muted-foreground">Score {row.playerA.score.toFixed(3)}</p>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
+                      <TableCell className="py-1.5">
+                        <div className="text-xs">
                         {row.playerB.submissionUuid ? (
                           <Link
                             href={`/submissions/${encodeURIComponent(row.playerB.submissionUuid)}`}
@@ -374,10 +371,10 @@ function ComparePageClient() {
                               Number(row.playerB.time),
                               Number(row.playerA.time)
                             )}`} />
-                            {row.playerB.time}
+                            {row.playerB.time} <span className="text-muted-foreground">({row.playerB.score.toFixed(3)})</span>
                           </Link>
                         ) : (
-                          <p className={`inline-flex items-center gap-2 ${timeIndicatorClass(
+                          <p className={`inline-flex items-center gap-2 text-sm ${timeIndicatorClass(
                             Number(row.playerB.time),
                             Number(row.playerA.time)
                           )}`}>
@@ -385,10 +382,9 @@ function ComparePageClient() {
                               Number(row.playerB.time),
                               Number(row.playerA.time)
                             )}`} />
-                            {row.playerB.time}
+                              {row.playerB.time} <span className="text-muted-foreground">({row.playerB.score.toFixed(3)})</span>
                           </p>
                         )}
-                        <p className="text-sm text-muted-foreground">Score {row.playerB.score.toFixed(3)}</p>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -397,8 +393,9 @@ function ComparePageClient() {
             </Table>
           </CardContent>
         </Card>
+        </SectionCard>
       )}
-    </div>
+    </PageShell>
   )
 }
 
