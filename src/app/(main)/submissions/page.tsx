@@ -24,9 +24,11 @@ import { PlusCircleIcon, X, UploadIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
+import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
 import { TrialName, trials } from "@/lib/trials"
 import calculateScore from "@/lib/calc-score"
+import { PageShell, SectionCard } from "@/components/custom/page-shell"
 
 type Submission = {
   uuid: string
@@ -396,6 +398,7 @@ function SubmissionsPage() {
   }, [submissions, loadingSubmissions])
 
   return (
+    <PageShell className="max-w-[95vw] px-3 md:px-4 lg:px-5">
     <div 
       className={`flex h-full w-full flex-col gap-4 ${isDragOver ? 'relative' : ''}`}
       onDragOver={handleDragOver}
@@ -581,14 +584,37 @@ function SubmissionsPage() {
           </AlertDialog>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <SectionCard contentClassName="min-h-0 p-0 md:p-0">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-5">
         {error ? (
           <div className="flex h-full w-full items-center justify-center">
             <p className="text-destructive">{error}</p>
           </div>
         ) : loadingSubmissions ? (
-          <div className="flex h-full w-full items-center justify-center">
-            <Spinner className="size-8 text-muted-foreground" />
+          <div className="submissions-grid">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="submission-grid-item">
+                <Card className="h-full overflow-hidden border-border/70 bg-card/80">
+                  <CardContent className="flex h-full min-h-0 gap-4 p-4">
+                    <Skeleton className="flex-1 rounded-lg" />
+                    <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
+                      <div className="space-y-2">
+                        <Skeleton className="h-7 w-32" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                      <Skeleton className="h-5 w-24" />
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <div className="w-full space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-4 w-1/3" />
+                    </div>
+                  </CardFooter>
+                </Card>
+              </div>
+            ))}
           </div>
         ) : submissions.length === 0 ? (
           <div className="flex h-full w-full items-center justify-center">
@@ -665,7 +691,7 @@ function SubmissionsPage() {
                     </CardContent>
                     <CardFooter>
                       <div className="w-full flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground max-w-full break-words text-center">
+                        <p className="text-xs text-muted-foreground max-w-full wrap-break-word text-center">
                           Moderator Note: {submission.moderator_note}
                         </p>
                       {submission.moderator_username && (
@@ -812,7 +838,9 @@ function SubmissionsPage() {
           </>
         )}
       </div>
+      </SectionCard>
     </div>
+    </PageShell>
   )
 }
 

@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "next build --webpack",
     "dev": "next dev",
     "start": "next start",
     "lint": "eslint",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "clean:opennext": "node -e \"const fs=require('fs');['.next','.open-next'].forEach((path)=>fs.rmSync(path,{recursive:true,force:true}))\"",
+    "preview": "npm run clean:opennext && opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "npm run clean:opennext && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload": "npm run clean:opennext && opennextjs-cloudflare build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {

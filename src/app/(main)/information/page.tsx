@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageHeader, PageShell, SectionCard, StatCard } from "@/components/custom/page-shell"
 
 const scoreSteps = [
   "Each trial gets a score from 0 - 1, where 0 is bronze and 1 is wr.",
@@ -53,15 +54,15 @@ function InfoCard({
 
 export default function InformationPage() {
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 md:p-6">
-      <div>
-        <h1 className="text-3xl font-bold">Information</h1>
-        <p className="text-muted-foreground">
-          Score explanation, role thresholds, FAQ, and the short version of the Wasans lore.
-        </p>
-      </div>
+    <PageShell className="max-w-6xl">
+      <PageHeader
+        eyebrow="Reference"
+        title="Information"
+        description="Score explanation, role thresholds, frequently asked questions, and the short version of the Wasans lore in a single readable reference page."
+        aside={<StatCard label="Reference blocks" value="3 sections" meta="Score model, FAQ, and Discord role thresholds." />}
+      />
 
-      <InfoCard title="Wasans Score">
+      <SectionCard title="Wasans Score" description="Understand what the number means and where it comes from.">
         <div className="grid gap-3">
           <p>
             Wasans Score is a skill value for time trials. Higher is better, and a score of
@@ -84,9 +85,9 @@ export default function InformationPage() {
             </Link>
           </div>
         </div>
-      </InfoCard>
+      </SectionCard>
 
-      <InfoCard title="FAQ">
+      <SectionCard title="FAQ" description="The short answers players ask for most often.">
         <div className="grid gap-4">
           {faq.map(([question, answer]) => (
             <div key={question}>
@@ -95,19 +96,18 @@ export default function InformationPage() {
             </div>
           ))}
         </div>
-      </InfoCard>
+      </SectionCard>
 
-      <InfoCard title="Score Roles (Discord)">
+      <SectionCard title="Score roles (Discord)" description="Role thresholds used by the community Discord.">
         <div className="grid gap-2 md:grid-cols-2">
           {roles.map(([role, description]) => (
-            <div key={role} className="rounded-md border border-border p-3">
+            <div key={role} className="rounded-2xl border border-border/70 bg-muted/15 p-4">
               <p className="font-semibold">@{role}</p>
               <p className="text-sm text-muted-foreground">{description}</p>
             </div>
           ))}
         </div>
-      </InfoCard>
-
-    </div>
+      </SectionCard>
+    </PageShell>
   )
 }

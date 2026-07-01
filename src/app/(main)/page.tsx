@@ -1,7 +1,8 @@
 import Link from "next/link"
-import { CalculatorIcon, ClipboardListIcon, InfoIcon, TrophyIcon } from "lucide-react"
+import { ArrowRightIcon, CalculatorIcon, ClipboardListIcon, InfoIcon, TrophyIcon } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { PageHeader, PageShell, SectionCard } from "@/components/custom/page-shell"
 
 const actions = [
   {
@@ -32,43 +33,48 @@ const actions = [
 
 export default function HomePage() {
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
-      <section className="grid gap-4 py-4">
-        <div className="max-w-3xl">
-          <h1 className="text-4xl font-bold">Wasans Score Hub</h1>
-          <p className="mt-2 text-lg text-muted-foreground">
-            A home for verified time-trial submissions, current world records, and score
-            calculation.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild>
-            <Link href="/submissions/new">New submission</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/rules">Read rules</Link>
-          </Button>
-        </div>
-      </section>
+    <PageShell>
+      <PageHeader
+        title="Wasans Score Hub"
+        actions={
+          <>
+            <Button asChild>
+              <Link href="/submissions/new">New submission</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/players">Open players</Link>
+            </Button>
+          </>
+        }
+      />
 
-      <section className="grid gap-4 md:grid-cols-2">
-        {actions.map((action) => {
-          const Icon = action.icon
-          return (
-            <Link key={action.href} href={action.href}>
-              <Card className="h-full transition hover:shadow-md">
-                <CardHeader className="grid-cols-[auto_1fr] items-center gap-3">
-                  <Icon className="size-5" />
-                  <CardTitle>{action.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">{action.description}</p>
-                </CardContent>
-              </Card>
-            </Link>
-          )
-        })}
-      </section>
-    </div>
+      <SectionCard>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {actions.map((action) => {
+            const Icon = action.icon
+            return (
+              <Link key={action.href} href={action.href}>
+                <Card className="glass-panel h-full rounded-[24px] border-border/70 transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_28px_60px_-36px_rgba(0,0,0,0.9)]">
+                  <CardHeader className="space-y-4">
+                    <div className="flex size-11 items-center justify-center rounded-2xl border border-border/70 bg-muted/40">
+                      <Icon className="size-5 text-primary" />
+                    </div>
+                    <div className="space-y-2">
+                      <CardTitle className="text-xl">{action.title}</CardTitle>
+                      <p className="text-sm leading-6 text-muted-foreground">{action.description}</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                      Open <ArrowRightIcon className="size-4" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })}
+        </div>
+      </SectionCard>
+    </PageShell>
   )
 }
