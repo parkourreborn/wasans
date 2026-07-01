@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { apiV1 } from "@/lib/api"
+import { trials } from "@/lib/trials"
 import Badges from "@/components/custom/badges"
 import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
@@ -29,6 +30,27 @@ type SubmissionsResponse = {
 type CachedWrs = {
   results: Submission[]
   timestamp: number
+}
+
+const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
+
+function compareByTrialOrder(aTrialName: string, bTrialName: string) {
+  const aOrder = trialOrderByName.get(String(aTrialName).toUpperCase())
+  const bOrder = trialOrderByName.get(String(bTrialName).toUpperCase())
+
+  if (aOrder == null && bOrder == null) {
+    return aTrialName.localeCompare(bTrialName)
+  }
+
+  if (aOrder == null) {
+    return 1
+  }
+
+  if (bOrder == null) {
+    return -1
+  }
+
+  return aOrder - bOrder
 }
 
 function formatTime(rawTime: number | string) {
@@ -63,17 +85,21 @@ export default function SubmissionsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const orderedSubmissions = useMemo(() => {
+    return [...submissions].sort((a, b) => compareByTrialOrder(a.trial_name, b.trial_name))
+  }, [submissions])
+
   const filteredSubmissions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
     if (!normalizedQuery) {
-      return submissions
+      return orderedSubmissions
     }
 
-    return submissions.filter((submission) =>
+    return orderedSubmissions.filter((submission) =>
       submission.trial_name.toLowerCase().includes(normalizedQuery)
     )
-  }, [searchQuery, submissions])
+  }, [searchQuery, orderedSubmissions])
 
   useEffect(() => {
     const CACHE_KEY = "wasans_wrs_cache"
