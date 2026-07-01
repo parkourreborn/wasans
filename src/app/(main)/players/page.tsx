@@ -184,7 +184,7 @@ export default function PlayersPage() {
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
           <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
             {mode === "trial" ? (
-              <div className="w-full lg:w-56">
+              <div className="w-full">
                 <Select value={trialName} onValueChange={(value) => setTrialName(value as TrialName)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Choose trial" />
