@@ -4,6 +4,16 @@ import { ArrowRightIcon, CalculatorIcon, ClipboardListIcon, InfoIcon, TrophyIcon
 import { Card, CardContent } from "@/components/ui/card"
 import { PageShell } from "@/components/custom/page-shell"
 
+type ActivityCountRow = {
+  count?: number
+}
+
+type ActivityLatestRow = {
+  trial_name?: string
+  player_name?: string
+  time?: number
+}
+
 const quickLinks = [
   {
     "href": "/rules",
@@ -48,34 +58,48 @@ export default async function HomePage() {
     submissionCount: 0,
     userCount: 0,
     latestWr: null as null | { trial_name: string; player_name: string; time: number },
-    latestSubmission: null as null | { trial_name: string; player_name: string; time: number; state: string },
+    latestSubmission: null as null | { trial_name: string; player_name: string; time: number},
   }
 
   try {
     const { env } = await getCloudflareContext({ async: true })
     if (env?.wasans) {
-      const [submissionCountRow, playerCountRow, latestWrRow, latestSubmissionRow] = await Promise.all([
-        env.wasans.prepare("SELECT COUNT(*) AS count FROM submissions").first<{ count: number }>(),
-        env.wasans.prepare("SELECT COUNT(*) AS count FROM players").first<{ count: number }>(),
+      const statements = [
+        env.wasans.prepare("SELECT COUNT(*) AS count FROM submissions"),
+        env.wasans.prepare("SELECT COUNT(*) AS count FROM players"),
         env.wasans.prepare(
           `SELECT trial_name, player_name, time
            FROM wrs
-           ORDER BY CAST(date AS INTEGER) DESC, trial_name ASC
+           ORDER BY date DESC, trial_name ASC
            LIMIT 1`
-        ).first<{ trial_name: string; player_name: string; time: number }>(),
+        ),
         env.wasans.prepare(
-          `SELECT trial_name, player_name, time, state
+          `SELECT trial_name, player_name, time
            FROM submissions
-           ORDER BY CAST(date AS INTEGER) DESC, uuid DESC
+           ORDER BY date DESC, uuid DESC
            LIMIT 1`
-        ).first<{ trial_name: string; player_name: string; time: number; state: string }>(),
-      ])
+        ),
+      ]
+
+      const [submissionCountResult, playerCountResult, latestWrResult, latestSubmissionResult] = await env.wasans.batch(statements)
+      const submissionCountRow = submissionCountResult.results?.[0] as ActivityCountRow | undefined
+      const playerCountRow = playerCountResult.results?.[0] as ActivityCountRow | undefined
+      const latestWrRow = latestWrResult.results?.[0] as ActivityLatestRow | undefined
+      const latestSubmissionRow = latestSubmissionResult.results?.[0] as ActivityLatestRow | undefined
 
       activity = {
         submissionCount: Number(submissionCountRow?.count ?? 0),
         userCount: Number(playerCountRow?.count ?? 0),
-        latestWr: latestWrRow ?? null,
-        latestSubmission: latestSubmissionRow ?? null,
+        latestWr: latestWrRow ? {
+          trial_name: String(latestWrRow.trial_name ?? ""),
+          player_name: String(latestWrRow.player_name ?? ""),
+          time: Number(latestWrRow.time ?? 0),
+        } : null,
+        latestSubmission: latestSubmissionRow ? {
+          trial_name: String(latestSubmissionRow.trial_name ?? ""),
+          player_name: String(latestSubmissionRow.player_name ?? ""),
+          time: Number(latestSubmissionRow.time ?? 0),
+        } : null,
       }
     }
   } catch {
