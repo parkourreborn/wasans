@@ -1,7 +1,7 @@
 import Link from "next/link"
+import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { ArrowRightIcon, CalculatorIcon, ClipboardListIcon, InfoIcon, TrophyIcon, MedalIcon, BookIcon } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { PageShell } from "@/components/custom/page-shell"
 
 const quickLinks = [
@@ -43,7 +43,50 @@ const quickLinks = [
   }
 ]
 
-export default function HomePage() {
+export default async function HomePage() {
+  let activity = {
+    submissionCount: 0,
+    userCount: 0,
+    latestWr: null as null | { trial_name: string; player_name: string; time: number },
+    latestSubmission: null as null | { trial_name: string; player_name: string; time: number; state: string },
+  }
+
+  try {
+    const { env } = await getCloudflareContext({ async: true })
+    if (env?.wasans) {
+      const [submissionCountRow, playerCountRow, latestWrRow, latestSubmissionRow] = await Promise.all([
+        env.wasans.prepare("SELECT COUNT(*) AS count FROM submissions").first<{ count: number }>(),
+        env.wasans.prepare("SELECT COUNT(*) AS count FROM players").first<{ count: number }>(),
+        env.wasans.prepare(
+          `SELECT trial_name, player_name, time
+           FROM wrs
+           ORDER BY CAST(date AS INTEGER) DESC, trial_name ASC
+           LIMIT 1`
+        ).first<{ trial_name: string; player_name: string; time: number }>(),
+        env.wasans.prepare(
+          `SELECT trial_name, player_name, time, state
+           FROM submissions
+           ORDER BY CAST(date AS INTEGER) DESC, uuid DESC
+           LIMIT 1`
+        ).first<{ trial_name: string; player_name: string; time: number; state: string }>(),
+      ])
+
+      activity = {
+        submissionCount: Number(submissionCountRow?.count ?? 0),
+        userCount: Number(playerCountRow?.count ?? 0),
+        latestWr: latestWrRow ?? null,
+        latestSubmission: latestSubmissionRow ?? null,
+      }
+    }
+  } catch {
+    activity = {
+      submissionCount: 0,
+      userCount: 0,
+      latestWr: null,
+      latestSubmission: null,
+    }
+  }
+
   return (
     <PageShell>
       <section className="animate-subtle-in relative overflow-hidden rounded-3xl border border-border/70 bg-background/55 px-5 py-8 shadow-[0_30px_90px_-55px_rgba(0,0,0,0.85)] md:px-8 md:py-10">
@@ -64,6 +107,24 @@ export default function HomePage() {
             </p>
           </div>
         </div>
+      </section>
+      <section className="animate-subtle-in flex flex-wrap items-center gap-2 w-full">
+         <div className="rounded-full border border-border/70 bg-background/45 px-3 py-1.5">
+              <span className="text-muted-foreground">Activity:</span>{" "}
+              <span className="font-medium text-foreground">{Math.round(activity.submissionCount/100)/10}k+ submissions</span>
+            </div>
+            <div className="rounded-full border border-border/70 bg-background/45 px-3 py-1.5">
+              <span className="text-muted-foreground">Latest WR:</span>{" "}
+              <span className="font-medium text-foreground">
+                {activity.latestWr ? `${activity.latestWr.trial_name} • ${activity.latestWr.time.toFixed(3)} by ${activity.latestWr.player_name}` : "No WRs yet"}
+              </span>
+            </div>
+            <div className="rounded-full border border-border/70 bg-background/45 px-3 py-1.5">
+              <span className="text-muted-foreground">Latest submission:</span>{" "}
+              <span className="font-medium text-foreground">
+                {activity.latestSubmission ? `${activity.latestSubmission.trial_name} • ${activity.latestSubmission.time.toFixed(3)} by ${activity.latestSubmission.player_name}` : "No submissions yet"}
+              </span>
+            </div>
       </section>
 
       <section className="animate-subtle-in">
@@ -94,6 +155,7 @@ export default function HomePage() {
           })}
         </div>
       </section>
+      
     </PageShell>
   )
 }
