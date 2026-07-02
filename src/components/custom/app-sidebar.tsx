@@ -18,6 +18,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
+import { FloatingSettingsModal } from "@/components/custom/settings-provider"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { apiV1 } from "@/lib/api"
 import { getRouteTheme, isRouteActive } from "@/lib/route-theme"
@@ -263,6 +264,12 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="gap-2">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <FloatingSettingsModal />
+          </SidebarMenuItem>
+        </SidebarMenu>
+
         {user ? (
           <div className="flex min-w-0 items-center gap-3 rounded-lg border border-sidebar-border/70 p-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1.5">
             <Link href={`/players/${encodeURIComponent(user.uuid)}`} aria-label={`Open ${user.player_name} profile`}>
