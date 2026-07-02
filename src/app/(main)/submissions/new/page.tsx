@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner"
 import calculateScore from "@/lib/calc-score"
 import { createFile } from "mp4box"
+import { getSubmissionErrorMessage } from "@/lib/submission-errors"
 
 type SubmissionDraft = {
   id: string
@@ -54,18 +55,6 @@ type WorldRecordValue = {
 type ListResponse<T> = {
   results?: T[]
   error?: string | { message?: string }
-}
-
-function getApiErrorMessage(error: ListResponse<unknown>["error"], fallback: string) {
-  if (typeof error === "string") {
-    return error
-  }
-
-  if (error?.message) {
-    return error.message
-  }
-
-  return fallback
 }
 
 type AuthResponse = {
@@ -227,7 +216,7 @@ async function getWorldRecords() {
       const json = (await response.json()) as ListResponse<WorldRecordValue>
 
       if (!response.ok) {
-        throw new Error(getApiErrorMessage(json.error, "Unable to load world records"))
+        throw new Error(getSubmissionErrorMessage(json.error, "Unable to load world records"))
       }
 
       cachedWorldRecords = Object.fromEntries(
@@ -318,7 +307,7 @@ function uploadSubmissions(
         return
       }
 
-      const errorMessage = getApiErrorMessage(json?.error, "Unable to create submission")
+      const errorMessage = getSubmissionErrorMessage(json?.error, "Unable to create submission")
 
       reject(new Error(errorMessage))
     }
@@ -373,7 +362,7 @@ export default function NewSubmissionPage() {
         const pbJson = (await pbResponse.json()) as ListResponse<SubmissionValue>
 
         if (!pbResponse.ok) {
-          throw new Error(getApiErrorMessage(pbJson.error, "Unable to load current scores"))
+          throw new Error(getSubmissionErrorMessage(pbJson.error, "Unable to load current scores"))
         }
 
         const nextPersonalBests: Record<string, number> = {}

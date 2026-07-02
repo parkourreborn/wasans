@@ -11,6 +11,7 @@ import {
   readIdempotencyKeyFromFormData,
   storeIdempotentResponse,
 } from "@/lib/server/services/idempotency-service"
+import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
 
 const cacheHeaders = {
   "cache-control": "max-age=10, stale-while-revalidate=30",
@@ -157,10 +158,10 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to create submission"
-    const status = message.includes("not found") ? 404 : message.includes("Authentication") ? 401 : 400
+    const message = getSubmissionErrorMessage(error instanceof Error ? error.message : null, "Unable to create submission")
+    const status = getSubmissionErrorStatus(message)
     return jsonError(message, status, {
-      code: status === 404 ? "not_found" : status === 401 ? "unauthorized" : "validation_error",
+      code: status === 404 ? "not_found" : status === 401 ? "unauthorized" : status === 409 ? "conflict" : status === 429 ? "rate_limited" : status === 500 ? "internal_error" : "validation_error",
       requestId,
     })
   }

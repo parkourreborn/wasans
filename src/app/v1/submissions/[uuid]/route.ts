@@ -4,6 +4,7 @@ import { getRequestId, jsonError, jsonResponse, validationError } from "@/lib/se
 import { querySubmissionByUuid } from "@/lib/server/services/submission-query-service"
 import { deleteSubmission, patchSubmission, resolveModeratorUser } from "@/lib/server/services/moderation-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
+import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
 
 function isValidSubmissionUuid(uuid: string) {
   return /^[A-Za-z0-9_-]{6,64}$/.test(uuid)
@@ -97,10 +98,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
 
     return jsonResponse({ results: updated ? [updated] : [] }, 200, { requestId })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to patch submission"
-    const status = message.includes("not found") ? 404 : message.includes("permission") ? 403 : 400
+    const message = getSubmissionErrorMessage(error instanceof Error ? error.message : null, "Unable to patch submission")
+    const status = getSubmissionErrorStatus(message)
     return jsonError(message, status, {
-      code: status === 404 ? "not_found" : status === 403 ? "forbidden" : "validation_error",
+      code: status === 404 ? "not_found" : status === 403 ? "forbidden" : status === 429 ? "rate_limited" : "validation_error",
       requestId,
     })
   }
@@ -145,10 +146,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
     await deleteSubmission(env, ctx, uuid, user)
     return jsonResponse({ ok: true }, 200, { requestId })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to delete submission"
-    const status = message.includes("not found") ? 404 : message.includes("own submissions") ? 403 : 400
+    const message = getSubmissionErrorMessage(error instanceof Error ? error.message : null, "Unable to delete submission")
+    const status = getSubmissionErrorStatus(message)
     return jsonError(message, status, {
-      code: status === 404 ? "not_found" : status === 403 ? "forbidden" : "validation_error",
+      code: status === 404 ? "not_found" : status === 403 ? "forbidden" : status === 429 ? "rate_limited" : "validation_error",
       requestId,
     })
   }

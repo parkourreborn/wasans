@@ -29,6 +29,10 @@ import {
   shouldNotifyModeratorOfChange,
   shouldUpdateSubmissionThread,
 } from "@/lib/server/ux-rules"
+import {
+  normalizeModeratorNote,
+  normalizeState,
+} from "@/lib/server/moderation-normalization"
 
 const botModeratorUser: AuthUser = {
   uuid: "discord-bot",
@@ -36,32 +40,6 @@ const botModeratorUser: AuthUser = {
   player_name: "Discord Bot",
   score: 0,
   permission: 1,
-}
-
-export function normalizeState(value: unknown) {
-  if (value === "accepted") {
-    return "approved"
-  }
-
-  if (value === "approved" || value === "denied" || value === "pending") {
-    return value
-  }
-
-  return null
-}
-
-export function normalizeModeratorNote(value: unknown) {
-  if (typeof value !== "string") {
-    return null
-  }
-
-  const moderatorNote = value.trim().replace(/\s+/g, " ")
-
-  if (moderatorNote.length === 0 || moderatorNote.length > 500) {
-    return null
-  }
-
-  return moderatorNote
 }
 
 function getBotApiKeyFromRequest(request: Request) {
