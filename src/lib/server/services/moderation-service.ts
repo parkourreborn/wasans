@@ -94,6 +94,53 @@ function normalizeDiscordId(value: unknown) {
   return discordId.length > 0 ? discordId : null
 }
 
+type PreviousWrDisplayRow = {
+  submission_uuid: string
+  player_uuid: string
+  player_name: string
+  time: number
+  date: string
+  previous_thread_id: string | null
+}
+
+async function getPreviousWrToDisplay(
+  db: D1Database,
+  trialName: string,
+  currentSubmissionUuid: string,
+  previousWrRow: PreviousWrDisplayRow | null
+) {
+  if (previousWrRow && previousWrRow.submission_uuid !== currentSubmissionUuid) {
+    return previousWrRow
+  }
+
+  const fallbackRow = await db.prepare(
+    `SELECT
+      uuid AS submission_uuid,
+      player_uuid,
+      player_name,
+      time,
+      date,
+      thread_id AS previous_thread_id
+    FROM submissions
+    WHERE trial_name = ?
+      AND state = 'approved'
+      AND uuid != ?
+    ORDER BY
+      time,
+      date,
+      uuid
+    LIMIT 1`
+  )
+    .bind(trialName, currentSubmissionUuid)
+    .first<PreviousWrDisplayRow | null>()
+
+  if (fallbackRow && fallbackRow.submission_uuid !== currentSubmissionUuid) {
+    return fallbackRow
+  }
+
+  return null
+}
+
 export async function resolveModeratorUser(request: Request, env: CloudflareEnv, sessionUser: AuthUser | null, discordId: unknown) {
   const resolvedDiscordId = normalizeDiscordId(discordId)
 
@@ -358,6 +405,10 @@ export async function patchSubmission(
       }
 
       const submissionIsWr = wrRow?.submission_uuid === uuid
+      const previousWrToShow = submissionIsWr
+        ? await getPreviousWrToDisplay(db, submission.trial_name, updatedSubmission.uuid, previousWrRow)
+        : null
+      const hasDifferentPreviousWr = previousWrRow === null || previousWrToShow?.submission_uuid !== updatedSubmission.uuid
       const hasExistingThread = Boolean(submission.thread_id)
       const shouldUpdateThread = hasExistingThread && (stateChanged || timeChanged || noteChanged)
 
@@ -370,8 +421,7 @@ export async function patchSubmission(
 
         await updateSubmissionThreadTags(submission.thread_id, newState, submissionIsWr).catch(() => null)
 
-        const previousToShow = previousWrRow?.submission_uuid === uuid ? wrRow : previousWrRow
-        const previousWrThreadId = previousToShow?.previous_thread_id ?? undefined
+        const previousWrThreadId = previousWrToShow?.previous_thread_id ?? undefined
         const updateOldTime = previousPbRow?.time ?? oldPb?.time
 
         await updateSubmissionThreadContent(submission.thread_id, {
@@ -386,9 +436,9 @@ export async function patchSubmission(
           discordUserId: String(oldPlayer?.player_id),
           averageScoreDelta,
           is_wr: submissionIsWr,
-          previous_wr_submission_uuid: previousToShow?.submission_uuid,
-          previous_wr_time: previousToShow?.time,
-          previous_wr_player_name: previousToShow?.player_name,
+          previous_wr_submission_uuid: previousWrToShow?.submission_uuid,
+          previous_wr_time: previousWrToShow?.time,
+          previous_wr_player_name: previousWrToShow?.player_name,
           previous_wr_thread_id: previousWrThreadId,
           new_state: newState,
           moderator_note: updatedSubmission.moderator_note,
@@ -396,7 +446,7 @@ export async function patchSubmission(
       }
 
       const shouldCreateThread = !hasExistingThread && (
-        (submissionIsWr && previousWrRow?.submission_uuid !== uuid)
+        (submissionIsWr && hasDifferentPreviousWr)
         || (newState === "approved" && previousState !== "approved" && Number(updatedSubmission.player_score) > 0.3)
       )
 
@@ -421,10 +471,10 @@ export async function patchSubmission(
         discordUserId: String(oldPlayer?.player_id),
         averageScoreDelta,
         is_wr: submissionIsWr,
-        previous_wr_submission_uuid: previousWrRow?.submission_uuid,
-        previous_wr_time: previousWrRow?.time,
-        previous_wr_player_name: previousWrRow?.player_name,
-        previous_wr_thread_id: previousWrRow?.previous_thread_id ?? undefined,
+        previous_wr_submission_uuid: previousWrToShow?.submission_uuid,
+        previous_wr_time: previousWrToShow?.time,
+        previous_wr_player_name: previousWrToShow?.player_name,
+        previous_wr_thread_id: previousWrToShow?.previous_thread_id ?? undefined,
       }
 
       const { threadId } = await postApprovedRun(approvedRun)
