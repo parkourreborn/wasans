@@ -6,6 +6,7 @@
     "build": "next build --webpack",
     "dev": "next dev",
     "start": "next start",
+    "test": "node --import tsx --test src/lib/server/__tests__/*.test.ts",
     "lint": "eslint",
     "clean:opennext": "node -e \"const fs=require('fs');['.next','.open-next'].forEach((path)=>fs.rmSync(path,{recursive:true,force:true}))\"",
     "preview": "npm run clean:opennext && opennextjs-cloudflare build && opennextjs-cloudflare preview",

@@ -25,6 +25,10 @@ import {
   setSubmissionThreadId,
   updateSubmissionByUuid,
 } from "@/lib/server/repositories/submission-repository"
+import {
+  shouldNotifyModeratorOfChange,
+  shouldUpdateSubmissionThread,
+} from "@/lib/server/ux-rules"
 
 const botModeratorUser: AuthUser = {
   uuid: "discord-bot",
@@ -293,7 +297,6 @@ export async function patchSubmission(
       const isApproved = newState === "approved"
       const scoreRecalculationNeeded = (stateChanged || timeChanged) && (wasApproved || isApproved)
 
-      await refreshPlayerPbs(db, submission.player_uuid)
       await refreshWorldRecords(db, submission.trial_name, user)
 
       const wrRow = await db.prepare(
@@ -309,14 +312,6 @@ export async function patchSubmission(
       const isCurrentWr = wrRow?.submission_uuid === submission.uuid
       const shouldRefreshEveryone = scoreRecalculationNeeded && (wasWr || isCurrentWr)
 
-      if (scoreRecalculationNeeded) {
-        if (shouldRefreshEveryone) {
-          await refreshAllPlayerScores(db, { discordUpdateMode: "all" })
-        } else if (wasApproved || isApproved) {
-          await refreshPlayerScore(db, submission.player_uuid)
-        }
-      }
-
       const updatedSubmission = await getSubmissionWithScore(db, uuid)
       if (!updatedSubmission) {
         return
@@ -330,7 +325,15 @@ export async function patchSubmission(
       const newRankName = getRankLabel(newPlayerScore)
       const rankChanged = oldRankName !== null && newRankName !== null && oldRankName !== newRankName
 
-      if ((stateChanged || noteChanged || scoreChanged || rankChanged) && oldPlayer?.player_id) {
+      const notificationPlayerId = oldPlayer?.player_id ?? null
+
+      if (shouldNotifyModeratorOfChange({
+        oldPlayerId: notificationPlayerId,
+        stateChanged,
+        noteChanged,
+        scoreChanged,
+        rankChanged,
+      })) {
         let content = `Your submission https://wasans.tully.sh/submissions/${uuid} has been moderated by ${user.player_name}`
 
         if (stateChanged) {
@@ -352,14 +355,21 @@ export async function patchSubmission(
           content += `\n\nRank\n${oldRankName} -> ${newRankName} (${rankDirection})`
         }
 
-        await sendDiscordDm(oldPlayer.player_id, content).catch((error) => {
-          console.error("Failed to send submission moderation DM:", error)
-        })
+        if (notificationPlayerId) {
+          await sendDiscordDm(notificationPlayerId, content).catch((error) => {
+            console.error("Failed to send submission moderation DM:", error)
+          })
+        }
       }
 
       const submissionIsWr = wrRow?.submission_uuid === uuid
       const hasExistingThread = Boolean(submission.thread_id)
-      const shouldUpdateThread = hasExistingThread && (stateChanged || timeChanged || noteChanged)
+      const shouldUpdateThread = shouldUpdateSubmissionThread({
+        hasExistingThread,
+        stateChanged,
+        timeChanged,
+        noteChanged,
+      })
 
       if (shouldUpdateThread && submission.thread_id) {
         let averageScoreDelta: number | undefined
@@ -399,6 +409,15 @@ export async function patchSubmission(
         (submissionIsWr && previousWrRow?.submission_uuid !== uuid)
         || (newState === "approved" && previousState !== "approved" && Number(updatedSubmission.player_score) > 0.3)
       )
+
+      if (scoreRecalculationNeeded) {
+        await refreshPlayerPbs(db, submission.player_uuid)
+        if (shouldRefreshEveryone) {
+          await refreshAllPlayerScores(db, { discordUpdateMode: "all" })
+        } else if (wasApproved || isApproved) {
+          await refreshPlayerScore(db, submission.player_uuid)
+        }
+      }
 
       if (!shouldCreateThread || !wrRow) {
         return
