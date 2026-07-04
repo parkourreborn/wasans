@@ -68,7 +68,7 @@ export function useSettings() {
   return useContext(SettingsContext)
 }
 
-export function FloatingSettingsModal({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
+export function FloatingSettingsModal() {
   const settings = useSettings()
   const [updatingScore, setUpdatingScore] = useState(false)
 
@@ -77,7 +77,7 @@ export function FloatingSettingsModal({ isLoggedIn = false }: { isLoggedIn?: boo
   }
 
   const updateScore = async () => {
-    if (!isLoggedIn || updatingScore) {
+    if (updatingScore) {
       return
     }
 
@@ -134,7 +134,7 @@ export function FloatingSettingsModal({ isLoggedIn = false }: { isLoggedIn?: boo
               type="button"
               variant="outline"
               size="sm"
-              disabled={!isLoggedIn || updatingScore}
+              disabled={updatingScore}
               onClick={updateScore}
             >
               Update score
