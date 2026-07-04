@@ -10,8 +10,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 import { SidebarMenuButton } from "@/components/ui/sidebar"
 import { Switch } from "@/components/ui/switch"
+import { apiV1 } from "@/lib/api"
 
 type SettingsContextValue = {
   disableSubmissionThumbnails: boolean
@@ -66,11 +68,27 @@ export function useSettings() {
   return useContext(SettingsContext)
 }
 
-export function FloatingSettingsModal() {
+export function FloatingSettingsModal({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
   const settings = useSettings()
+  const [updatingScore, setUpdatingScore] = useState(false)
 
   if (!settings) {
     return null
+  }
+
+  const updateScore = async () => {
+    if (!isLoggedIn || updatingScore) {
+      return
+    }
+
+    setUpdatingScore(true)
+
+    await fetch(apiV1("/auth/me/score"), {
+      method: "POST",
+      cache: "no-store",
+    }).catch(() => null)
+
+    setUpdatingScore(false)
   }
 
   return (
@@ -103,6 +121,24 @@ export function FloatingSettingsModal() {
               onCheckedChange={settings.setDisableSubmissionThumbnails}
               aria-label="Disable submission thumbnails"
             />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border/70 bg-muted/30 p-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Update score</p>
+              <p className="text-xs text-muted-foreground">Recalculate from your personal bests.</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!isLoggedIn || updatingScore}
+              onClick={updateScore}
+            >
+              Update score
+            </Button>
           </div>
         </div>
       </DialogContent>
