@@ -96,6 +96,26 @@ const routeThemes: Array<{ href: string; theme: RouteTheme }> = [
         "linear-gradient(180deg, color-mix(in oklab, #f43f5e 28%, transparent) 0%, color-mix(in oklab, #f59e0b 22%, transparent) 42%, transparent 80%)",
     },
   },
+  {
+    href: "/terms",
+    theme: {
+      label: "Terms",
+      accent: "#a78bfa",
+      accentSoft: "#38bdf8",
+      gradient:
+        "linear-gradient(180deg, color-mix(in oklab, #a78bfa 26%, transparent) 0%, color-mix(in oklab, #38bdf8 20%, transparent) 42%, transparent 80%)",
+    },
+  },
+  {
+    href: "/privacy",
+    theme: {
+      label: "Privacy",
+      accent: "#22c55e",
+      accentSoft: "#38bdf8",
+      gradient:
+        "linear-gradient(180deg, color-mix(in oklab, #22c55e 26%, transparent) 0%, color-mix(in oklab, #38bdf8 20%, transparent) 42%, transparent 80%)",
+    },
+  },
 ]
 
 const defaultTheme = routeThemes[0].theme

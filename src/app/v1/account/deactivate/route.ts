@@ -1,8 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { getAuthUser } from "@/lib/server/auth"
-import { getRequestId, jsonError, jsonResponse } from "@/lib/server/http"
-import { refreshPlayerPbs } from "@/lib/server/pbs"
-import { refreshPlayerScore } from "@/lib/server/player-scores"
+import { getRequestId, jsonError } from "@/lib/server/http"
+import { appendExpiredAuthCookies, deactivateAccount } from "@/lib/server/services/account-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 
 export async function POST(request: Request) {
@@ -15,14 +14,11 @@ export async function POST(request: Request) {
 
   const user = await getAuthUser(request, env.wasans)
   if (!user) {
-    return jsonError("Authentication required", 401, {
-      code: "unauthorized",
-      requestId,
-    })
+    return jsonError("Authentication required", 401, { code: "unauthorized", requestId })
   }
 
-  const rate = await enforceRateLimit(env.wasans, getRateLimitKey(request, "v1:auth:me:score", user.uuid), {
-    limit: 1,
+  const rate = await enforceRateLimit(env.wasans, getRateLimitKey(request, "v1:account:deactivate", user.uuid), {
+    limit: 5,
     windowSeconds: 60,
   })
 
@@ -35,8 +31,11 @@ export async function POST(request: Request) {
     })
   }
 
-  await refreshPlayerPbs(env.wasans, user.uuid)
-  const score = await refreshPlayerScore(env.wasans, user.uuid, { discordUpdateMode: "all" })
+  await deactivateAccount(env.wasans, user)
 
-  return jsonResponse({ ok: true, score }, 200, { requestId })
+  const headers = new Headers({ "content-type": "application/json" })
+  headers.set("x-request-id", requestId)
+  appendExpiredAuthCookies(headers, request)
+
+  return new Response(JSON.stringify({ ok: true }), { status: 200, headers })
 }

@@ -17,7 +17,14 @@ CREATE TABLE players (
   player_name TEXT NOT NULL,
   date_joined TEXT NOT NULL,
   permission INTEGER NOT NULL DEFAULT 0,
-  score REAL NOT NULL DEFAULT 0
+  score REAL NOT NULL DEFAULT 0,
+  account_status TEXT NOT NULL DEFAULT 'active'
+    CHECK (account_status IN ('active', 'deactivated', 'deleted')),
+  deactivated_at TEXT,
+  deleted_at TEXT,
+  legal_terms_accepted_at TEXT,
+  legal_privacy_accepted_at TEXT,
+  legal_version TEXT
 );
 
 CREATE TABLE auth_sessions (
@@ -171,6 +178,7 @@ CREATE INDEX IF NOT EXISTS idx_submissions_state_trial_time_date ON submissions(
 CREATE INDEX IF NOT EXISTS idx_submissions_date ON submissions(date);
 CREATE INDEX IF NOT EXISTS idx_submissions_trial_name ON submissions(trial_name);
 CREATE INDEX IF NOT EXISTS idx_pbs_player_trial ON pbs(player_uuid, trial_name);
+CREATE INDEX IF NOT EXISTS idx_players_account_status ON players(account_status);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_token_expires ON auth_sessions(token, expires_at);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_player_uuid ON auth_sessions(player_uuid);
 CREATE INDEX IF NOT EXISTS idx_oauth_accounts_provider_player ON oauth_accounts(provider, provider_account_id, player_uuid);

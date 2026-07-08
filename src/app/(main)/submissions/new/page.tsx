@@ -1,6 +1,7 @@
 "use client"
 
 import { FormEvent, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { apiV1 } from "@/lib/api"
@@ -616,7 +617,10 @@ export default function NewSubmissionPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Login required</AlertDialogTitle>
             <AlertDialogDescription>
-              You need to sign in with Discord before you can submit scores.
+              You need to sign in with Discord before you can submit scores. By signing in, you agree to{" "}
+              <Link href="/terms">Terms</Link>{" "}
+              and{" "}
+              <Link href="/privacy">Privacy</Link>.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

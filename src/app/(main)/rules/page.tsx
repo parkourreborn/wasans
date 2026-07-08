@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageHeader, PageShell, SectionCard, StatCard } from "@/components/custom/page-shell"
 
@@ -105,6 +106,17 @@ export default function RulesPage() {
               <p className="text-sm text-muted-foreground">{item.answer}</p>
             </div>
           ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Legal" description="Terms, privacy, and account data info.">
+        <div className="flex flex-wrap gap-3 text-sm">
+          <Link href="/terms" className="text-primary underline underline-offset-4">
+            Terms of Service
+          </Link>
+          <Link href="/privacy" className="text-primary underline underline-offset-4">
+            Privacy Policy
+          </Link>
         </div>
       </SectionCard>
     </PageShell>

@@ -4,10 +4,15 @@ import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 export async function listOverallLeaderboard(db: D1Database, limit: number, offset: number) {
   await ensurePlayerAvatarColumns(db)
 
-  const count = await db.prepare(`SELECT COUNT(*) AS count FROM players`).first<{ count: number }>()
+  const count = await db.prepare(
+    `SELECT COUNT(*) AS count
+     FROM players
+     WHERE COALESCE(account_status, 'active') != 'deactivated'`
+  ).first<{ count: number }>()
   const rows = await db.prepare(
     `SELECT uuid AS player_uuid, player_id, discord_avatar, discord_discriminator, player_name, score AS overall_score, date_joined
      FROM players
+     WHERE COALESCE(account_status, 'active') != 'deactivated'
      ORDER BY score DESC, player_name ASC
      LIMIT ? OFFSET ?`
   )
@@ -27,7 +32,11 @@ export async function listTrialLeaderboard(db: D1Database, trialName: string, li
     .bind(trialName)
     .first<{ submission_uuid: string; time: number }>()
 
-  const count = await db.prepare(`SELECT COUNT(*) AS count FROM players`).first<{ count: number }>()
+  const count = await db.prepare(
+    `SELECT COUNT(*) AS count
+     FROM players
+     WHERE COALESCE(account_status, 'active') != 'deactivated'`
+  ).first<{ count: number }>()
 
   const rows = await db.prepare(
     `SELECT players.uuid AS player_uuid,
@@ -39,6 +48,7 @@ export async function listTrialLeaderboard(db: D1Database, trialName: string, li
             pbs.submission_uuid
      FROM players
      LEFT JOIN pbs ON pbs.player_uuid = players.uuid AND pbs.trial_name = ?
+     WHERE COALESCE(players.account_status, 'active') != 'deactivated'
      ORDER BY CASE WHEN pbs.time IS NULL THEN 1 ELSE 0 END, pbs.time ASC, players.player_name ASC
      LIMIT ? OFFSET ?`
   )

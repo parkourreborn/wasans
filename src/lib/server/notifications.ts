@@ -1,5 +1,6 @@
 import "server-only"
 import { getCloudflareContext } from "@opennextjs/cloudflare" 
+import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 export type ApprovedHighScoreRun = {
   submission_uuid: string
@@ -131,6 +132,7 @@ async function sendPromotionMessage(userId: string, oldRoleId: string, newRoleId
 const GUILD_ID = "1257994787512913961"
 const THREAD_CHANNEL_ID = "1351374148881874944"
 const BOT_API_BASE = "https://bot.wasans.tully.sh"
+const WR_PING = "<@&1335389577883418736>"
 
 async function getBotApiKey(): Promise<string> {
   let botApiKey = ""
@@ -192,6 +194,14 @@ async function sendBotApiRequest(
   }
 
   return json
+}
+
+async function sendBotMessage(channelId: string, content: string) {
+  return sendBotApiRequest("/send-message", {
+    guild_id: GUILD_ID,
+    channel_id: channelId,
+    content,
+  })
 }
 
 async function createBotThread(
@@ -269,6 +279,16 @@ export async function deleteBotThread(threadId: string): Promise<boolean> {
   }
 }
 
+export async function postWrPing(threadId: string): Promise<boolean> {
+  try {
+    await sendBotMessage(threadId, WR_PING)
+    return true
+  } catch (error) {
+    console.error("Failed to send WR ping:", error)
+    return false
+  }
+}
+
 export function reportMissingApprovedThread(run: ApprovedHighScoreRun) {
   const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime.toFixed(3) : "N/A"
   const newTimeFormatted = run.time.toFixed(3)
@@ -277,10 +297,6 @@ export function reportMissingApprovedThread(run: ApprovedHighScoreRun) {
   const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
 
   const lines: Array<string | null> = []
-
-  if (run.is_wr) {
-    lines.push("<@&1335389577883418736>")
-  }
 
   lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
   lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
@@ -322,6 +338,7 @@ export function reportMissingApprovedThread(run: ApprovedHighScoreRun) {
       discord_user_id: run.discordUserId,
       trial_name: run.trial_name,
       is_wr: run.is_wr,
+      wr_ping: run.is_wr ? WR_PING : undefined,
     },
     time_change: {
       old_time: run.oldTime,
@@ -397,10 +414,6 @@ export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ thre
 
     const lines: Array<string | null> = []
 
-    if (run.is_wr) {
-      lines.push("<@&1335389577883418736>")
-    }
-
     lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
     lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
     lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`)
@@ -428,6 +441,10 @@ export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ thre
     }
 
     const threadId = await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent, tags)
+    if (threadId && run.is_wr) {
+      await postWrPing(threadId)
+    }
+
     return { threadId }
   } catch (error) {
     console.error("Error posting approved run:", error)
@@ -479,10 +496,6 @@ export async function updateSubmissionThreadContent(
     const state = run.new_state ?? "approved"
 
     if (state === "approved") {
-      if (run.is_wr) {
-        lines.push("<@&1335389577883418736>")
-      }
-
       lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
       lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
       lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`)
@@ -531,12 +544,13 @@ export async function updateSubmissionThreadContent(
 export async function updateDiscordUsernameOnScoreChange(playerUuid: string, oldScore = 0) {
   try {
     const { env } = await getCloudflareContext({ async: true })
+    await ensurePlayerAvatarColumns(env.wasans)
     const row = await env.wasans.prepare(
-      `SELECT player_id, score, player_name FROM players WHERE uuid = ?`)
+      `SELECT player_id, score, player_name, account_status FROM players WHERE uuid = ?`)
       .bind(playerUuid)
-      .first<{ player_id: string, score: number, player_name: string }>()
+      .first<{ player_id: string, score: number, player_name: string, account_status?: string | null }>()
 
-    if (!row) {
+    if (!row || (row.account_status || "active") !== "active") {
       return
     }
 

@@ -266,7 +266,7 @@ export function AppSidebar() {
       <SidebarFooter className="gap-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <FloatingSettingsModal />
+            <FloatingSettingsModal user={user} onLogout={() => setUser(null)} onUserUpdate={setUser} />
           </SidebarMenuItem>
         </SidebarMenu>
 
@@ -293,14 +293,22 @@ export function AppSidebar() {
             </div>
           </div>
         ) : (
-          <a
-            href={apiV1("/auth/discord/start")}
-            target="_blank"
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
-          >
-            <LogInIcon className="size-4" />
-            <span>Login with Discord</span>
-          </a>
+          <div className="group-data-[collapsible=icon]:hidden">
+            <a
+              href={apiV1("/auth/discord/start")}
+              target="_blank"
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <LogInIcon className="size-4" />
+              <span>Login with Discord</span>
+            </a>
+            <p className="px-2 text-[11px] leading-5 text-muted-foreground">
+              By logging in, you agree to{" "}
+              <Link href="/terms" className="underline underline-offset-3">Terms</Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="underline underline-offset-3">Privacy</Link>.
+            </p>
+          </div>
         )}
 
         <Link

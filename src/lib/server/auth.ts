@@ -15,10 +15,6 @@ type SessionRow = {
   player_uuid: string
 }
 
-type DiscordAccountRow = {
-  player_uuid: string
-}
-
 function getCookie(request: Request, name: string) {
   const cookie = request.headers.get("cookie")
 
@@ -69,6 +65,7 @@ export async function getAuthUser(request: Request, db: D1Database) {
        ON oauth_accounts.player_uuid = players.uuid
        AND oauth_accounts.provider = 'discord'
      WHERE players.uuid = ?
+       AND COALESCE(players.account_status, 'active') = 'active'
      ORDER BY oauth_accounts.updated_at DESC
      LIMIT 1`
   )

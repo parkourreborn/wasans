@@ -22,7 +22,7 @@ export type PlayerWithRankRow = {
 export async function listPlayers(db: D1Database, options: PlayerListOptions) {
   await ensurePlayerAvatarColumns(db)
 
-  const filters: string[] = []
+  const filters: string[] = ["COALESCE(account_status, 'active') != 'deactivated'"]
   const bindings: Array<string | number> = []
 
   if (options.search) {
@@ -58,7 +58,8 @@ export async function getPlayerByUuid(db: D1Database, uuid: string) {
   return db.prepare(
     `SELECT uuid, player_id, discord_avatar, discord_discriminator, player_name, score, permission, date_joined
      FROM players
-     WHERE uuid = ?`
+     WHERE uuid = ?
+       AND COALESCE(account_status, 'active') != 'deactivated'`
   )
     .bind(uuid)
     .first<{
@@ -74,7 +75,14 @@ export async function getPlayerByUuid(db: D1Database, uuid: string) {
 }
 
 export async function getPlayerRank(db: D1Database, score: number) {
-  const rank = await db.prepare(`SELECT COUNT(*) + 1 AS rank FROM players WHERE score > ?`)
+  await ensurePlayerAvatarColumns(db)
+
+  const rank = await db.prepare(
+    `SELECT COUNT(*) + 1 AS rank
+     FROM players
+     WHERE score > ?
+       AND COALESCE(account_status, 'active') != 'deactivated'`
+  )
     .bind(score)
     .first<{ rank: number }>()
 

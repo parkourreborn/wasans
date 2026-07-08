@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { apiV1 } from "@/lib/api"
 import { SubmissionCard } from "@/components/custom/submission-card"
@@ -496,7 +497,10 @@ function SubmissionsPage() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Sign in with Discord</AlertDialogTitle>
                 <AlertDialogDescription>
-                  You need to log in before creating a new submission.
+                  You need to log in before creating a new submission. By logging in, you agree to{" "}
+                  <Link href="/terms">Terms</Link>{" "}
+                  and{" "}
+                  <Link href="/privacy">Privacy</Link>.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

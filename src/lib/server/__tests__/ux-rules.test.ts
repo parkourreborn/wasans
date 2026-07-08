@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import calculateScore from "@/lib/calc-score"
+import { validatePlayerName } from "@/lib/player-name"
 import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
 import {
   normalizeModeratorNote,
@@ -81,4 +82,13 @@ test("submission API errors map to the correct HTTP status codes", () => {
   assert.equal(getSubmissionErrorStatus("Rate limit exceeded"), 429)
   assert.equal(getSubmissionErrorStatus("DB binding not available"), 500)
   assert.equal(getSubmissionErrorStatus("Unexpected issue"), 400)
+})
+
+test("player username validation allows clean names and rejects bad ones", () => {
+  assert.deepEqual(validatePlayerName(" Wasans  Main "), { ok: true, playerName: "Wasans Main" })
+  assert.deepEqual(validatePlayerName("wasans_1"), { ok: true, playerName: "wasans_1" })
+  assert.equal(validatePlayerName("ab").ok, false)
+  assert.equal(validatePlayerName("wasans!").ok, false)
+  assert.equal(validatePlayerName("wasans-").ok, false)
+  assert.equal(validatePlayerName("Deleted Account").ok, false)
 })

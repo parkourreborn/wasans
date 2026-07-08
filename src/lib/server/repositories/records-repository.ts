@@ -1,6 +1,9 @@
 import "server-only"
+import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 export async function listWorldRecords(db: D1Database) {
+  await ensurePlayerAvatarColumns(db)
+
   const rows = await db.prepare(
     `SELECT
        wrs.*,
@@ -13,6 +16,7 @@ export async function listWorldRecords(db: D1Database) {
      FROM wrs
      LEFT JOIN players ON players.uuid = wrs.player_uuid
      LEFT JOIN submissions ON submissions.uuid = wrs.submission_uuid
+     WHERE COALESCE(players.account_status, 'active') != 'deactivated'
      ORDER BY wrs.trial_name ASC`
   ).all()
 
@@ -20,6 +24,8 @@ export async function listWorldRecords(db: D1Database) {
 }
 
 export async function getWorldRecordByTrial(db: D1Database, trialName: string) {
+  await ensurePlayerAvatarColumns(db)
+
   return db.prepare(
     `SELECT
        wrs.*,
@@ -32,7 +38,8 @@ export async function getWorldRecordByTrial(db: D1Database, trialName: string) {
      FROM wrs
      LEFT JOIN players ON players.uuid = wrs.player_uuid
      LEFT JOIN submissions ON submissions.uuid = wrs.submission_uuid
-     WHERE wrs.trial_name = ?`
+     WHERE wrs.trial_name = ?
+       AND COALESCE(players.account_status, 'active') != 'deactivated'`
   )
     .bind(trialName)
     .first()

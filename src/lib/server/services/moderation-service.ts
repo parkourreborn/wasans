@@ -1,8 +1,11 @@
 import "server-only"
+import calculateScore from "@/lib/calc-score"
+import type { TrialName } from "@/lib/trials"
 import type { AuthUser } from "@/lib/server/auth"
 import { canModerate } from "@/lib/server/auth"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
+import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
@@ -10,6 +13,7 @@ import {
   deleteBotThread,
   getRankLabel,
   postApprovedRun,
+  postWrPing,
   reportMissingApprovedThread,
   sendDiscordDm,
   updateSubmissionThreadContent,
@@ -40,6 +44,71 @@ const botModeratorUser: AuthUser = {
   player_name: "Discord Bot",
   score: 0,
   permission: 1,
+}
+
+type ScorePbRow = {
+  trial_name: TrialName
+  time: number
+}
+
+type PreviousWrRow = {
+  trial_name: TrialName
+  submission_uuid: string
+  player_uuid: string
+  player_name: string
+  time: number
+  date: string
+  previous_thread_id: string | null
+}
+
+function scoreFromPbs(
+  pbs: ScorePbRow[],
+  wrs: Map<TrialName, number>,
+  trialCount: number,
+  wrTrial?: TrialName
+) {
+  if (trialCount <= 0) {
+    return 0
+  }
+
+  let total = 0
+
+  for (const pb of pbs) {
+    const trial = pb.trial_name
+    const time = Number(pb.time)
+
+    if (!Number.isFinite(time) || time <= 0) {
+      continue
+    }
+
+    if (wrTrial && trial === wrTrial) {
+      total += 1
+      continue
+    }
+
+    const wr = wrs.get(trial)
+
+    if (!wr || !Number.isFinite(wr)) {
+      continue
+    }
+
+    total += calculateScore(wr, time, trial)
+  }
+
+  return Number((total / Math.max(trialCount, 1)).toFixed(3))
+}
+
+function withSubmittedPb(pbs: ScorePbRow[], trialName: string, time: number) {
+  const rowsByTrial = new Map<TrialName, ScorePbRow>()
+
+  for (const pb of pbs) {
+    rowsByTrial.set(pb.trial_name, { trial_name: pb.trial_name, time: Number(pb.time) })
+  }
+
+  const trial = trialName as TrialName
+  rowsByTrial.set(trial, { trial_name: trial, time })
+
+  return [...rowsByTrial.values()]
 }
 
 function getBotApiKeyFromRequest(request: Request) {
@@ -91,6 +160,8 @@ export async function resolveModeratorUser(request: Request, env: CloudflareEnv,
     return botModeratorUser
   }
 
+  await ensurePlayerAvatarColumns(env.wasans)
+
   const account = await env.wasans.prepare(
     `SELECT player_uuid
      FROM oauth_accounts
@@ -116,6 +187,7 @@ export async function resolveModeratorUser(request: Request, env: CloudflareEnv,
        ON oauth_accounts.player_uuid = players.uuid
        AND oauth_accounts.provider = 'discord'
      WHERE players.uuid = ?
+       AND COALESCE(players.account_status, 'active') = 'active'
      ORDER BY oauth_accounts.updated_at DESC
      LIMIT 1`
   )
@@ -247,14 +319,25 @@ export async function patchSubmission(
   ctx.waitUntil((async () => {
     try {
       const db = env.wasans
-      const previousWrRow = await db.prepare(
-        `SELECT w.submission_uuid, w.player_uuid, w.player_name, w.time, w.date, s.thread_id AS previous_thread_id
-         FROM wrs w
-         LEFT JOIN submissions s ON s.uuid = w.submission_uuid
-         WHERE w.trial_name = ?`
-      )
-        .bind(submission.trial_name)
-        .first<{ submission_uuid: string; player_uuid: string; player_name: string; time: number; date: string; previous_thread_id: string | null } | null>()
+      const [previousWrResult, oldPbResult, trialCountRow] = await Promise.all([
+        db.prepare(
+          `SELECT w.trial_name, w.submission_uuid, w.player_uuid, w.player_name, w.time, w.date, s.thread_id AS previous_thread_id
+          FROM wrs w
+          LEFT JOIN submissions s ON s.uuid = w.submission_uuid`
+        )
+          .all<PreviousWrRow>(),
+        db.prepare(`SELECT trial_name, time FROM pbs WHERE player_uuid = ?`)
+          .bind(submission.player_uuid)
+          .all<ScorePbRow>(),
+        db.prepare(`SELECT COUNT(*) AS count FROM trials`).first<{ count: number }>(),
+      ])
+
+      const previousWrRows = previousWrResult.results || []
+      const oldPbRows = oldPbResult.results || []
+      const previousWrRow = previousWrRows.find((row) => row.trial_name === submission.trial_name) ?? null
+      const beforeWrTimes = new Map<TrialName, number>(previousWrRows.map((row) => [row.trial_name, Number(row.time)] as const))
+      const trialCount = Number(trialCountRow?.count ?? 0)
+      const beforeScore = scoreFromPbs(oldPbRows, beforeWrTimes, trialCount)
 
       const previousPbRow = previousState === "approved"
         ? await db.prepare(
@@ -284,7 +367,7 @@ export async function patchSubmission(
          WHERE w.trial_name = ?`
       )
         .bind(submission.trial_name)
-        .first<{ submission_uuid: string; player_uuid: string; player_name: string; trial_name: string; time: number; date: string; previous_thread_id: string | null } | null>()
+        .first<PreviousWrRow | null>()
 
       const wasWr = previousWrRow?.submission_uuid === submission.uuid
       const isCurrentWr = wrRow?.submission_uuid === submission.uuid
@@ -295,10 +378,25 @@ export async function patchSubmission(
         return
       }
 
-      const playerScoreBefore = oldPlayer?.score
+      const submissionIsWr = wrRow?.submission_uuid === uuid
+      const afterWrTimes = new Map(beforeWrTimes)
+      if (wrRow) {
+        afterWrTimes.set(wrRow.trial_name, Number(wrRow.time))
+      }
+
+      const oldPlayerScore = oldPlayer?.score !== undefined ? Number(oldPlayer.score) : undefined
+      const updatedTime = Number(updatedSubmission.time)
+      const playerScoreBefore = scoreRecalculationNeeded ? beforeScore : oldPlayerScore
+      const newPlayerScore = scoreRecalculationNeeded && isApproved
+        ? scoreFromPbs(
+            withSubmittedPb(oldPbRows, updatedSubmission.trial_name, updatedTime),
+            afterWrTimes,
+            trialCount,
+            submissionIsWr ? (updatedSubmission.trial_name as TrialName) : undefined
+          )
+        : Number(updatedSubmission.player_score)
       const finalModeratorNote = newModeratorNote ?? submission.moderator_note
-      const scoreChanged = typeof playerScoreBefore === "number" && Number(updatedSubmission.player_score) !== playerScoreBefore
-      const newPlayerScore = Number(updatedSubmission.player_score)
+      const scoreChanged = typeof playerScoreBefore === "number" && newPlayerScore !== playerScoreBefore
       const oldRankName = typeof playerScoreBefore === "number" ? getRankLabel(playerScoreBefore) : null
       const newRankName = getRankLabel(newPlayerScore)
       const rankChanged = oldRankName !== null && newRankName !== null && oldRankName !== newRankName
@@ -340,7 +438,6 @@ export async function patchSubmission(
         }
       }
 
-      const submissionIsWr = wrRow?.submission_uuid === uuid
       const hasExistingThread = Boolean(submission.thread_id)
       const shouldUpdateThread = shouldUpdateSubmissionThread({
         hasExistingThread,
@@ -362,14 +459,14 @@ export async function patchSubmission(
         const previousWrThreadId = previousToShow?.previous_thread_id ?? undefined
         const updateOldTime = previousPbRow?.time ?? oldPb?.time
 
-        await updateSubmissionThreadContent(submission.thread_id, {
+        const threadUpdated = await updateSubmissionThreadContent(submission.thread_id, {
           submission_uuid: updatedSubmission.uuid,
           player_uuid: updatedSubmission.player_uuid,
           player_name: updatedSubmission.player_name,
           trial_name: updatedSubmission.trial_name,
           time: Number(updatedSubmission.time),
-          player_score: Number(updatedSubmission.player_score),
-          oldPlayerScore: oldPlayer?.score,
+          player_score: newPlayerScore,
+          oldPlayerScore: playerScoreBefore,
           oldTime: updateOldTime,
           discordUserId: String(oldPlayer?.player_id),
           averageScoreDelta,
@@ -380,12 +477,16 @@ export async function patchSubmission(
           previous_wr_thread_id: previousWrThreadId,
           new_state: newState,
           moderator_note: updatedSubmission.moderator_note,
-        }).catch(() => null)
+        }).catch(() => false)
+
+        if (threadUpdated && newState === "approved" && submissionIsWr && previousWrRow?.submission_uuid !== uuid) {
+          await postWrPing(submission.thread_id).catch(() => null)
+        }
       }
 
       const shouldCreateThread = !hasExistingThread && (
-        (submissionIsWr && previousWrRow?.submission_uuid !== uuid)
-        || (newState === "approved" && previousState !== "approved" && Number(updatedSubmission.player_score) > 0.3)
+        submissionIsWr
+        || (newState === "approved" && previousState !== "approved" && newPlayerScore > 0.3)
       )
 
       if (scoreRecalculationNeeded) {
@@ -412,8 +513,8 @@ export async function patchSubmission(
         player_name: updatedSubmission.player_name,
         trial_name: updatedSubmission.trial_name,
         time: Number(updatedSubmission.time),
-        player_score: Number(updatedSubmission.player_score),
-        oldPlayerScore: oldPlayer?.score,
+        player_score: newPlayerScore,
+        oldPlayerScore: playerScoreBefore,
         oldTime: oldPb?.time,
         discordUserId: String(oldPlayer?.player_id),
         averageScoreDelta,

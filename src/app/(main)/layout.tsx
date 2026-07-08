@@ -5,6 +5,7 @@ import { AppSidebar } from "@/components/custom/app-sidebar"
 import { SettingsProvider } from "@/components/custom/settings-provider"
 import { Button } from "@/components/ui/button"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { Toaster } from "@/components/ui/sonner"
 import { getRouteTheme } from "@/lib/route-theme"
 
 export default function RootLayout({
@@ -42,6 +43,7 @@ export default function RootLayout({
           </div>
           <div className="relative z-10">{children}</div>
         </main>
+        <Toaster />
       </SettingsProvider>
     </SidebarProvider>
   )

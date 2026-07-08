@@ -1,4 +1,5 @@
 import "server-only"
+import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 export type SubmissionRow = {
   uuid: string
@@ -37,7 +38,9 @@ export async function listSubmissions(
     search?: string
   }
 ) {
-  const whereConditions: string[] = []
+  await ensurePlayerAvatarColumns(db)
+
+  const whereConditions: string[] = ["COALESCE(players.account_status, 'active') != 'deactivated'"]
   const bindValues: (string | number)[] = []
 
   if (options.state && ["approved", "denied", "pending"].includes(options.state)) {
@@ -57,7 +60,12 @@ export async function listSubmissions(
 
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : ""
 
-  const countResult = await db.prepare(`SELECT COUNT(*) AS count FROM submissions ${whereClause}`)
+  const countResult = await db.prepare(
+    `SELECT COUNT(*) AS count
+     FROM submissions
+     LEFT JOIN players ON players.uuid = submissions.player_uuid
+     ${whereClause}`
+  )
     .bind(...bindValues)
     .first<{ count: number }>()
 
@@ -79,7 +87,14 @@ export async function listSubmissions(
 }
 
 export async function findPlayerByUuid(db: D1Database, playerUuid: string) {
-  return db.prepare(`SELECT uuid, player_id, player_name, score FROM players WHERE uuid = ?`)
+  await ensurePlayerAvatarColumns(db)
+
+  return db.prepare(
+    `SELECT uuid, player_id, player_name, score
+     FROM players
+     WHERE uuid = ?
+       AND COALESCE(account_status, 'active') = 'active'`
+  )
     .bind(playerUuid)
     .first<PlayerSubmissionContext>()
 }
