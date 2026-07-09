@@ -375,7 +375,7 @@ export type PendingSubmissionPost = {
 
 export async function postPendingRun(submission: PendingSubmissionPost): Promise<{ threadId: string | null }> {
   try {
-    if (!Number.isFinite(submission.player_score) || submission.player_score < 0.3) {
+    if (!Number.isFinite(submission.player_score)) {
       return { threadId: null }
     }
 

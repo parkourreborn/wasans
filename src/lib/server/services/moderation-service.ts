@@ -486,7 +486,7 @@ export async function patchSubmission(
 
       const shouldCreateThread = !hasExistingThread && (
         submissionIsWr
-        || (newState === "approved" && previousState !== "approved" && newPlayerScore > 0.3)
+        || (newState === "approved" && previousState !== "approved")
       )
 
       if (scoreRecalculationNeeded) {
