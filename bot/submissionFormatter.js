@@ -22,7 +22,7 @@ export function buildSubmissionContent(body) {
         lines.push(`N/A -> ${body.time_new}`);
     }
 
-    if (body.score_new !== undefined && body.score_new !== null && body.score_old !== undefined && body.score_old !== null) {
+    if (body.score_new !== undefined && body.score_new !== null && body.score_old !== undefined && body.score_old !== null && body.score_new !== body.score_old) {
         lines.push(`*${body.score_old}* -> *${body.score_new}*`);
     }
 
