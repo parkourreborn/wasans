@@ -77,29 +77,14 @@ function getRoleForScore(score: number) {
   return matchedRole
 }
 
-async function manageDiscordRole(userId: string, roleId: string, action: "add" | "remove") {
-  try {
-    await sendBotApiRequest("/manage-role", {
-      guild_id: GUILD_ID,
-      user_id: userId,
-      role_id: roleId,
-      action,
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (action === "remove" && message.includes("role not found")) {
-      return
-    }
-    throw error
-  }
-}
-
-export const wasansMemberRoleId = "1371654123446992936"
 
 export async function sendDiscordDm(userId: string, content: string) {
-  return sendBotApiRequest("/send-dm", {
-    user_id: userId,
+  return sendBotApiRequest("/v2/messages/dm", {
+    discord_user_id: userId,
     content,
+    options: {
+      fail_if_cannot_dm: false,
+    },
   })
 }
 
@@ -112,20 +97,43 @@ function getRoleIndex(roleId: string) {
   return sortedRankRoles.findIndex((rank) => rank.roleId === roleId)
 }
 
-async function sendPromotionMessage(userId: string, oldRoleId: string, newRoleId: string) {
-  const oldIndex = getRoleIndex(oldRoleId)
-  const newIndex = getRoleIndex(newRoleId)
-  const isPromotion = newIndex > oldIndex
-  const action = isPromotion ? "promoted" : "demoted"
-  const oldRoleName = roleNames[oldRoleId] ?? oldRoleId
-  const newRoleName = roleNames[newRoleId] ?? newRoleId
+type SubmissionSyncPayload = {
+  submission_id: string
+  state: "pending" | "approved" | "denied"
+  trial_name: string
+  player_name: string
+  player_discord_id?: string
+  time_new: number
+  time_old?: number
+  score_new?: number
+  score_old?: number
+  is_wr: boolean
+  previous_wr?: {
+    player_name?: string
+    time?: number
+    thread_id?: string
+  }
+  moderator_note?: string
+  thread_id?: string
+  options?: {
+    send_wr_ping?: boolean
+    create_if_missing?: boolean
+  }
+}
 
+type SubmissionSyncResponse = {
+  ok?: boolean
+  thread?: {
+    id?: string
+    created?: boolean
+    updated?: boolean
+  }
+  tags_applied?: string[]
+  wr_ping_sent?: boolean
+}
 
-  await sendBotApiRequest("/send-message", {
-    guild_id: GUILD_ID,
-    channel_id: "1258680561929814066",
-    content: `${isPromotion ? "🎉 ": "😭 "}<@${userId}> has been ${action} from ${oldRoleName} to ${newRoleName}!`,
-  })
+async function syncSubmissionThread(payload: SubmissionSyncPayload): Promise<SubmissionSyncResponse> {
+  return sendBotApiRequest("/v2/submissions/sync", payload) as Promise<SubmissionSyncResponse>
 }
 
 // Discord bot API configuration
@@ -160,9 +168,11 @@ async function getBotApiKey(): Promise<string> {
 }
 
 type BotApiResponse = {
+  ok?: boolean
   error?: string
   thread_id?: string
   id?: string
+  message_id?: string | null
 }
 
 async function sendBotApiRequest(
@@ -196,95 +206,17 @@ async function sendBotApiRequest(
   return json
 }
 
-async function sendBotMessage(channelId: string, content: string) {
-  return sendBotApiRequest("/send-message", {
-    guild_id: GUILD_ID,
-    channel_id: channelId,
-    content,
-  })
-}
 
-async function createBotThread(
-  channelId: string,
-  title: string,
-  content: string,
-  tags: string[]
-): Promise<string | null> {
+export async function deleteBotThread(threadId: string, submissionId = "unknown-submission"): Promise<boolean> {
   try {
-    const json = await sendBotApiRequest("/create-thread", {
-      channel_id: channelId,
-      title,
-      content,
-      guild_id: GUILD_ID,
-      tags,
-    })
-
-    return typeof json.thread_id === "string"
-      ? json.thread_id
-      : typeof json.id === "string"
-      ? json.id
-      : null
-  } catch (error) {
-    console.error("Failed to create bot thread:", error)
-    return null
-  }
-}
-
-async function updateBotThreadTags(
-  threadId: string,
-  tags: string[]
-): Promise<boolean> {
-  try {
-    await sendBotApiRequest("/update-thread-tags", {
+    await sendBotApiRequest("/v2/submissions/delete", {
+      submission_id: submissionId,
       thread_id: threadId,
-      channel_id: THREAD_CHANNEL_ID,
-      tags,
-    })
-    return true
-  } catch (error) {
-    console.error("Failed to update bot thread tags:", error)
-    return false
-  }
-}
-
-async function updateBotThreadContent(
-  threadId: string,
-  title: string | null,
-  content: string
-): Promise<boolean> {
-  try {
-    await sendBotApiRequest("/update-thread", {
-      thread_id: threadId,
-      channel_id: THREAD_CHANNEL_ID,
-      title,
-      content,
-    })
-    return true
-  } catch (error) {
-    console.error("Failed to update bot thread content:", error)
-    return false
-  }
-}
-
-export async function deleteBotThread(threadId: string): Promise<boolean> {
-  try {
-    await sendBotApiRequest("/delete-thread", {
-      thread_id: threadId,
-      channel_id: THREAD_CHANNEL_ID
+      mode: "delete",
     })
     return true
   } catch (error) {
     console.error("Failed to delete bot thread:", error)
-    return false
-  }
-}
-
-export async function postWrPing(threadId: string): Promise<boolean> {
-  try {
-    await sendBotMessage(threadId, WR_PING)
-    return true
-  } catch (error) {
-    console.error("Failed to send WR ping:", error)
     return false
   }
 }
@@ -379,24 +311,22 @@ export async function postPendingRun(submission: PendingSubmissionPost): Promise
       return { threadId: null }
     }
 
-    const oldTimeFormatted = submission.oldTime !== undefined ? submission.oldTime.toFixed(3) : "N/A"
-    const timeFormatted = submission.time.toFixed(3)
-    const userMention = submission.discordUserId ? `<@${submission.discordUserId}>` : submission.player_name
-
-    const announcementMessage = [
-      `**${submission.trial_name} ${timeFormatted} | ${userMention}**`,
-      `${oldTimeFormatted} -> ${timeFormatted}`,
-      `https://wasans.tully.sh/submissions/${submission.submission_uuid}`,
-    ]
-      .filter(Boolean)
-      .join("\n")
-
-    const threadTitle = `${submission.trial_name} ${timeFormatted} | ${submission.player_name}`
-    const threadContent = announcementMessage
-
-    const tags = ["1351580041896656936"]
-
-    const threadId = await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent, tags)
+    const response = await syncSubmissionThread({
+      submission_id: submission.submission_uuid,
+      state: "pending",
+      trial_name: submission.trial_name,
+      player_name: submission.player_name,
+      player_discord_id: submission.discordUserId,
+      time_new: submission.time,
+      time_old: submission.oldTime,
+      score_new: Number.isFinite(submission.player_score) ? submission.player_score : undefined,
+      is_wr: false,
+      options: {
+        create_if_missing: true,
+        send_wr_ping: false,
+      },
+    })
+    const threadId = response.thread?.id || null
     return { threadId }
   } catch (error) {
     console.error("Error posting pending run:", error)
@@ -406,44 +336,28 @@ export async function postPendingRun(submission: PendingSubmissionPost): Promise
 
 export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ threadId: string | null }> {
   try {
-    const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime.toFixed(3) : "N/A"
-    const newTimeFormatted = run.time.toFixed(3)
-    const oldScoreFormatted = run.oldPlayerScore !== undefined ? run.oldPlayerScore.toFixed(3) : "N/A"
-    const newScoreFormatted = run.player_score.toFixed(3)
-    const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
-
-    const lines: Array<string | null> = []
-
-    lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
-    lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
-    lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`)
-
-    if (run.is_wr) {
-      if (run.previous_wr_thread_id) {
-        lines.push(`Previous WR: <#${run.previous_wr_thread_id}>`)
-      } else if (run.previous_wr_time && run.previous_wr_player_name) {
-        lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name}`)
-      }
-    }
-
-    if (run.averageScoreDelta !== undefined) {
-      lines.push(`Average score decrease: ${run.averageScoreDelta.toFixed(3)}`)
-    }
-
-    lines.push(`https://wasans.tully.sh/submissions/${run.submission_uuid}`)
-
-    const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
-    const threadContent = lines.filter(Boolean).join("\n")
-    const tags = ["1351581039499284521"]
-
-    if (run.is_wr) {
-      tags.push("1351581114841436230")
-    }
-
-    const threadId = await createBotThread(THREAD_CHANNEL_ID, threadTitle, threadContent, tags)
-    if (threadId && run.is_wr) {
-      await postWrPing(threadId)
-    }
+    const response = await syncSubmissionThread({
+      submission_id: run.submission_uuid,
+      state: "approved",
+      trial_name: run.trial_name,
+      player_name: run.player_name,
+      player_discord_id: run.discordUserId,
+      time_new: run.time,
+      time_old: run.oldTime,
+      score_new: run.player_score,
+      score_old: run.oldPlayerScore,
+      is_wr: run.is_wr,
+      previous_wr: {
+        player_name: run.previous_wr_player_name,
+        time: run.previous_wr_time,
+        thread_id: run.previous_wr_thread_id,
+      },
+      options: {
+        create_if_missing: true,
+        send_wr_ping: run.is_wr,
+      },
+    })
+    const threadId = response.thread?.id || null
 
     return { threadId }
   } catch (error) {
@@ -452,88 +366,38 @@ export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ thre
   }
 }
 
-export async function updateSubmissionThreadTags(
-  threadId: string,
-  newState: string,
-  isWr: boolean
-): Promise<boolean> {
-  const tags: string[] = []
-
-  if (newState === "approved") {
-    tags.push("1351581039499284521")
-  } else if (newState === "denied") {
-    tags.push("1351581072043020442")
-  } else if (newState === "pending") {
-    tags.push("1351580041896656936")
-  }
-
-  // Only add WR tag when the submission is approved
-  if (isWr && newState === "approved") {
-    tags.push("1351581114841436230")
-  }
-
-  return updateBotThreadTags(threadId, tags)
-}
-
 export async function updateSubmissionThreadContent(
   threadId: string,
   run: ApprovedHighScoreRun
 ): Promise<boolean> {
   try {
-    const oldTimeFormatted = run.oldTime !== undefined ? run.oldTime.toFixed(3) : "N/A"
-    const newTimeFormatted = run.time.toFixed(3)
-    const oldScoreFormatted = run.oldPlayerScore !== undefined ? run.oldPlayerScore.toFixed(3) : "N/A"
-    const newScoreFormatted = run.player_score.toFixed(3)
-    const userMention = run.discordUserId ? `<@${run.discordUserId}>` : run.player_name
-
-    const scoreDeltaLine =
-      run.averageScoreDelta !== undefined
-      ?
-        `Average score decrease: ${run.averageScoreDelta.toFixed(3)}`
-        : null
-
-    const lines: Array<string | null> = []
-    const state = run.new_state ?? "approved"
-
-    if (state === "approved") {
-      lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
-      lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
-      lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`)
-
-      if (run.is_wr) {
-        if (run.previous_wr_thread_id) {
-          lines.push(`Previous WR: <#${run.previous_wr_thread_id}>`)
-        } else if (run.previous_wr_time && run.previous_wr_player_name) {
-          lines.push(`Previous WR: ${run.previous_wr_time.toFixed(3)} by ${run.previous_wr_player_name}`)
-        }
-      }
-
-      if (scoreDeltaLine) {
-        lines.push(scoreDeltaLine)
-      }
-    } else if (state === "pending") {
-      lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
-      if (run.oldTime !== undefined) {
-        lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`)
-      }
-    } else if (state === "denied") {
-      lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
-    } else {
-      lines.push(`**${run.trial_name} ${newTimeFormatted} | ${userMention}**`)
-    }
-
-    if (run.moderator_note) {
-      lines.push(`Moderator note: ${run.moderator_note}`)
-    }
-
-    lines.push(`https://wasans.tully.sh/submissions/${run.submission_uuid}`)
-
-    const announcementMessage = lines.filter(Boolean).join("\n")
-
-    const threadTitle = `${run.trial_name} ${newTimeFormatted} | ${run.player_name}`
-
-    const ok = await updateBotThreadContent(threadId, threadTitle, announcementMessage)
-    return ok
+    const state = run.new_state === "pending" || run.new_state === "denied" || run.new_state === "approved"
+      ? run.new_state
+      : "approved"
+    const response = await syncSubmissionThread({
+      submission_id: run.submission_uuid,
+      state,
+      trial_name: run.trial_name,
+      player_name: run.player_name,
+      player_discord_id: run.discordUserId,
+      time_new: run.time,
+      time_old: run.oldTime,
+      score_new: run.player_score,
+      score_old: run.oldPlayerScore,
+      is_wr: run.is_wr,
+      previous_wr: {
+        player_name: run.previous_wr_player_name,
+        time: run.previous_wr_time,
+        thread_id: run.previous_wr_thread_id,
+      },
+      moderator_note: run.moderator_note || undefined,
+      thread_id: threadId,
+      options: {
+        create_if_missing: true,
+        send_wr_ping: state === "approved" && run.is_wr,
+      },
+    })
+    return Boolean(response.ok)
   } catch (error) {
     console.error("Failed to update submission thread content:", error)
     return false
@@ -560,46 +424,56 @@ export async function updateDiscordUsernameOnScoreChange(playerUuid: string, old
     const oldRoleId = getRoleForScore(oldScore)
     const newRoleId = getRoleForScore(score)
 
-    if (score > 0.3) {
-      await manageDiscordRole(playerId, wasansMemberRoleId, "add")
+    const memberSyncBody = {
+      discord_user_id: playerId,
+      scope: "ranking",
+      score,
+      nickname: `${playerName} (${score.toFixed(3)})`,
+      options: {
+        update_nickname: true,
+        remove_unlisted_in_scope: true,
+      },
     }
 
-    if (newRoleId) {
-      for (const rank of sortedRankRoles) {
-        if (rank.roleId === newRoleId) {
-          continue
-        }
-
-        try {
-          await manageDiscordRole(playerId, rank.roleId, "remove")
-        } catch (error) {
-          console.error("Failed to remove old Discord rank role:", { playerId, roleId: rank.roleId, error })
-        }
-      }
-
-      try {
-        await manageDiscordRole(playerId, newRoleId, "add")
-      } catch (error) {
-        console.error("Failed to add Discord rank role:", { playerId, roleId: newRoleId, error })
-      }
-    }
-
-    if (oldRoleId && newRoleId && oldRoleId !== newRoleId) {
-      try {
-        await sendPromotionMessage(playerId, oldRoleId, newRoleId)
-      } catch (error) {
-        console.error("Failed to announce role promotion:", error)
-      }
-    }
+    const roleChanged = Boolean(oldRoleId && newRoleId && oldRoleId !== newRoleId)
 
     try {
-      await sendBotApiRequest("/set-nick", {
-        guild_id: GUILD_ID,
-        user_id: playerId,
-        nick: `${playerName} (${score.toFixed(3)})`,
-      })
+      if (roleChanged && oldRoleId && newRoleId) {
+        const oldIndex = getRoleIndex(oldRoleId)
+        const newIndex = getRoleIndex(newRoleId)
+        const isPromotion = newIndex > oldIndex
+        const action = isPromotion ? "promoted" : "demoted"
+        const oldRoleName = roleNames[oldRoleId] ?? oldRoleId
+        const newRoleName = roleNames[newRoleId] ?? newRoleId
+
+        await sendBotApiRequest("/v2/batch", {
+          requests: [
+            {
+              id: "member-sync",
+              route: "/v2/members/sync",
+              body: memberSyncBody,
+            },
+            {
+              id: "promotion-dm",
+              route: "/v2/messages/dm",
+              body: {
+                discord_user_id: playerId,
+                content: `${isPromotion ? "🎉 ": "😭 "}You have been ${action} from ${oldRoleName} to ${newRoleName}!`,
+                options: {
+                  fail_if_cannot_dm: false,
+                },
+              },
+            },
+          ],
+          options: {
+            continue_on_error: true,
+          },
+        })
+      } else {
+        await sendBotApiRequest("/v2/members/sync", memberSyncBody)
+      }
     } catch (error) {
-      console.error("Failed to update Discord username on score change:", error)
+      console.error("Failed to sync Discord member state on score change:", error)
     }
   } catch (error) {
     console.error("updateDiscordUsernameOnScoreChange failed:", error)

@@ -13,11 +13,9 @@ import {
   deleteBotThread,
   getRankLabel,
   postApprovedRun,
-  postWrPing,
   reportMissingApprovedThread,
   sendDiscordDm,
   updateSubmissionThreadContent,
-  updateSubmissionThreadTags,
 } from "@/lib/server/notifications"
 import {
   deleteSubmissionCascade,
@@ -453,13 +451,11 @@ export async function patchSubmission(
           averageScoreDelta = await calculateAverageScoreDeltaForWrChange(db, submission.trial_name, oldWr, wrRow.time).catch(() => undefined)
         }
 
-        await updateSubmissionThreadTags(submission.thread_id, newState, submissionIsWr).catch(() => null)
-
         const previousToShow = previousWrRow?.submission_uuid === uuid ? wrRow : previousWrRow
         const previousWrThreadId = previousToShow?.previous_thread_id ?? undefined
         const updateOldTime = previousPbRow?.time ?? oldPb?.time
 
-        const threadUpdated = await updateSubmissionThreadContent(submission.thread_id, {
+        await updateSubmissionThreadContent(submission.thread_id, {
           submission_uuid: updatedSubmission.uuid,
           player_uuid: updatedSubmission.player_uuid,
           player_name: updatedSubmission.player_name,
@@ -478,10 +474,6 @@ export async function patchSubmission(
           new_state: newState,
           moderator_note: updatedSubmission.moderator_note,
         }).catch(() => false)
-
-        if (threadUpdated && newState === "approved" && submissionIsWr && previousWrRow?.submission_uuid !== uuid) {
-          await postWrPing(submission.thread_id).catch(() => null)
-        }
       }
 
       const shouldCreateThread = !hasExistingThread && (
@@ -563,7 +555,7 @@ export async function deleteSubmission(
 
   if (submission.thread_id) {
     ctx.waitUntil((async () => {
-      await deleteBotThread(submission.thread_id as string).catch(() => null)
+      await deleteBotThread(submission.thread_id as string, submission.uuid).catch(() => null)
     })())
   }
 
