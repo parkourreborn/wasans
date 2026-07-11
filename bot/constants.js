@@ -2,7 +2,7 @@ export const PORT = Number(process.env.PORT || 4500);
 export const API_SECRET = process.env.API_SECRET;
 export const BOT_TOKEN = process.env.BOT_TOKEN || process.env.DISCORD_TOKEN
 
-export const DEFAULT_GUILD_ID = process.env.GUILD_ID;
+export const DEFAULT_GUILD_ID = "1257994787512913961";
 export const ALLOWED_USER_ID = "694274948071555154";
 
 export const HONEYPOT_CHANNEL_ID = "1524517132786864279";
