@@ -18,12 +18,12 @@ export function buildSubmissionContent(body) {
 
     if (body.time_old !== undefined && body.time_old !== null) {
         lines.push(`${body.time_old} -> ${body.time_new}`);
+    } else {
+        lines.push(`N/A -> ${body.time_new}`);
     }
 
     if (body.score_new !== undefined && body.score_new !== null && body.score_old !== undefined && body.score_old !== null) {
         lines.push(`*${body.score_old}* -> *${body.score_new}*`);
-    } else if (body.score_new !== undefined && body.score_new !== null) {
-        lines.push(`*N/A* -> *${body.score_new}*`);
     }
 
     if (body.is_wr && body.previous_wr && (body.previous_wr.player_name || body.previous_wr.time)) {
