@@ -7,7 +7,6 @@ services:
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       API_SECRET: ${API_SECRET}
-      GUILD_ID: ${GUILD_ID}
       PORT: ${PORT:-4500}
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost ${PORT:-4500}"]
