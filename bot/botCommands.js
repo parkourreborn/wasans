@@ -9,12 +9,12 @@ export async function handleAdminCommandMessage(message, allowedUserId) {
     const commandName = args.shift()?.toLowerCase();
 
     if (!commandName) {
-        await logger.warn('Command ignored', 'No command name after prefix');
+        await logger.warn('Command ignored', 'No command was provided');
         return false;
     }
 
     if (commandName === 'status') {
-        await logger.log('Command executed', `status by ${message.author.id}`);
+        await logger.log('Command completed', 'Status replied with Online');
         await message.reply('Online');
         return true;
     }
@@ -22,7 +22,7 @@ export async function handleAdminCommandMessage(message, allowedUserId) {
     if (commandName === 'say') {
         const text = args.join(' ');
         if (!text) {
-            await logger.warn('Command ignored', 'say has no text payload');
+            await logger.warn('Command ignored', 'Say had no text to send');
             return true;
         }
 
@@ -38,7 +38,7 @@ export async function handleAdminCommandMessage(message, allowedUserId) {
         }
 
         await message.delete().catch(() => {});
-        await logger.log('Command executed', `say by ${message.author.id}; channel=${message.channel.id}`);
+        await logger.log('Command completed', 'Message sent and command message removed');
         return true;
     }
 
@@ -54,11 +54,11 @@ export async function handleAdminCommandMessage(message, allowedUserId) {
         }
 
         await message.delete().catch(() => {});
-        await logger.log('Command executed', `delete by ${message.author.id}; channel=${message.channel.id}`);
+        await logger.log('Command completed', 'Message deleted and command message removed');
         return true;
     }
 
-    await logger.warn('Unknown admin command', `name=${commandName}`);
+    await logger.warn('Command ignored', 'Unknown command');
 
     return false;
 }

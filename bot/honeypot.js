@@ -6,7 +6,7 @@ export async function handleHoneypot(message) {
     // if the message is from a bot, ignore it
     if (message.author.bot) return;
 
-    await logger.warn('Honeypot triggered', `user=${message.author.id}; channel=${message.channel.id}`);
+    await logger.warn('Honeypot triggered', `User ${message.author.id} posted in the honeypot channel`);
 
     const channel = message.channel;
     const messageHistory = await message.channel.messages.fetch({ limit: 50 });
@@ -25,7 +25,7 @@ export async function handleHoneypot(message) {
             reason: `Honeypot ban (sending scam message)`,
             deleteMessageSeconds: 604800,
         });
-        await logger.log('Honeypot action completed', `user=${message.author.id}; action=ban`);
+        await logger.log('Honeypot action completed', 'User was banned');
     } catch (error) {
         await logger.error(`Failed to ban user ${message.author.id}`, error.message);
         throw new Error(`Failed to ban user ${message.author.id}: ${error.message}`);
@@ -49,9 +49,9 @@ export async function ensureHoneypotWarningMessage() {
 
         if (!existingBotWarning) {
             await channel.send(HONEYPOT_WARNING_MESSAGE);
-            await logger.log('Honeypot initialized', 'Warning message created');
+            await logger.log('Honeypot ready', 'Warning message created');
         } else {
-            await logger.log('Honeypot initialized', 'Warning message already present');
+            await logger.log('Honeypot ready', 'Warning message already exists');
         }
     } catch (error) {
         await logger.error('Failed to ensure honeypot warning message', error.message);

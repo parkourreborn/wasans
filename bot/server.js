@@ -1,5 +1,4 @@
 import http from 'http';
-import { randomUUID } from 'crypto';
 import { API_SECRET, DEFAULT_GUILD_ID } from './constants.js';
 import { client } from './discordClient.js';
 import { logger } from './logging.js';
@@ -15,14 +14,8 @@ import {
     jsonResponse,
 } from './apiHandlers.js';
 
-function truncate(value, maxLength = 600) {
-    if (typeof value !== 'string') return '';
-    if (value.length <= maxLength) return value;
-    return `${value.slice(0, maxLength)}...`;
-}
-
-async function logApiEvent(level, requestId, title, description = '') {
-    const line = `[API][${requestId}] ${title}${description ? ` | ${description}` : ''}`;
+async function logApiEvent(level, title, description = '') {
+    const line = `${title}${description ? `: ${description}` : ''}`;
     if (level === 'error') {
         console.error(line);
     } else if (level === 'warn') {
@@ -33,16 +26,16 @@ async function logApiEvent(level, requestId, title, description = '') {
 
     try {
         if (level === 'error') {
-            await logger.error(`[API:${requestId}] ${title}`, description);
+            await logger.error(title, description);
             return;
         }
         if (level === 'warn') {
-            await logger.warn(`[API:${requestId}] ${title}`, description);
+            await logger.warn(title, description);
             return;
         }
-        await logger.log(`[API:${requestId}] ${title}`, description);
+        await logger.log(title, description);
     } catch (error) {
-        console.error(`[API][${requestId}] Failed to write remote log:`, error.message);
+        console.error('Failed to write remote log:', error.message);
     }
 }
 
@@ -73,48 +66,34 @@ function getAuthHeader(req) {
 }
 
 export const server = http.createServer(async (req, res) => {
-    const requestId = randomUUID().slice(0, 8);
     const startedAt = Date.now();
     const method = req.method || 'UNKNOWN';
     const host = req.headers.host || 'localhost';
     const url = new URL(req.url || '/', `http://${host}`);
     const pathname = url.pathname;
-    const sourceIp = req.socket?.remoteAddress || 'unknown';
-
-    let responseBody = '';
-    const originalEnd = res.end.bind(res);
-    res.end = ((chunk, ...args) => {
-        if (typeof chunk === 'string') {
-            responseBody = chunk;
-        } else if (Buffer.isBuffer(chunk)) {
-            responseBody = chunk.toString('utf8');
-        }
-        return originalEnd(chunk, ...args);
-    });
 
     res.on('finish', () => {
         const durationMs = Date.now() - startedAt;
         const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'log';
-        const summary = `${method} ${pathname} -> ${res.statusCode} in ${durationMs}ms`;
-        const detail = `ip=${sourceIp}; response=${truncate(responseBody)}`;
-        void logApiEvent(level, requestId, 'Request completed', `${summary}; ${detail}`);
+        const summary = `${method} ${pathname} finished with ${res.statusCode} in ${durationMs}ms`;
+        void logApiEvent(level, 'Request completed', summary);
     });
 
-    await logApiEvent('log', requestId, 'Request received', `method=${method}; path=${pathname}; ip=${sourceIp}`);
+    await logApiEvent('log', 'Request received', `${method} ${pathname}`);
 
     if (req.method !== 'POST') {
-        await logApiEvent('warn', requestId, 'Rejected request', 'Only POST is supported');
+        await logApiEvent('warn', 'Request rejected', 'Only POST is supported');
         return jsonResponse(res, 405, { error: 'Only POST is supported' });
     }
 
     if (!API_SECRET) {
-        await logApiEvent('error', requestId, 'Server misconfiguration', 'API_SECRET is not configured');
+        await logApiEvent('error', 'Request failed', 'API secret is not configured');
         return jsonResponse(res, 500, { error: 'API_SECRET is not configured' });
     }
 
     const authHeader = getAuthHeader(req);
     if (authHeader !== `Bearer ${API_SECRET}`) {
-        await logApiEvent('warn', requestId, 'Unauthorized request', 'Authorization header did not match');
+        await logApiEvent('warn', 'Request rejected', 'Unauthorized');
         return jsonResponse(res, 401, { error: 'Unauthorized' });
     }
 
@@ -123,7 +102,7 @@ export const server = http.createServer(async (req, res) => {
     try {
         payload = await parseJsonBody(req);
     } catch (error) {
-        await logApiEvent('warn', requestId, 'Invalid request body', error.message);
+        await logApiEvent('warn', 'Request rejected', error.message);
         return jsonResponse(res, 400, { error: error.message });
     }
 
@@ -133,13 +112,13 @@ export const server = http.createServer(async (req, res) => {
 
     const guildId = payload.guild_id || DEFAULT_GUILD_ID;
     if (!guildId) {
-        await logApiEvent('warn', requestId, 'Missing guild_id', 'No guild_id in payload and no DEFAULT_GUILD_ID configured');
+        await logApiEvent('warn', 'Request rejected', 'No guild was provided');
         return jsonResponse(res, 400, {
             error: 'guild_id is required or set GUILD_ID in the environment',
         });
     }
     if (typeof guildId !== 'string') {
-        await logApiEvent('warn', requestId, 'Invalid guild_id', 'guild_id must be a string');
+        await logApiEvent('warn', 'Request rejected', 'Guild must be a string');
         return jsonResponse(res, 400, { error: 'guild_id must be a string' });
     }
 
@@ -174,11 +153,11 @@ export const server = http.createServer(async (req, res) => {
             return await handleDeleteThread(guild, payload, res);
         }
 
-        await logApiEvent('warn', requestId, 'Unknown route', `path=${pathname}`);
+        await logApiEvent('warn', 'Request rejected', 'Unknown route');
 
         return jsonResponse(res, 404, { error: 'Route not found' });
     } catch (error) {
-        await logApiEvent('error', requestId, 'Unhandled API error', error.message);
+        await logApiEvent('error', 'Request failed', error.message);
         return jsonResponse(res, 500, {
             error: 'Internal server error',
             detail: error.message,

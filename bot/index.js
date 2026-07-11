@@ -9,10 +9,11 @@ import { server } from './server.js';
 client.once(Events.ClientReady, async () => {
     console.log('Bot ready. Listening on port', PORT);
 
-    await logger.log('Bot online!', '');
+    await logger.log('Bot is online', '');
     await ensureHoneypotWarningMessage();
 
     server.listen(PORT);
+    await logger.log('Server started', '');
 });
 
 client.on('messageCreate', async (message) => {

@@ -28,7 +28,7 @@ export async function handleSetNick(guild, payload, res) {
     const userId = payload.user_id;
     const nick = payload.nick;
 
-    await logAction('API action started: set nick', `guild=${guild.id}; user=${userId || 'missing'}; nick=${nick || 'missing'}`);
+    await logAction('Set nickname started', 'Updating a member nickname');
 
     if (!userId) return jsonResponse(res, 400, { error: 'user_id is required' });
     if (typeof userId !== 'string') return jsonResponse(res, 400, { error: 'user_id must be a string' });
@@ -37,7 +37,7 @@ export async function handleSetNick(guild, payload, res) {
 
     const member = await guild.members.fetch(userId);
     await member.setNickname(nick);
-    await logAction('Nickname updated successfully', `user=${userId}; nick=${nick}`);
+    await logAction('Set nickname completed', 'Nickname was updated');
     return jsonResponse(res, 200, { success: true, user_id: userId, nick });
 }
 
@@ -46,7 +46,7 @@ export async function handleManageRole(guild, payload, res) {
     const roleId = payload.role_id;
     const action = payload.action;
 
-    await logAction('API action started: manage role', `guild=${guild.id}; user=${userId || 'missing'}; role=${roleId || 'missing'}; action=${action || 'missing'}`);
+    await logAction('Role change started', 'Updating a member role');
 
     if (!userId) return jsonResponse(res, 400, { error: 'user_id is required' });
     if (typeof userId !== 'string') return jsonResponse(res, 400, { error: 'user_id must be a string' });
@@ -66,7 +66,7 @@ export async function handleManageRole(guild, payload, res) {
         await member.roles.remove(role);
     }
 
-    await logAction('Role action completed', `user=${userId}; role=${roleId}; action=${action}`);
+    await logAction('Role change completed', 'The member role was updated');
 
     return jsonResponse(res, 200, {
         success: true,
@@ -80,7 +80,7 @@ export async function handleSendMessage(guild, payload, res) {
     const channelId = payload.channel_id;
     const content = payload.content;
 
-    await logAction('API action started: send message', `guild=${guild.id}; channel=${channelId || 'missing'}`);
+    await logAction('Send message started', 'Posting a message in a channel');
 
     if (!channelId) return jsonResponse(res, 400, { error: 'channel_id is required' });
     if (typeof channelId !== 'string') return jsonResponse(res, 400, { error: 'channel_id must be a string' });
@@ -93,7 +93,7 @@ export async function handleSendMessage(guild, payload, res) {
     }
 
     const message = await channel.send(String(content));
-    await logAction('Channel message sent', `channel=${channelId}; message=${message.id}`);
+    await logAction('Send message completed', 'The message was posted');
     return jsonResponse(res, 200, {
         success: true,
         guild_id: guild.id,
@@ -107,7 +107,7 @@ export async function handleSendDM(payload, res) {
     const userId = payload.user_id;
     const content = payload.content;
 
-    await logAction('API action started: send DM', `user=${userId || 'missing'}`);
+    await logAction('Send DM started', 'Sending a direct message');
 
     if (!userId) return jsonResponse(res, 400, { error: 'user_id is required' });
     if (typeof userId !== 'string') return jsonResponse(res, 400, { error: 'user_id must be a string' });
@@ -117,7 +117,7 @@ export async function handleSendDM(payload, res) {
     try {
         const user = await client.users.fetch(userId);
         const message = await user.send(String(content));
-        await logAction('DM sent', `user=${userId}; message=${message.id}`);
+        await logAction('Send DM completed', 'The direct message was sent');
 
         return jsonResponse(res, 200, {
             success: true,
@@ -150,7 +150,7 @@ export async function handleCreateThread(guild, payload, res) {
     const content = payload.content;
     const tags = payload.tags;
 
-    await logAction('API action started: create thread', `guild=${guild.id}; channel=${channelId || 'missing'}; title=${title || 'missing'}`);
+    await logAction('Create thread started', 'Creating a new thread');
 
     if (!channelId) return jsonResponse(res, 400, { error: 'channel_id is required' });
     if (typeof channelId !== 'string') return jsonResponse(res, 400, { error: 'channel_id must be a string' });
@@ -176,7 +176,7 @@ export async function handleCreateThread(guild, payload, res) {
         await thread.setAppliedTags(tags);
     }
 
-    await logAction('Thread created', `thread=${thread.id}; channel=${channelId}`);
+    await logAction('Create thread completed', 'The thread was created');
 
     return jsonResponse(res, 200, {
         success: true,
@@ -192,7 +192,7 @@ export async function handleUpdateThreadTags(guild, payload, res) {
     const threadId = payload.thread_id;
     const tags = payload.tags;
 
-    await logAction('API action started: update thread tags', `guild=${guild.id}; channel=${channelId || 'missing'}; thread=${threadId || 'missing'}`);
+    await logAction('Update thread tags started', 'Updating thread tags');
 
     if (!channelId) return jsonResponse(res, 400, { error: 'channel_id is required' });
     if (typeof channelId !== 'string') return jsonResponse(res, 400, { error: 'channel_id must be a string' });
@@ -217,7 +217,7 @@ export async function handleUpdateThreadTags(guild, payload, res) {
         }
 
         await thread.setAppliedTags(tags);
-        await logAction('Thread tags updated', `thread=${threadId}; tags=${JSON.stringify(tags)}`);
+        await logAction('Update thread tags completed', 'The thread tags were updated');
 
         return jsonResponse(res, 200, {
             success: true,
@@ -242,7 +242,7 @@ export async function handleUpdateThread(guild, payload, res) {
     const title = payload.title;
     const content = payload.content;
 
-    await logAction('API action started: update thread', `guild=${guild.id}; channel=${channelId || 'missing'}; thread=${threadId || 'missing'}`);
+    await logAction('Update thread started', 'Updating a thread');
 
     if (!channelId) return jsonResponse(res, 400, { error: 'channel_id is required' });
     if (typeof channelId !== 'string') return jsonResponse(res, 400, { error: 'channel_id must be a string' });
@@ -273,7 +273,7 @@ export async function handleUpdateThread(guild, payload, res) {
         }
 
         await starterMessage.edit({ content: String(content) });
-        await logAction('Thread starter message updated', `thread=${threadId}; message=${starterMessage.id}`);
+        await logAction('Update thread completed', 'The thread was updated');
 
         return jsonResponse(res, 200, {
             success: true,
@@ -297,7 +297,7 @@ export async function handleDeleteThread(guild, payload, res) {
     const channelId = payload.channel_id;
     const threadId = payload.thread_id;
 
-    await logAction('API action started: delete thread', `guild=${guild.id}; channel=${channelId || 'missing'}; thread=${threadId || 'missing'}`);
+    await logAction('Delete thread started', 'Deleting a thread');
 
     if (!channelId) return jsonResponse(res, 400, { error: 'channel_id is required' });
     if (typeof channelId !== 'string') return jsonResponse(res, 400, { error: 'channel_id must be a string' });
@@ -318,7 +318,7 @@ export async function handleDeleteThread(guild, payload, res) {
         }
 
         await thread.delete();
-        await logAction('Thread deleted', `thread=${threadId}; channel=${channelId}`);
+        await logAction('Delete thread completed', 'The thread was deleted');
 
         return jsonResponse(res, 200, {
             success: true,
