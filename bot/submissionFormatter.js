@@ -18,8 +18,6 @@ export function buildSubmissionContent(body) {
 
     if (body.time_old !== undefined && body.time_old !== null) {
         lines.push(`${body.time_old} -> ${body.time_new}`);
-    } else {
-        lines.push(`N/A -> ${body.time_new}`);
     }
 
     if (body.score_new !== undefined && body.score_new !== null && body.score_old !== undefined && body.score_old !== null) {
