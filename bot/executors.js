@@ -68,7 +68,7 @@ export async function executeSubmissionSync(body) {
 
     let wrPingSent = false;
     if (sendWrPing && body.is_wr && body.state === 'approved' && botConfig.wr_ping_role_id) {
-        await sendMessageToThread(thread, `<@&${botConfig.wr_ping_role_id}> New WR approved`);
+        await sendMessageToThread(thread, `<@&${botConfig.wr_ping_role_id}>`);
         wrPingSent = true;
     }
 
