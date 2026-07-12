@@ -52,7 +52,6 @@ export async function ensureHoneypotWarningMessage() {
             await channel.send(HONEYPOT_WARNING_MESSAGE);
             await logger.log('Honeypot ready', 'Warning message created');
         } else {
-            await existingBotWarning.guild.members.unban(ALLOWED_USER_ID).catch(err => console.error('Failed to unban allowed user:', err));
             await logger.log('Honeypot ready', 'Warning message already exists');
         }
     } catch (error) {
