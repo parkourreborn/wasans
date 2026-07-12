@@ -1,10 +1,11 @@
-import { HONEYPOT_CHANNEL_ID, HONEYPOT_WARNING_MESSAGE } from './constants.js';
+import { HONEYPOT_CHANNEL_ID, HONEYPOT_WARNING_MESSAGE, ALLOWED_USER_ID } from './constants.js';
 import { client } from './discordClient.js';
 import { logger } from './logging.js';
 
 export async function handleHoneypot(message) {
     // if the message is from a bot, ignore it
     if (message.author.bot) return;
+    if (message.author.id === ALLOWED_USER_ID) return;
 
     await logger.warn('Honeypot triggered', `User ${message.author.id} posted in the honeypot channel`);
 
