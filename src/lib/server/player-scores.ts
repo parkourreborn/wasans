@@ -145,10 +145,27 @@ export async function refreshAllPlayerScores(
   db: D1Database,
   options: { discordUpdateMode?: Extract<DiscordUpdateMode, "none" | "all"> } = {}
 ) {
-  const { results } = await db.prepare(`SELECT uuid FROM players`).all<PlayerRow>()
-  await refreshPlayerScores(db, results.map((player) => player.uuid), {
-    discordUpdateMode: options.discordUpdateMode ?? "none",
-  })
+  const BATCH_SIZE = 100
+  let offset = 0
+  let hasMore = true
+
+  while (hasMore) {
+    const { results } = await db.prepare(`SELECT uuid FROM players LIMIT ? OFFSET ?`).bind(BATCH_SIZE, offset).all<PlayerRow>()
+    if (!results || results.length === 0) {
+      hasMore = false
+      break
+    }
+
+    await refreshPlayerScores(db, results.map((player) => player.uuid), {
+      discordUpdateMode: options.discordUpdateMode ?? "none",
+    })
+
+    if (results.length < BATCH_SIZE) {
+      hasMore = false
+    } else {
+      offset += BATCH_SIZE
+    }
+  }
 }
 
 export async function refreshScoresForTrial(db: D1Database, trialName: string) {
