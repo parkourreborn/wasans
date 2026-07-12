@@ -573,8 +573,13 @@ export async function deleteSubmission(
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       if (isWr && wrTrialName) {
         await refreshWorldRecords(env.wasans, wrTrialName, user)
+        // Only refresh all scores if a world record was deleted
+        // refreshWorldRecords will handle updating the affected trial
+        await refreshAllPlayerScores(env.wasans)
+      } else {
+        // For non-WR deletions, only refresh the deleting player's score
+        await refreshPlayerScore(env.wasans, submission.player_uuid)
       }
-      await refreshAllPlayerScores(env.wasans)
     } catch (error) {
       console.error("Background submission delete post-processing failed:", error)
     }
