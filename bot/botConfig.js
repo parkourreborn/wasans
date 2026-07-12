@@ -11,6 +11,7 @@ function csvToIds(value) {
 export const botConfig = {
     guild_id: DEFAULT_GUILD_ID,
     submissions_forum_channel_id: process.env.SUBMISSIONS_FORUM_CHANNEL_ID || '1351374148881874944',
+    rank_milestones_channel_id: process.env.RANK_MILESTONES_CHANNEL_ID || '1258680561929814066',
     wr_ping_role_id: process.env.WR_PING_ROLE_ID || '1335389577883418736',
     submission_base_url: process.env.SUBMISSION_BASE_URL || 'https://wasans.tully.sh/submissions/',
     state_tags: {

@@ -94,6 +94,18 @@ export async function sendMessageToThread(thread, content) {
     }
 }
 
+export async function sendMessageToChannel(channelId, content) {
+    try {
+        const channel = await client.channels.fetch(channelId);
+        if (!channel || typeof channel.send !== 'function') {
+            throw new Error('Channel not found or is not text-based');
+        }
+        return await channel.send(content);
+    } catch (error) {
+        throw discordError(`Failed to send channel message: ${error.message}`);
+    }
+}
+
 export async function deleteThread(thread) {
     try {
         await thread.delete();

@@ -9,6 +9,7 @@ import {
     fetchThreadById,
     removeRoles,
     sendDirectMessage,
+    sendMessageToChannel,
     sendMessageToThread,
     setThreadTags,
     updateNickname,
@@ -23,6 +24,31 @@ import { deleteSubmissionThread, getThreadIdBySubmissionId, setSubmissionThread 
 
 function asSet(values) {
     return new Set(values || []);
+}
+
+function formatScore(score) {
+    return Number.isFinite(score) ? score.toFixed(3) : String(score);
+}
+
+function getCurrentRankingRoleId(roleIds) {
+    for (const roleId of roleIds) {
+        if (botConfig.role_names[roleId]) {
+            return roleId;
+        }
+    }
+    return null;
+}
+
+function getRankRoleScore(roleId) {
+    if (!roleId) return null;
+
+    for (const [score, configuredRoleId] of Object.entries(botConfig.role_ranks)) {
+        if (configuredRoleId === roleId) {
+            return Number(score);
+        }
+    }
+
+    return null;
 }
 
 export async function executeSubmissionSync(body) {
@@ -172,6 +198,9 @@ export async function executeMemberSync(body) {
     const desiredSet = asSet(desiredRolesInScope);
     const currentInScopeSet = asSet(currentInScope);
 
+    const previousRankingRoleId = body.scope === 'ranking' ? getCurrentRankingRoleId(currentInScope) : null;
+    const nextRankingRoleId = body.scope === 'ranking' ? getCurrentRankingRoleId(desiredRolesInScope) : null;
+
     const toAdd = [...desiredSet].filter((id) => !currentInScopeSet.has(id));
     const removeUnlisted = body.options?.remove_unlisted_in_scope !== false;
     const toRemove = removeUnlisted
@@ -190,6 +219,38 @@ export async function executeMemberSync(body) {
     const unchanged = [...desiredSet].filter((id) => currentInScopeSet.has(id));
     const outOfScopeRolesPreservedCount = currentRoles.filter((id) => !scopeSet.has(id)).length;
 
+    let rank_milestone_message_sent = false;
+    if (body.scope === 'ranking' && body.score !== undefined && body.score !== null) {
+        const previousScore = getRankRoleScore(previousRankingRoleId);
+        const nextScore = getRankRoleScore(nextRankingRoleId);
+        const previousRankName = previousRankingRoleId ? botConfig.role_names[previousRankingRoleId] : null;
+        const nextRankName = nextRankingRoleId ? botConfig.role_names[nextRankingRoleId] : null;
+
+        if (
+            previousRankingRoleId &&
+            nextRankingRoleId &&
+            previousRankingRoleId !== nextRankingRoleId &&
+            Number.isFinite(previousScore) &&
+            Number.isFinite(nextScore) &&
+            previousRankName &&
+            nextRankName
+        ) {
+            const isPromotion = nextScore > previousScore;
+            const emoji = isPromotion ? ':tada:' : ':sob:';
+            const direction = isPromotion ? 'promoted' : 'demoted';
+            const announcement = `${emoji} <@${body.discord_user_id}> (${formatScore(body.score)}) has been ${direction} from ${previousRankName} to ${nextRankName}!`;
+
+            if (botConfig.rank_milestones_channel_id) {
+                try {
+                    await sendMessageToChannel(botConfig.rank_milestones_channel_id, announcement);
+                    rank_milestone_message_sent = true;
+                } catch (error) {
+                    await logger.warn('Member sync note', `Failed to send rank milestone message: ${error.message}`);
+                }
+            }
+        }
+    }
+
     await logger.log('Member sync completed', `Member ${body.discord_user_id}`);
 
     return {
@@ -200,6 +261,7 @@ export async function executeMemberSync(body) {
         roles_unchanged_in_scope: unchanged,
         out_of_scope_roles_preserved_count: outOfScopeRolesPreservedCount,
         nickname_updated: nicknameUpdated,
+        rank_milestone_message_sent,
     };
 }
 
