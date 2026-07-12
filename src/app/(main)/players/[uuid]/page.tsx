@@ -262,17 +262,13 @@ export default function PlayerProfilePage() {
     })
   }, [orderedPbRows, search])
 
-  const orderedSubmissionRows = React.useMemo(() => {
-    return [...submissionRows].sort((a, b) => compareByTrialOrder(a.trial_name, b.trial_name))
-  }, [submissionRows])
-
   const filteredSubmissions = React.useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) {
-      return orderedSubmissionRows
+      return submissionRows
     }
 
-    return orderedSubmissionRows.filter((row) => {
+    return submissionRows.filter((row) => {
       return (
         row.trial_name.toLowerCase().includes(query)
         || row.state.toLowerCase().includes(query)
@@ -281,7 +277,7 @@ export default function PlayerProfilePage() {
         || formatDate(row.date).toLowerCase().includes(query)
       )
     })
-  }, [orderedSubmissionRows, search])
+  }, [submissionRows, search])
 
   React.useEffect(() => {
     if (typeof window === "undefined" || loading || !player) {
