@@ -238,7 +238,7 @@ export async function executeMemberSync(body) {
             const isPromotion = nextScore > previousScore;
             const emoji = isPromotion ? ':tada:' : ':sob:';
             const direction = isPromotion ? 'promoted' : 'demoted';
-            const announcement = `${emoji} <@${body.discord_user_id}> (${formatScore(body.score)}) has been ${direction} from ${previousRankName} to ${nextRankName}!`;
+            const announcement = `${emoji} <@${body.discord_user_id}> has been ${direction} from ${previousRankName} to ${nextRankName}!`;
 
             if (botConfig.rank_milestones_channel_id) {
                 try {
