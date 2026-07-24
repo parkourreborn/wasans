@@ -328,7 +328,7 @@ function buildPages(items, mapper) {
                 fields.push({
                     name: truncate(mapped.field.name || 'N/A', 256),
                     value: truncate(mapped.field.value || 'N/A', 1024),
-                    inline: mapped.field.inline === true,
+                    inline: true,
                 });
             }
 
@@ -756,7 +756,7 @@ async function handleStatsCommand(interaction) {
                 value: mostRecent
                     ? `${getTrialName(mostRecent)} | ${formatTime(mostRecent?.time ?? mostRecent?.time_new)} | ${mostRecent?.state || 'unknown'}`
                     : 'No submissions',
-                inline: false,
+                inline: true,
             },
         );
 
