@@ -495,7 +495,7 @@ async function handleLeaderboardCommand(interaction) {
         await sendPaginatedReply(interaction, {
             ownerId: interaction.user.id,
             title: 'Overall Leaderboard',
-            description: '**Player** | **Score**',
+            description: 'Player | Score',
             pages: buildPages(entries, (item, index) => ({
                 field: {
                     name: `#${index + 1}`,
@@ -515,7 +515,7 @@ async function handleLeaderboardCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: `${trial} Leaderboard`,
-        description: '**Player** | **Trial Score** | **Time**',
+        description: 'Player | Trial Score | Time',
         pages: buildPages(entries, (item, index) => {
             const rank = item?.rank ?? index + 1;
             const playerName = getDisplayPlayerName(item);
@@ -561,7 +561,7 @@ async function handleSubmissionsCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: player ? `Submissions for ${getDisplayPlayerName(player)}` : 'Recent Submissions',
-        description: player ? '**Trial** | **Time** | **State**' : '**Trial** | **Player** | **Time** | **State**',
+        description: player ? 'Trial | Time | State' : 'Trial | Player | Time | State',
         pages: buildPages(submissions, (submission, index) => {
             const trialName = getTrialName(submission);
             const playerName = getDisplayPlayerName(submission);
@@ -639,7 +639,7 @@ async function handlePbsCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: `PBs for ${getDisplayPlayerName(player)}`,
-        description: '**Trial** | **Score** | **Time**',
+        description: 'Trial | Score | Time',
         pages: buildPages(pbs, (entry) => {
             if (!entry.submission) {
                 return {
@@ -676,7 +676,7 @@ async function handleWrsCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: 'World Records',
-        description: '**Trial** | **Player** | **Time**',
+        description: 'Trial | Player | Time',
         pages: buildPages(records, (record) => {
             const trialName = getTrialName(record);
             const playerName = getDisplayPlayerName(record);
