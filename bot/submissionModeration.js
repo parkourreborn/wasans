@@ -154,7 +154,7 @@ async function isModerator(interaction) {
     const isAdministrator = member.permissions.has(PermissionFlagsBits.Administrator);
     const hasModeratorRole = member.roles.cache.has(moderatorRoleId);
     const rolePositionComparison = highestRole.comparePositionTo(moderatorRole);
-    const allowed = isAdministrator || hasModeratorRole || rolePositionComparison >= 0;
+    const allowed = isAdministrator || rolePositionComparison >= 0;
 
     console.debug('[submissionModeration] Moderator permission check', {
         userId: interaction.user.id,
