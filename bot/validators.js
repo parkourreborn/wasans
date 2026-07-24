@@ -70,6 +70,8 @@ export function validateSubmissionSyncBody(body) {
     assertString(body.trial_name, 'trial_name');
     assertString(body.player_name, 'player_name');
     assertOptionalString(body.player_discord_id, 'player_discord_id');
+    assertOptionalString(body.discord_avatar, 'discord_avatar');
+    assertOptionalString(body.discord_avatar_discriminator, 'discord_avatar_discriminator');
     assertPositiveNumber(body.time_new, 'time_new');
     assertOptionalNumber(body.time_old, 'time_old');
     assertOptionalNumber(body.score_new, 'score_new');
