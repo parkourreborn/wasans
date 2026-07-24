@@ -1,42 +1,5 @@
-import { EmbedBuilder } from 'discord.js';
-import { resolvePlayerUrl, resolveSubmissionAssetUrl, resolveSubmissionUrl } from './resolvers.js';
+import { resolveSubmissionUrl } from './resolvers.js';
 import { buildSubmissionModerationComponentsForSubmission } from './submissionModeration.js';
-
-function formatValue(value) {
-    if (value === null || value === undefined) return 'N/A';
-    return Number.isFinite(value) ? String(value) : String(value);
-}
-
-function formatScoreValue(score) {
-    const value = formatValue(score);
-    return value === 'N/A' ? value : `*${value}*`;
-}
-
-function formatBeforeAfterValue(time, score, state) {
-    const timeValue = formatValue(time);
-    if (state !== 'approved') {
-        return timeValue;
-    }
-
-    const scoreValue = formatScoreValue(score);
-    if (scoreValue === 'N/A' || timeValue === 'N/A') {
-        return timeValue;
-    }
-
-    return `${timeValue}\n${scoreValue}`;
-}
-
-function resolveModeratorValue(body) {
-    if (typeof body.moderator_name === 'string' && body.moderator_name.trim()) {
-        return body.moderator_name.trim();
-    }
-
-    if (typeof body.moderator_discord_id === 'string' && body.moderator_discord_id.trim()) {
-        return `<@${body.moderator_discord_id.trim()}>`;
-    }
-
-    return 'N/A';
-}
 
 export function getDiscordDefaultAvatarUrl(discordId, discriminator) {
     const id = String(discordId || '').trim();
@@ -65,57 +28,41 @@ export function buildSubmissionTitle({ trial_name, time_new, player_name }) {
 }
 
 export function buildSubmissionMessage(body) {
-    const submissionUrl = resolveSubmissionUrl(body.submission_id);
-    const playerId = body.player_id || body.player_uuid;
-    const authorName = `${body.player_name} (${formatValue(body.score_new)})`;
-    const embedTitle = `${body.trial_name} ${body.time_new}`.slice(0, 256);
-    const avatarUrl = resolveDiscordAvatarUrl(
-        body.player_discord_id,
-        body.discord_avatar,
-        body.discord_avatar_discriminator,
-    );
-    const embed = new EmbedBuilder()
-        .setTitle(embedTitle)
-        .setURL(submissionUrl)
-        .setAuthor({
-            name: authorName,
-            ...(playerId ? { url: resolvePlayerUrl(playerId) } : {}),
-            ...(avatarUrl ? { iconURL: avatarUrl } : {}),
-        })
-        .addFields(
-            {
-                name: 'Score',
-                value: formatScoreValue(body.score_new),
-                inline: true,
-            },
-            {
-                name: 'Before',
-                value: formatBeforeAfterValue(body.time_old, body.score_old, body.state),
-                inline: true,
-            },
-            {
-                name: 'After',
-                value: formatBeforeAfterValue(body.time_new, body.score_new, body.state),
-                inline: true,
-            },
-            {
-                name: 'Moderator',
-                value: resolveModeratorValue(body),
-                inline: true,
-            },
-            {
-                name: 'Moderator Note',
-                value: body.moderator_note?.trim() || 'N/A',
-                inline: false,
-            },
-        );
-    embed.data.description = '';
+    const oldTimeFormatted = Number.isFinite(body.time_old) ? body.time_old.toFixed(3) : 'N/A';
+    const newTimeFormatted = body.time_new.toFixed(3);
+    const oldScoreFormatted = Number.isFinite(body.score_old) ? body.score_old.toFixed(3) : 'N/A';
+    const newScoreFormatted = Number.isFinite(body.score_new) ? body.score_new.toFixed(3) : 'N/A';
+    const userMention = body.player_discord_id ? `<@${body.player_discord_id}>` : body.player_name;
+    const moderatorNote = body.moderator_note?.trim() || 'N/A';
+    const lines = [];
 
-    const assetUrl = resolveSubmissionAssetUrl(body.submission_id);
+    lines.push(`**${body.trial_name} ${newTimeFormatted} | ${userMention}**`);
+    lines.push(`${oldTimeFormatted} -> ${newTimeFormatted}`);
+
+    if (body.state === 'approved') {
+        lines.push(`*${oldScoreFormatted}* -> *${newScoreFormatted}*`);
+    }
+
+    lines.push(`Moderator note: ${moderatorNote}`);
+
+    if (body.previous_wr?.time !== undefined && body.previous_wr?.player_name) {
+        if (body.previous_wr.thread_id) {
+            lines.push(
+                `Previous WR: ${body.previous_wr.time.toFixed(3)} by ${body.previous_wr.player_name} <#${body.previous_wr.thread_id}>`,
+            );
+        } else {
+            lines.push(`Previous WR: ${body.previous_wr.time.toFixed(3)} by ${body.previous_wr.player_name}`);
+        }
+    }
+
+    if (body.is_wr && body.state === 'approved' && Number.isFinite(body.average_score_delta)) {
+        lines.push(`Average score decrease: ${body.average_score_delta.toFixed(3)}`);
+    }
+
+    lines.push(resolveSubmissionUrl(body.submission_id));
 
     return {
-        content: `${assetUrl}\n`,
-        embeds: [embed],
+        content: lines.join('\n'),
         components: buildSubmissionModerationComponentsForSubmission(body.submission_id, body.state),
     };
 }

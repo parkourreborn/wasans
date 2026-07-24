@@ -38,19 +38,26 @@ function parseCustomId(customId) {
     return { action, submissionId };
 }
 
-function getEmbedField(interaction, name) {
-    const embed = interaction.message?.embeds?.[0];
-    const field = embed?.fields?.find((item) => item.name === name);
-    return field?.value || '';
+function getMessageLines(interaction) {
+    const content = interaction.message?.content || '';
+    return content.split('\n').map((line) => line.trim());
 }
 
 function getCurrentTimeValue(interaction) {
-    const afterField = getEmbedField(interaction, 'After');
-    return afterField.split('\n')[0]?.trim() || '';
+    const lines = getMessageLines(interaction);
+    const comparisonLine = lines[1] || '';
+    const match = comparisonLine.match(/->\s*([0-9]+(?:\.[0-9]+)?)/);
+    return match?.[1] || '';
 }
 
 function getCurrentNoteValue(interaction) {
-    const note = getEmbedField(interaction, 'Moderator Note').trim();
+    const lines = getMessageLines(interaction);
+    const noteLine = lines.find((line) => line.startsWith('Moderator note:'));
+    if (!noteLine) {
+        return '';
+    }
+
+    const note = noteLine.slice('Moderator note:'.length).trim();
     return note === 'N/A' ? '' : note;
 }
 
