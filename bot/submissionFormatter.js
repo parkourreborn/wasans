@@ -33,7 +33,7 @@ export function buildSubmissionTitle({ trial_name, time_new, player_name }) {
 
 export function buildSubmissionMessage(body) {
     const oldTimeFormatted = formatFixed3(body.time_old);
-    const newTimeFormatted = body.time_new.toFixed(3);
+    const newTimeFormatted = formatFixed3(body.time_new);
     const oldScoreFormatted = formatFixed3(body.score_old);
     const newScoreFormatted = formatFixed3(body.score_new);
     const userMention = body.player_discord_id ? `<@${body.player_discord_id}>` : body.player_name;
@@ -50,12 +50,11 @@ export function buildSubmissionMessage(body) {
     lines.push(`Moderator note: ${moderatorNote}`);
 
     if (body.previous_wr?.time !== undefined && body.previous_wr?.player_name) {
+        const previousWrBase = `Previous WR: ${body.previous_wr.time.toFixed(3)} by ${body.previous_wr.player_name}`;
         if (body.previous_wr.thread_id) {
-            lines.push(
-                `Previous WR: ${body.previous_wr.time.toFixed(3)} by ${body.previous_wr.player_name} <#${body.previous_wr.thread_id}>`,
-            );
+            lines.push(`${previousWrBase} <#${body.previous_wr.thread_id}>`);
         } else {
-            lines.push(`Previous WR: ${body.previous_wr.time.toFixed(3)} by ${body.previous_wr.player_name}`);
+            lines.push(previousWrBase);
         }
     }
 
