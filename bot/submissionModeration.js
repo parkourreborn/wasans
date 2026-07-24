@@ -45,7 +45,7 @@ function getMessageLines(interaction) {
 
 function getCurrentTimeValue(interaction) {
     const lines = getMessageLines(interaction);
-    const comparisonLine = lines[1] || '';
+    const comparisonLine = lines.find((line) => line.includes('->')) || '';
     const match = comparisonLine.match(/->\s*([0-9]+(?:\.[0-9]+)?)/);
     return match?.[1] || '';
 }

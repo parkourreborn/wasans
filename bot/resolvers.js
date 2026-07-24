@@ -6,6 +6,7 @@ export function resolveStateTags(state, isWr) {
     const stateTag = botConfig.state_tags[state];
     if (stateTag) tags.push(stateTag);
 
+    // WR tag remains on pending and approved WR submissions, and is removed once denied.
     if (isWr && state !== 'denied' && botConfig.state_tags.wr_tag) {
         tags.push(botConfig.state_tags.wr_tag);
     }

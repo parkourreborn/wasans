@@ -1,6 +1,10 @@
 import { resolveSubmissionUrl } from './resolvers.js';
 import { buildSubmissionModerationComponentsForSubmission } from './submissionModeration.js';
 
+function formatFixed3(value) {
+    return Number.isFinite(value) ? value.toFixed(3) : 'N/A';
+}
+
 export function getDiscordDefaultAvatarUrl(discordId, discriminator) {
     const id = String(discordId || '').trim();
     const discriminatorValue = String(discriminator || '').trim();
@@ -28,10 +32,10 @@ export function buildSubmissionTitle({ trial_name, time_new, player_name }) {
 }
 
 export function buildSubmissionMessage(body) {
-    const oldTimeFormatted = Number.isFinite(body.time_old) ? body.time_old.toFixed(3) : 'N/A';
+    const oldTimeFormatted = formatFixed3(body.time_old);
     const newTimeFormatted = body.time_new.toFixed(3);
-    const oldScoreFormatted = Number.isFinite(body.score_old) ? body.score_old.toFixed(3) : 'N/A';
-    const newScoreFormatted = Number.isFinite(body.score_new) ? body.score_new.toFixed(3) : 'N/A';
+    const oldScoreFormatted = formatFixed3(body.score_old);
+    const newScoreFormatted = formatFixed3(body.score_new);
     const userMention = body.player_discord_id ? `<@${body.player_discord_id}>` : body.player_name;
     const moderatorNote = body.moderator_note?.trim() || 'N/A';
     const lines = [];
