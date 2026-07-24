@@ -18,7 +18,7 @@ const API_BASE_URL =
     'https://wasans.tully.sh/v1/';
 const PAGE_SIZE = 10;
 const CUSTOM_ID_PREFIX = 'wasans-slash';
-const MAX_PLAYER_NAME_LENGTH = 16;
+const MAX_PLAYER_NAME_LENGTH = 12;
 
 export const trials = [
     'Crystal',
@@ -830,7 +830,7 @@ async function handleLeaderboardCommand(
                     (item, index) => ({
                         columns: {
                             Rank: `#${index + 1}`,
-                            Player:
+                            Plyr:
                                 getDisplayPlayerName(
                                     item,
                                 ),
@@ -880,7 +880,7 @@ async function handleLeaderboardCommand(
                     return {
                         columns: {
                             Rank: `#${rank}`,
-                            Player: playerName,
+                            Plyr: playerName,
                             Score: formatScore(
                                 item?.score,
                             ),
@@ -977,7 +977,7 @@ async function handleSubmissionsCommand(
                     return {
                         columns: {
                             Trial: trialName,
-                            Player: playerName,
+                            Plyr: playerName,
                             Time: formatTime(
                                 submission?.time ??
                                     submission?.time_new,
@@ -1103,7 +1103,8 @@ async function handlePbsCommand(
                 if (!entry.submission) {
                     return {
                         columns: {
-                            Trial: entry.trialName,
+                            Trial:
+                                entry.trialName,
                             Score: 'N/A',
                             Time: 'No PB found',
                         },
@@ -1181,7 +1182,7 @@ async function handleWrsCommand(
                     return {
                         columns: {
                             Trial: trialName,
-                            Player: playerName,
+                            Plyr: playerName,
                             Time: formatTime(
                                 record?.time ??
                                     record?.time_new,
