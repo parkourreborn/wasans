@@ -192,7 +192,13 @@ export async function resolveModeratorUser(request: Request, env: CloudflareEnv,
     .bind(account.player_uuid)
     .first<AuthUser>()
 
-  return moderator ?? botModeratorUser
+  // Verify that the resolved user actually has moderator permissions
+  if (moderator && canModerate(moderator)) {
+    return moderator
+  }
+
+  // If the Discord user exists but is not a moderator, return null to trigger permission error
+  return null
 }
 
 async function calculateAverageScoreDeltaForWrChange(
