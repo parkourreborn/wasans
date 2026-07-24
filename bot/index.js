@@ -5,6 +5,7 @@ import { client } from './discordClient.js';
 import { ensureHoneypotWarningMessage, handleHoneypot } from './honeypot.js';
 import { logger } from './logging.js';
 import { server } from './server.js';
+import { handleSlashCommandInteraction, registerSlashCommands } from './slashCommands.js';
 import { handleSubmissionModerationInteraction } from './submissionModeration.js';
 
 client.once(Events.ClientReady, async () => {
@@ -12,6 +13,7 @@ client.once(Events.ClientReady, async () => {
 
     await logger.log('Bot is online', '');
     await ensureHoneypotWarningMessage();
+    await registerSlashCommands(client);
 
     server.listen(PORT);
     await logger.log('Server started', '');
@@ -49,6 +51,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     try {
         const handled = await handleSubmissionModerationInteraction(interaction);
         if (handled) {
+            return;
+        }
+
+        const slashHandled = await handleSlashCommandInteraction(interaction);
+        if (slashHandled) {
             return;
         }
     } catch (error) {
