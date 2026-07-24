@@ -341,12 +341,12 @@ export function buildSubmissionModerationComponentsForSubmission(submissionId, s
                 .setDisabled(state === 'approved'),
             new ButtonBuilder()
                 .setCustomId(buildCustomId(ACTION_REJECT, submissionId))
-                .setLabel('Reject')
+                .setLabel('Deny')
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(state === 'denied'),
             new ButtonBuilder()
                 .setCustomId(buildCustomId(ACTION_PENDING, submissionId))
-                .setLabel('Mark as Pending')
+                .setLabel('Pending')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(state === 'pending'),
             new ButtonBuilder()
