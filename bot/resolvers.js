@@ -25,6 +25,10 @@ export function resolveSubmissionUrl(submissionId) {
     return `${botConfig.submission_base_url}${encodeURIComponent(submissionId)}`;
 }
 
+export function resolvePlayerUrl(playerId) {
+    return `${botConfig.player_base_url}${encodeURIComponent(playerId)}`;
+}
+
 export function resolveRolesForRankingScore(score) {
     if (typeof score !== 'number' || !Number.isFinite(score)) {
         throw badRequest('score must be a number');

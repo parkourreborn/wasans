@@ -19,7 +19,7 @@ import {
 import { badRequest, discordError, notFound } from './errors.js';
 import { logger } from './logging.js';
 import { resolveRoleScope, resolveRolesForRankingScore, resolveStateTags } from './resolvers.js';
-import { buildSubmissionContent, buildSubmissionTitle } from './submissionFormatter.js';
+import { buildSubmissionMessage, buildSubmissionTitle } from './submissionFormatter.js';
 import { deleteSubmissionThread, getThreadIdBySubmissionId, setSubmissionThread } from './submissionStore.js';
 
 function asSet(values) {
@@ -59,7 +59,7 @@ export async function executeSubmissionSync(body) {
     await logger.log('Submission sync started', `Submission ${body.submission_id}`);
 
     const title = buildSubmissionTitle(body);
-    const content = buildSubmissionContent(body);
+    const content = buildSubmissionMessage(body);
     const tags = resolveStateTags(body.state, body.is_wr);
 
     let threadId = body.thread_id || getThreadIdBySubmissionId(body.submission_id);

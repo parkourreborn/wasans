@@ -3,6 +3,18 @@ import { client } from './discordClient.js';
 import { botConfig } from './botConfig.js';
 import { discordError, notFound } from './errors.js';
 
+function normalizeMessagePayload(content) {
+    if (typeof content === 'string') {
+        return { content };
+    }
+
+    if (!content || typeof content !== 'object' || Array.isArray(content)) {
+        throw discordError('Message payload must be a string or object');
+    }
+
+    return content;
+}
+
 export async function fetchGuild() {
     if (!botConfig.guild_id) {
         throw discordError('Guild is not configured');
@@ -49,7 +61,7 @@ export async function createSubmissionThread({ title, content, forumChannelId })
     try {
         return await forum.threads.create({
             name: title,
-            message: { content },
+            message: normalizeMessagePayload(content),
             autoArchiveDuration: 1440,
         });
     } catch (error) {
@@ -63,7 +75,7 @@ export async function updateThreadStarterMessage(thread, content) {
         if (!starterMessage) {
             throw new Error('Starter message not found');
         }
-        await starterMessage.edit({ content });
+        await starterMessage.edit(normalizeMessagePayload(content));
         return starterMessage;
     } catch (error) {
         throw discordError(`Failed to update thread content: ${error.message}`);
