@@ -15,7 +15,6 @@ import { resolveSubmissionUrl } from './resolvers.js';
 const API_BASE_URL = 'https://wasans.tully.sh/v1/';
 const PAGE_SIZE = 10;
 const CUSTOM_ID_PREFIX = 'wasans-slash';
-const MAX_EMBED_FIELDS = 25;
 const MAX_PLAYER_NAME_LENGTH = 32;
 
 export const trials = [
@@ -303,6 +302,23 @@ function buildCommandDefinitions() {
     ];
 }
 
+function buildTableDescription(columnOrder, colWidths, rows) {
+    if (rows.length === 0) {
+        return null;
+    }
+
+    const header = columnOrder.map((col) => col.padEnd(colWidths[col])).join('  ').trimEnd();
+    const divider = columnOrder.map((col) => '─'.repeat(colWidths[col])).join('  ');
+    const dataLines = rows.map((row) =>
+        columnOrder
+            .map((col) => (row[col] || 'N/A').padEnd(colWidths[col]))
+            .join('  ')
+            .trimEnd(),
+    );
+
+    return `\`\`\`\n${header}\n${divider}\n${dataLines.join('\n')}\n\`\`\``;
+}
+
 function buildPages(items, mapper) {
     if (items.length === 0) {
         return [];
@@ -311,9 +327,9 @@ function buildPages(items, mapper) {
     const pages = [];
     for (let offset = 0; offset < items.length; offset += PAGE_SIZE) {
         const pageItems = items.slice(offset, offset + PAGE_SIZE);
-        const fields = [];
-        const columnValues = new Map();
+        const rows = [];
         const columnOrder = [];
+        const colWidths = {};
         const submissionOptions = [];
 
         for (let index = 0; index < pageItems.length; index += 1) {
@@ -324,24 +340,19 @@ function buildPages(items, mapper) {
                 continue;
             }
 
-            if (mapped.field) {
-                fields.push({
-                    name: truncate(mapped.field.name || 'N/A', 256),
-                    value: truncate(mapped.field.value || 'N/A', 1024),
-                    inline: true,
-                });
-            }
-
             if (mapped.columns && typeof mapped.columns === 'object') {
+                const rowValues = {};
                 for (const [name, rawValue] of Object.entries(mapped.columns)) {
-                    if (!columnValues.has(name)) {
-                        columnValues.set(name, []);
+                    if (!colWidths[name]) {
                         columnOrder.push(name);
+                        colWidths[name] = name.length;
                     }
 
                     const value = String(rawValue ?? '').trim() || 'N/A';
-                    columnValues.get(name).push(value);
+                    colWidths[name] = Math.max(colWidths[name], value.length);
+                    rowValues[name] = value;
                 }
+                rows.push(rowValues);
             }
 
             if (mapped.submissionUuid) {
@@ -355,15 +366,8 @@ function buildPages(items, mapper) {
             }
         }
 
-        for (const name of columnOrder) {
-            fields.push({
-                name: truncate(name, 256),
-                value: truncate(columnValues.get(name)?.join('\n') || 'N/A', 1024),
-                inline: true,
-            });
-        }
-
-        pages.push({ fields, submissionOptions });
+        const description = buildTableDescription(columnOrder, colWidths, rows);
+        pages.push({ description, submissionOptions });
     }
 
     return pages;
@@ -415,15 +419,7 @@ function buildPageView(contextId, context, requestedPageIndex) {
     }
 
     const page = context.pages[currentPageIndex];
-    if (context.description) {
-        embed.setDescription(context.description);
-    }
-
-    if (page.fields.length > 0) {
-        embed.addFields(page.fields.slice(0, MAX_EMBED_FIELDS));
-    } else {
-        embed.setDescription(context.emptyMessage || 'No results found.');
-    }
+    embed.setDescription(page.description || context.emptyMessage || 'No results found.');
 
     const components = [];
 
