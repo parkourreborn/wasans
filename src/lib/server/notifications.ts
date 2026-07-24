@@ -111,6 +111,7 @@ type SubmissionSyncPayload = {
   time_old?: number
   score_new?: number
   score_old?: number
+  average_score_delta?: number
   is_wr: boolean
   previous_wr?: {
     player_name?: string
@@ -356,6 +357,7 @@ export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ thre
       time_old: run.oldTime,
       score_new: run.player_score,
       score_old: run.oldPlayerScore,
+      average_score_delta: run.averageScoreDelta,
       is_wr: run.is_wr,
       previous_wr: {
         player_name: run.previous_wr_player_name,
@@ -396,6 +398,7 @@ export async function updateSubmissionThreadContent(
       time_old: run.oldTime,
       score_new: run.player_score,
       score_old: run.oldPlayerScore,
+      average_score_delta: run.averageScoreDelta,
       is_wr: run.is_wr,
       previous_wr: {
         player_name: run.previous_wr_player_name,
