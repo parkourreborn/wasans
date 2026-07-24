@@ -152,7 +152,7 @@ export async function resolveModeratorUser(
 
   // If session user is already a moderator, return them
   if (canModerate(sessionUser)) {
-    console.log(`[${requestId}] Moderator verified via session user: ${sessionUser.uuid}`)
+    console.log(`[${requestId}] Moderator verified via session user: ${sessionUser?.uuid}`)
     return {
       user: sessionUser,
       error: null,
