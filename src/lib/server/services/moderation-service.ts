@@ -36,14 +36,6 @@ import {
   normalizeState,
 } from "@/lib/server/moderation-normalization"
 
-const botModeratorUser: AuthUser = {
-  uuid: "discord-bot",
-  player_id: "discord-bot",
-  player_name: "Discord Bot",
-  score: 0,
-  permission: 1,
-}
-
 type ScorePbRow = {
   trial_name: TrialName
   time: number
@@ -57,6 +49,12 @@ type PreviousWrRow = {
   time: number
   date: string
   previous_thread_id: string | null
+}
+
+type ModeratorLookupResult = {
+  user: AuthUser | null
+  error: string | null
+  debugInfo: string
 }
 
 function scoreFromPbs(
@@ -143,23 +141,53 @@ function normalizeDiscordId(value: unknown) {
   return discordId.length > 0 ? discordId : null
 }
 
-export async function resolveModeratorUser(request: Request, env: CloudflareEnv, sessionUser: AuthUser | null, discordId: unknown) {
+export async function resolveModeratorUser(
+  request: Request,
+  env: CloudflareEnv,
+  sessionUser: AuthUser | null,
+  discordId: unknown,
+  requestId: string = "unknown"
+): Promise<ModeratorLookupResult> {
   const resolvedDiscordId = normalizeDiscordId(discordId)
 
+  // If session user is already a moderator, return them
   if (canModerate(sessionUser)) {
-    return sessionUser
+    console.log(`[${requestId}] Moderator verified via session user: ${sessionUser.uuid}`)
+    return {
+      user: sessionUser,
+      error: null,
+      debugInfo: "Session user has moderator permissions"
+    }
   }
 
+  // Check if this is a valid bot API request
   if (!isBotApiRequest(request, env)) {
-    return sessionUser
+    console.log(`[${requestId}] Not a bot API request, returning session user (no permissions)`)
+    return {
+      user: sessionUser,
+      error: null,
+      debugInfo: "Not a bot API request"
+    }
   }
 
+  console.log(`[${requestId}] Bot API request detected`)
+
+  // For bot API requests, Discord ID is required
   if (!resolvedDiscordId) {
-    return botModeratorUser
+    const error = "No Discord ID provided for bot API request"
+    console.error(`[${requestId}] ${error}`)
+    return {
+      user: null,
+      error,
+      debugInfo: "Discord ID is required for bot API requests"
+    }
   }
+
+  console.log(`[${requestId}] Resolving Discord ID: ${resolvedDiscordId}`)
 
   await ensurePlayerAvatarColumns(env.wasans)
 
+  // Look up the Discord account
   const account = await env.wasans.prepare(
     `SELECT player_uuid
      FROM oauth_accounts
@@ -171,34 +199,76 @@ export async function resolveModeratorUser(request: Request, env: CloudflareEnv,
     .first<{ player_uuid: string }>()
 
   if (!account?.player_uuid) {
-    return botModeratorUser
+    const error = `Discord ID ${resolvedDiscordId} is not linked to any account`
+    console.error(`[${requestId}] ${error}`)
+    return {
+      user: null,
+      error,
+      debugInfo: "OAuth account not found"
+    }
   }
 
+  console.log(`[${requestId}] Found player UUID: ${account.player_uuid}`)
+
+  // Fetch moderator details
   const moderator = await env.wasans.prepare(
     `SELECT players.uuid,
             COALESCE(oauth_accounts.provider_account_id, players.player_id) AS player_id,
             players.player_name,
             players.score,
-            players.permission
+            players.permission,
+            COALESCE(players.account_status, 'active') AS account_status
      FROM players
      LEFT JOIN oauth_accounts
        ON oauth_accounts.player_uuid = players.uuid
        AND oauth_accounts.provider = 'discord'
      WHERE players.uuid = ?
-       AND COALESCE(players.account_status, 'active') = 'active'
      ORDER BY oauth_accounts.updated_at DESC
      LIMIT 1`
   )
     .bind(account.player_uuid)
-    .first<AuthUser>()
+    .first<AuthUser & { account_status: string }>()
 
-  // Verify that the resolved user actually has moderator permissions
-  if (moderator && canModerate(moderator)) {
-    return moderator
+  if (!moderator) {
+    const error = `Player account for Discord ID ${resolvedDiscordId} not found`
+    console.error(`[${requestId}] ${error}`)
+    return {
+      user: null,
+      error,
+      debugInfo: "Player record not found"
+    }
   }
 
-  // If the Discord user exists but is not a moderator, return null to trigger permission error
-  return null
+  console.log(`[${requestId}] Found player: ${moderator.player_name} (uuid: ${moderator.uuid}, permission: ${moderator.permission}, status: ${moderator.account_status})`)
+
+  // Check account status
+  if (moderator.account_status !== "active") {
+    const error = `Account is deactivated (status: ${moderator.account_status})`
+    console.error(`[${requestId}] ${error}`)
+    return {
+      user: null,
+      error,
+      debugInfo: `Account status is '${moderator.account_status}', not 'active'`
+    }
+  }
+
+  // Check permission level
+  if (!canModerate(moderator)) {
+    const error = `User does not have moderator permissions (permission level: ${moderator.permission}, required: >= 1)`
+    console.error(`[${requestId}] ${error}`)
+    return {
+      user: null,
+      error,
+      debugInfo: `Permission level is ${moderator.permission}, need >= 1`
+    }
+  }
+
+  console.log(`[${requestId}] Moderator verified: ${moderator.player_name}`)
+  return {
+    user: moderator,
+    error: null,
+    debugInfo: "Moderator verified successfully"
+  }
 }
 
 async function calculateAverageScoreDeltaForWrChange(
