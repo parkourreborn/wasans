@@ -340,15 +340,15 @@ export function buildSubmissionModerationComponentsForSubmission(submissionId, s
                 .setStyle(ButtonStyle.Success)
                 .setDisabled(state === 'approved'),
             new ButtonBuilder()
-                .setCustomId(buildCustomId(ACTION_REJECT, submissionId))
-                .setLabel('Deny')
-                .setStyle(ButtonStyle.Danger)
-                .setDisabled(state === 'denied'),
-            new ButtonBuilder()
                 .setCustomId(buildCustomId(ACTION_PENDING, submissionId))
                 .setLabel('Pending')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(state === 'pending'),
+            new ButtonBuilder()
+                .setCustomId(buildCustomId(ACTION_REJECT, submissionId))
+                .setLabel('Deny')
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(state === 'denied'),
             new ButtonBuilder()
                 .setCustomId(buildCustomId(ACTION_TIME, submissionId))
                 .setLabel('Change Time')
