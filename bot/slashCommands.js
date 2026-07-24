@@ -7,6 +7,7 @@ import {
     SlashCommandBuilder,
     StringSelectMenuBuilder,
 } from 'discord.js';
+import { randomUUID } from 'node:crypto';
 import { botConfig } from './botConfig.js';
 import { logger } from './logging.js';
 import { resolveSubmissionUrl } from './resolvers.js';
@@ -349,7 +350,7 @@ function buildPages(items, mapper) {
 }
 
 function createPaginationContext(context) {
-    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = randomUUID();
     paginationContexts.set(id, context);
 
     if (paginationContexts.size > 1000) {
