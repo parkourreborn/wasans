@@ -74,7 +74,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
       {
         code: "forbidden",
         requestId,
-        debugInfo: moderatorLookup.debugInfo,
+        details: { debug: moderatorLookup.debugInfo },
       }
     )
   }
