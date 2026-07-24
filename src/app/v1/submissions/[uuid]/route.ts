@@ -65,14 +65,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ uu
   }
 
   const sessionUser = await getAuthUser(request, env.wasans)
-  const user = await resolveModeratorUser(request, env, sessionUser, body?.discordId)
+  const moderatorLookup = await resolveModeratorUser(request, env, sessionUser, body?.discordId, requestId)
 
-  if (!user || !canModerate(user)) {
-    return jsonError("Moderator permission is required", 403, {
-      code: "forbidden",
-      requestId,
-    })
+  if (moderatorLookup.error || !moderatorLookup.user) {
+    return jsonError(
+      moderatorLookup.error || "Moderator permission is required",
+      403,
+      {
+        code: "forbidden",
+        requestId,
+        debugInfo: moderatorLookup.debugInfo,
+      }
+    )
   }
+
+  const user = moderatorLookup.user
 
   const writeRate = await enforceRateLimit(env.wasans, getRateLimitKey(request, "v1:submissions:patch", user.uuid), {
     limit: 60,
