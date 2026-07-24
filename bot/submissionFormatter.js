@@ -51,15 +51,18 @@ export function buildSubmissionMessage(body) {
 
     if (body.previous_wr?.time !== undefined && body.previous_wr?.player_name) {
         const previousWrBase = `Previous WR: ${body.previous_wr.time.toFixed(3)} by ${body.previous_wr.player_name}`;
-        if (body.previous_wr.thread_id) {
-            lines.push(`${previousWrBase} <#${body.previous_wr.thread_id}>`);
-        } else {
-            lines.push(previousWrBase);
-        }
+        
     }
 
-    if (body.is_wr && body.state === 'approved' && Number.isFinite(body.average_score_delta)) {
-        lines.push(`Average score decrease: ${body.average_score_delta.toFixed(3)}`);
+    if (body.is_wr && body.state === 'approved') {
+        if (body.previous_wr.thread_id) {
+            lines.push(`<#${body.previous_wr.thread_id}>`);
+        } else if (body.previous_wr?.time !== undefined && body.previous_wr?.player_name) {
+            lines.push(`Previous WR: ${body.previous_wr.time.toFixed(3)} by ${body.previous_wr.player_name}`);
+        }
+        if (Number.isFinite(averageScoreDelta) {
+            lines.push(`Average score decrease: ${body.average_score_delta.toFixed(3)}`);
+        }
     }
 
     lines.push(resolveSubmissionUrl(body.submission_id));
