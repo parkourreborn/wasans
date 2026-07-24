@@ -73,9 +73,13 @@ async function replyEphemeral(interaction, content) {
     }
 }
 
+function logModeratorPermissionCheck(details) {
+    console.debug('[submissionModeration] Moderator permission check', details);
+}
+
 async function isModerator(interaction) {
     if (!interaction.inGuild() || !interaction.guild) {
-        console.debug('[submissionModeration] Moderator permission check', {
+        logModeratorPermissionCheck({
             userId: interaction.user?.id ?? null,
             highestRole: null,
             moderatorRoleId: botConfig.moderator_role_id || null,
@@ -92,7 +96,7 @@ async function isModerator(interaction) {
         await logger.error('Moderator permission check failed', 'MODERATOR_ROLE_ID is not configured', {
             moderator_id: interaction.user.id,
         }).catch(() => {});
-        console.debug('[submissionModeration] Moderator permission check', {
+        logModeratorPermissionCheck({
             userId: interaction.user.id,
             highestRole: null,
             moderatorRoleId: null,
@@ -113,7 +117,7 @@ async function isModerator(interaction) {
                 moderator_id: interaction.user.id,
                 stage: 'fetch_member',
             }).catch(() => {});
-            console.debug('[submissionModeration] Moderator permission check', {
+            logModeratorPermissionCheck({
                 userId: interaction.user.id,
                 highestRole: null,
                 moderatorRoleId,
@@ -145,7 +149,7 @@ async function isModerator(interaction) {
             moderator_role_id: moderatorRoleId,
             stage: 'missing_role',
         }).catch(() => {});
-        console.debug('[submissionModeration] Moderator permission check', {
+        logModeratorPermissionCheck({
             userId: interaction.user.id,
             highestRole: member.roles.highest
                 ? {
@@ -162,14 +166,12 @@ async function isModerator(interaction) {
         });
         return false;
     }
-
     const highestRole = member.roles.highest;
     const isAdministrator = member.permissions.has(PermissionFlagsBits.Administrator);
-    const hasModeratorRole = member.roles.cache.has(moderatorRoleId);
     const rolePositionComparison = highestRole.comparePositionTo(moderatorRole);
     const allowed = isAdministrator || rolePositionComparison >= 0;
 
-    console.debug('[submissionModeration] Moderator permission check', {
+    logModeratorPermissionCheck({
         userId: interaction.user.id,
         highestRole: highestRole
             ? {
@@ -180,7 +182,7 @@ async function isModerator(interaction) {
             : null,
         moderatorRoleId: moderatorRole.id,
         moderatorRolePosition: moderatorRole.position,
-        hasModeratorRole,
+        hasModeratorRole: member.roles.cache.has(moderatorRoleId),
         rolePositionComparison,
         isAdministrator,
         allowed,
