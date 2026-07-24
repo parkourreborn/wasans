@@ -15,6 +15,7 @@ import { resolveSubmissionUrl } from './resolvers.js';
 const API_BASE_URL = 'https://wasans.tully.sh/v1/';
 const PAGE_SIZE = 10;
 const CUSTOM_ID_PREFIX = 'wasans-slash';
+const MAX_EMBED_FIELDS = 25;
 const MAX_PLAYER_NAME_LENGTH = 32;
 
 export const trials = [
@@ -322,8 +323,8 @@ function buildPages(items, mapper) {
 
             if (mapped.field) {
                 fields.push({
-                    name: truncate(mapped.field.name || '\u200b', 256),
-                    value: truncate(mapped.field.value || '\u200b', 1024),
+                    name: truncate(mapped.field.name || 'N/A', 256),
+                    value: truncate(mapped.field.value || 'N/A', 1024),
                     inline: mapped.field.inline === true,
                 });
             }
@@ -387,7 +388,7 @@ function buildPageView(contextId, context, requestedPageIndex) {
 
     if (context.pages.length === 0) {
         embed.setDescription(context.emptyMessage || 'No results found.');
-        return { embed, components: [] };
+        return { embeds: [embed], components: [] };
     }
 
     const page = context.pages[currentPageIndex];
@@ -396,7 +397,7 @@ function buildPageView(contextId, context, requestedPageIndex) {
     }
 
     if (page.fields.length > 0) {
-        embed.addFields(page.fields.slice(0, 25));
+        embed.addFields(page.fields.slice(0, MAX_EMBED_FIELDS));
     } else {
         embed.setDescription(context.emptyMessage || 'No results found.');
     }
@@ -431,15 +432,11 @@ function buildPageView(contextId, context, requestedPageIndex) {
         );
     }
 
-    return { embed, components };
+    return { embeds: [embed], components };
 }
 
 async function replyFromContext(interaction, contextId, context, pageIndex) {
-    const view = buildPageView(contextId, context, pageIndex);
-    const payload = {
-        embeds: [view.embed],
-        components: view.components,
-    };
+    const payload = buildPageView(contextId, context, pageIndex);
 
     if (interaction.deferred || interaction.replied) {
         await interaction.editReply(payload);
@@ -820,11 +817,7 @@ async function handleComponentInteraction(interaction) {
 
     if (parsed.action === 'page' && interaction.isButton()) {
         const page = Number(parsed.value || 0);
-        const view = buildPageView(parsed.contextId, context, page);
-        await interaction.update({
-            embeds: [view.embed],
-            components: view.components,
-        });
+        await interaction.update(buildPageView(parsed.contextId, context, page));
         return true;
     }
 
