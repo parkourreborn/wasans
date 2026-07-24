@@ -1,4 +1,4 @@
-import { DEFAULT_GUILD_ID } from './constants.js';
+import { BOT_TOKEN, DEFAULT_GUILD_ID } from './constants.js';
 
 function csvToIds(value) {
     if (!value) return [];
@@ -16,7 +16,7 @@ export const botConfig = {
     submission_base_url: process.env.SUBMISSION_BASE_URL || 'https://wasans.tully.sh/submissions/',
     player_base_url: process.env.PLAYER_BASE_URL || 'https://wasans.tully.sh/players/',
     submission_api_base_url: process.env.SUBMISSION_API_BASE_URL || 'https://wasans.tully.sh/v1/submissions/',
-    bot_api_key: process.env.BOT_API_KEY,
+    bot_token: BOT_TOKEN,
     moderator_role_id: process.env.MODERATOR_ROLE_ID || '1340709947758874624',
     state_tags: {
         pending: process.env.TAG_PENDING_ID || '1351580041896656936',

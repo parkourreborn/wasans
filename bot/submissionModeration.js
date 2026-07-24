@@ -105,8 +105,8 @@ async function ensureModerator(interaction) {
 }
 
 async function patchSubmission(submissionId, body) {
-    if (!botConfig.bot_api_key) {
-        throw new Error('BOT_API_KEY is not configured');
+    if (!botConfig.bot_token) {
+        throw new Error('BOT_TOKEN is not configured');
     }
 
     const response = await fetch(
@@ -114,7 +114,7 @@ async function patchSubmission(submissionId, body) {
         {
             method: 'PATCH',
             headers: {
-                Authorization: ['Bearer', botConfig.bot_api_key].join(' '),
+                Authorization: ['Bearer', botConfig.bot_token].join(' '),
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(body),
