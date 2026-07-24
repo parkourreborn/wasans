@@ -12,6 +12,8 @@ export type ApprovedHighScoreRun = {
   oldTime?: number
   oldPlayerScore?: number
   discordUserId?: string,
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
   averageScoreDelta?: number
   is_wr: boolean
   // optional previous WR info (when this run becomes a WR)
@@ -103,6 +105,8 @@ type SubmissionSyncPayload = {
   trial_name: string
   player_name: string
   player_discord_id?: string
+  discord_avatar?: string | null
+  discord_avatar_discriminator?: string | null
   time_new: number
   time_old?: number
   score_new?: number
@@ -303,6 +307,8 @@ export type PendingSubmissionPost = {
   oldTime?: number
   player_score: number
   discordUserId?: string
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
 }
 
 export async function postPendingRun(submission: PendingSubmissionPost): Promise<{ threadId: string | null }> {
@@ -317,6 +323,8 @@ export async function postPendingRun(submission: PendingSubmissionPost): Promise
       trial_name: submission.trial_name,
       player_name: submission.player_name,
       player_discord_id: submission.discordUserId,
+      discord_avatar: submission.discord_avatar,
+      discord_avatar_discriminator: submission.discord_discriminator,
       time_new: submission.time,
       time_old: submission.oldTime,
       score_new: Number.isFinite(submission.player_score) ? submission.player_score : undefined,
@@ -342,6 +350,8 @@ export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ thre
       trial_name: run.trial_name,
       player_name: run.player_name,
       player_discord_id: run.discordUserId,
+      discord_avatar: run.discord_avatar,
+      discord_avatar_discriminator: run.discord_discriminator,
       time_new: run.time,
       time_old: run.oldTime,
       score_new: run.player_score,
@@ -380,6 +390,8 @@ export async function updateSubmissionThreadContent(
       trial_name: run.trial_name,
       player_name: run.player_name,
       player_discord_id: run.discordUserId,
+      discord_avatar: run.discord_avatar,
+      discord_avatar_discriminator: run.discord_discriminator,
       time_new: run.time,
       time_old: run.oldTime,
       score_new: run.player_score,
