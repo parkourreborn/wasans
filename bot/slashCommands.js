@@ -662,11 +662,19 @@ function buildPageView(
     );
 
     const pageLabel = `${currentPageIndex + 1}/${totalPages}`;
+    const prevPageIndex = Math.max(
+        0,
+        currentPageIndex - 1,
+    );
+    const nextPageIndex = Math.min(
+        totalPages - 1,
+        currentPageIndex + 1,
+    );
     const components = [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(
-                    `${CUSTOM_ID_PREFIX}:page:${contextId}:${currentPageIndex - 1}`,
+                    `${CUSTOM_ID_PREFIX}:page:${contextId}:${prevPageIndex}`,
                 )
                 .setLabel('◀')
                 .setStyle(ButtonStyle.Primary)
@@ -693,7 +701,7 @@ function buildPageView(
                 .setDisabled(true),
             new ButtonBuilder()
                 .setCustomId(
-                    `${CUSTOM_ID_PREFIX}:page:${contextId}:${currentPageIndex + 1}`,
+                    `${CUSTOM_ID_PREFIX}:page:${contextId}:${nextPageIndex}`,
                 )
                 .setLabel('▶')
                 .setStyle(ButtonStyle.Success)
@@ -768,8 +776,8 @@ async function sendPaginatedReply(
     const enrichedContext = {
         ...context,
         botName:
-            botUser?.username ||
             botUser?.displayName ||
+            botUser?.username ||
             'WASANS Bot',
         botAvatarUrl:
             botUser?.displayAvatarURL() ||
