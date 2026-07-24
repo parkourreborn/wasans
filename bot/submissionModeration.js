@@ -15,10 +15,12 @@ import { logger } from './logging.js';
 const CUSTOM_ID_PREFIX = 'submission-moderation';
 const ACTION_APPROVE = 'approve';
 const ACTION_REJECT = 'reject';
+const ACTION_PENDING = 'pending';
 const ACTION_TIME = 'time';
 const ACTION_NOTE = 'note';
 const ACTION_TIME_MODAL = 'time-modal';
 const ACTION_NOTE_MODAL = 'note-modal';
+const ACTION_DENY_MODAL = 'deny-modal';
 const MODERATOR_NOTE_PREFIX = 'Moderator note:';
 
 function buildCustomId(action, submissionId) {
@@ -316,6 +318,19 @@ function buildNoteModal(submissionId, value = '') {
         .addComponents(new ActionRowBuilder().addComponents(input));
 }
 
+function buildDenyReasonModal(submissionId) {
+    const input = new TextInputBuilder()
+        .setCustomId('deny_reason')
+        .setLabel('Deny reason')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true);
+
+    return new ModalBuilder()
+        .setCustomId(buildCustomId(ACTION_DENY_MODAL, submissionId))
+        .setTitle('Reject submission')
+        .addComponents(new ActionRowBuilder().addComponents(input));
+}
+
 export function buildSubmissionModerationComponentsForSubmission(submissionId, state) {
     return [
         new ActionRowBuilder().addComponents(
@@ -329,6 +344,11 @@ export function buildSubmissionModerationComponentsForSubmission(submissionId, s
                 .setLabel('Reject')
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(state === 'denied'),
+            new ButtonBuilder()
+                .setCustomId(buildCustomId(ACTION_PENDING, submissionId))
+                .setLabel('Mark as Pending')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(state === 'pending'),
             new ButtonBuilder()
                 .setCustomId(buildCustomId(ACTION_TIME, submissionId))
                 .setLabel('Change Time')
@@ -351,7 +371,12 @@ async function handleButtonInteraction(interaction, parsed) {
     }
 
     if (parsed.action === ACTION_REJECT) {
-        return await sendModerationRequest(interaction, parsed.submissionId, { state: 'denied' }, 'Submission rejected.');
+        await interaction.showModal(buildDenyReasonModal(parsed.submissionId));
+        return true;
+    }
+
+    if (parsed.action === ACTION_PENDING) {
+        return await sendModerationRequest(interaction, parsed.submissionId, { state: 'pending' }, 'Submission marked as pending.');
     }
 
     if (parsed.action === ACTION_TIME) {
@@ -392,6 +417,25 @@ async function handleModalInteraction(interaction, parsed) {
         }
 
         return await sendModerationRequest(interaction, parsed.submissionId, { time }, 'Submission time updated.');
+    }
+
+    if (parsed.action === ACTION_DENY_MODAL) {
+        const denyReason = interaction.fields.getTextInputValue('deny_reason').trim();
+
+        if (!denyReason) {
+            await interaction.reply({
+                content: 'Failed to reject submission: a deny reason is required.',
+                flags: MessageFlags.Ephemeral,
+            });
+            return true;
+        }
+
+        return await sendModerationRequest(
+            interaction,
+            parsed.submissionId,
+            { moderator_note: denyReason, state: 'denied' },
+            'Submission rejected.',
+        );
     }
 
     if (parsed.action === ACTION_NOTE_MODAL) {
