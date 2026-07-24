@@ -312,6 +312,8 @@ function buildPages(items, mapper) {
     for (let offset = 0; offset < items.length; offset += PAGE_SIZE) {
         const pageItems = items.slice(offset, offset + PAGE_SIZE);
         const fields = [];
+        const columnValues = new Map();
+        const columnOrder = [];
         const submissionOptions = [];
 
         for (let index = 0; index < pageItems.length; index += 1) {
@@ -330,6 +332,18 @@ function buildPages(items, mapper) {
                 });
             }
 
+            if (mapped.columns && typeof mapped.columns === 'object') {
+                for (const [name, rawValue] of Object.entries(mapped.columns)) {
+                    if (!columnValues.has(name)) {
+                        columnValues.set(name, []);
+                        columnOrder.push(name);
+                    }
+
+                    const value = String(rawValue ?? '').trim() || 'N/A';
+                    columnValues.get(name).push(value);
+                }
+            }
+
             if (mapped.submissionUuid) {
                 submissionOptions.push({
                     label: truncate(mapped.submissionLabel || `Entry ${globalIndex + 1}`, 100),
@@ -339,6 +353,14 @@ function buildPages(items, mapper) {
                         : undefined,
                 });
             }
+        }
+
+        for (const name of columnOrder) {
+            fields.push({
+                name: truncate(name, 256),
+                value: truncate(columnValues.get(name)?.join('\n') || 'N/A', 1024),
+                inline: true,
+            });
         }
 
         pages.push({ fields, submissionOptions });
@@ -493,11 +515,11 @@ async function handleLeaderboardCommand(interaction) {
         await sendPaginatedReply(interaction, {
             ownerId: interaction.user.id,
             title: 'Overall Leaderboard',
-            description: 'Player | Score',
             pages: buildPages(entries, (item, index) => ({
-                field: {
-                    name: `#${index + 1}`,
-                    value: `${getDisplayPlayerName(item)} | ${formatScore(item?.score ?? item?.overall_score)}`,
+                columns: {
+                    Rank: `#${index + 1}`,
+                    Player: getDisplayPlayerName(item),
+                    Score: formatScore(item?.score ?? item?.overall_score),
                 },
             })),
             emptyMessage: 'No overall leaderboard entries found.',
@@ -513,15 +535,16 @@ async function handleLeaderboardCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: `${trial} Leaderboard`,
-        description: 'Player | Trial Score | Time',
         pages: buildPages(entries, (item, index) => {
             const rank = item?.rank ?? index + 1;
             const playerName = getDisplayPlayerName(item);
             const submissionUuid = getSubmissionUuid(item);
             return {
-                field: {
-                    name: `#${rank}`,
-                    value: `${playerName} | ${formatScore(item?.score)} | ${formatTime(item?.time ?? item?.time_new)}`,
+                columns: {
+                    Rank: `#${rank}`,
+                    Player: playerName,
+                    Score: formatScore(item?.score),
+                    Time: formatTime(item?.time ?? item?.time_new),
                 },
                 submissionUuid,
                 submissionLabel: `#${rank} ${playerName}`,
@@ -559,7 +582,6 @@ async function handleSubmissionsCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: player ? `Submissions for ${getDisplayPlayerName(player)}` : 'Recent Submissions',
-        description: player ? 'Trial | Time | State' : 'Trial | Player | Time | State',
         pages: buildPages(submissions, (submission, index) => {
             const trialName = getTrialName(submission);
             const playerName = getDisplayPlayerName(submission);
@@ -567,11 +589,11 @@ async function handleSubmissionsCommand(interaction) {
             const submissionUuid = getSubmissionUuid(submission);
 
             return {
-                field: {
-                    name: `#${index + 1}`,
-                    value: player
-                        ? `${trialName} | ${formatTime(submission?.time ?? submission?.time_new)} | ${state}`
-                        : `${trialName} | ${playerName} | ${formatTime(submission?.time ?? submission?.time_new)} | ${state}`,
+                columns: {
+                    Trial: trialName,
+                    Player: playerName,
+                    Time: formatTime(submission?.time ?? submission?.time_new),
+                    State: state,
                 },
                 submissionUuid,
                 submissionLabel: `${trialName} • ${playerName}`,
@@ -637,13 +659,13 @@ async function handlePbsCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: `PBs for ${getDisplayPlayerName(player)}`,
-        description: 'Trial | Score | Time',
         pages: buildPages(pbs, (entry) => {
             if (!entry.submission) {
                 return {
-                    field: {
-                        name: entry.trialName,
-                        value: 'No approved submission',
+                    columns: {
+                        Trial: entry.trialName,
+                        Score: 'N/A',
+                        Time: 'No approved submission',
                     },
                 };
             }
@@ -651,9 +673,10 @@ async function handlePbsCommand(interaction) {
             const submissionUuid = getSubmissionUuid(entry.submission);
             const score = entry.submission?.score;
             return {
-                field: {
-                    name: entry.trialName,
-                    value: `${formatScore(score)} | ${formatTime(entry.submission?.time ?? entry.submission?.time_new)}`,
+                columns: {
+                    Trial: entry.trialName,
+                    Score: formatScore(score),
+                    Time: formatTime(entry.submission?.time ?? entry.submission?.time_new),
                 },
                 submissionUuid,
                 submissionLabel: entry.trialName,
@@ -674,15 +697,15 @@ async function handleWrsCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: 'World Records',
-        description: 'Trial | Player | Time',
         pages: buildPages(records, (record) => {
             const trialName = getTrialName(record);
             const playerName = getDisplayPlayerName(record);
             const submissionUuid = getSubmissionUuid(record);
             return {
-                field: {
-                    name: trialName,
-                    value: `${playerName} | ${formatTime(record?.time ?? record?.time_new)}`,
+                columns: {
+                    Trial: trialName,
+                    Player: playerName,
+                    Time: formatTime(record?.time ?? record?.time_new),
                 },
                 submissionUuid,
                 submissionLabel: trialName,
