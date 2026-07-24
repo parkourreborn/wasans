@@ -5,7 +5,6 @@ import {
     createSubmissionThread,
     deleteThread,
     fetchGuild,
-    fetchGuildMember,
     fetchThreadById,
     removeRoles,
     sendDirectMessage,
@@ -160,7 +159,7 @@ export async function executeMemberSync(body) {
     await logger.log('Member sync started', `Member ${body.discord_user_id}`);
 
     const guild = await fetchGuild();
-    const member = await fetchGuildMember(guild, body.discord_user_id);
+    const member = await guild.members.fetch(body.discord_user_id).catch(() => null);
     if (!member) {
         await logger.warn('Member sync completed', 'Member not found');
         return {

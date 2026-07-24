@@ -135,14 +135,6 @@ export async function archiveThread(thread) {
     }
 }
 
-export async function fetchGuildMember(guild, userId) {
-    try {
-        return await guild.members.fetch(userId);
-    } catch {
-        return null;
-    }
-}
-
 export async function addRoles(member, roleIds) {
     if (roleIds.length === 0) return;
     try {

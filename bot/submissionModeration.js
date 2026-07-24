@@ -2,13 +2,14 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    GuildMember,
     MessageFlags,
     ModalBuilder,
+    PermissionFlagsBits,
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
 import { botConfig } from './botConfig.js';
-import { fetchGuildMember } from './discordApi.js';
 import { logger } from './logging.js';
 
 const CUSTOM_ID_PREFIX = 'submission-moderation';
@@ -74,24 +75,105 @@ async function replyEphemeral(interaction, content) {
 
 async function isModerator(interaction) {
     if (!interaction.inGuild() || !interaction.guild) {
+        console.debug('[submissionModeration] Moderator permission check', {
+            userId: interaction.user?.id ?? null,
+            highestRole: null,
+            moderatorRoleId: botConfig.moderator_role_id || null,
+            moderatorRolePosition: null,
+            rolePositionComparison: null,
+            isAdministrator: false,
+            allowed: false,
+        });
         return false;
     }
 
     const moderatorRoleId = botConfig.moderator_role_id;
     if (!moderatorRoleId) {
+        console.error('[submissionModeration] MODERATOR_ROLE_ID is not configured');
+        console.debug('[submissionModeration] Moderator permission check', {
+            userId: interaction.user.id,
+            highestRole: null,
+            moderatorRoleId: null,
+            moderatorRolePosition: null,
+            rolePositionComparison: null,
+            isAdministrator: false,
+            allowed: false,
+        });
         return false;
     }
 
-    const [member, moderatorRole] = await Promise.all([
-        fetchGuildMember(interaction.guild, interaction.user.id),
-        interaction.guild.roles.fetch(moderatorRoleId),
-    ]);
+    let member = interaction.member instanceof GuildMember ? interaction.member : null;
+    if (!member) {
+        try {
+            member = await interaction.guild.members.fetch(interaction.user.id);
+        } catch (error) {
+            console.error('[submissionModeration] Failed to fetch guild member for moderator check', error);
+            console.debug('[submissionModeration] Moderator permission check', {
+                userId: interaction.user.id,
+                highestRole: null,
+                moderatorRoleId,
+                moderatorRolePosition: null,
+                rolePositionComparison: null,
+                isAdministrator: false,
+                allowed: false,
+            });
+            return false;
+        }
+    }
 
-    if (!member || !moderatorRole) {
+    let moderatorRole = interaction.guild.roles.cache.get(moderatorRoleId) || null;
+    if (!moderatorRole) {
+        try {
+            moderatorRole = await interaction.guild.roles.fetch(moderatorRoleId);
+        } catch (error) {
+            console.error('[submissionModeration] Failed to fetch moderator role for permission check', error);
+        }
+    }
+
+    if (!moderatorRole) {
+        console.error(`[submissionModeration] Moderator role ${moderatorRoleId} was not found`);
+        console.debug('[submissionModeration] Moderator permission check', {
+            userId: interaction.user.id,
+            highestRole: member.roles.highest
+                ? {
+                    id: member.roles.highest.id,
+                    name: member.roles.highest.name,
+                    position: member.roles.highest.position,
+                }
+                : null,
+            moderatorRoleId,
+            moderatorRolePosition: null,
+            rolePositionComparison: null,
+            isAdministrator: member.permissions.has(PermissionFlagsBits.Administrator),
+            allowed: false,
+        });
         return false;
     }
 
-    return member.roles.highest.comparePositionTo(moderatorRole) >= 0;
+    const highestRole = member.roles.highest;
+    const isAdministrator = member.permissions.has(PermissionFlagsBits.Administrator);
+    const hasModeratorRole = member.roles.cache.has(moderatorRoleId);
+    const rolePositionComparison = highestRole.comparePositionTo(moderatorRole);
+    const allowed = isAdministrator || hasModeratorRole || rolePositionComparison >= 0;
+
+    console.debug('[submissionModeration] Moderator permission check', {
+        userId: interaction.user.id,
+        highestRole: highestRole
+            ? {
+                id: highestRole.id,
+                name: highestRole.name,
+                position: highestRole.position,
+            }
+            : null,
+        moderatorRoleId: moderatorRole.id,
+        moderatorRolePosition: moderatorRole.position,
+        hasModeratorRole,
+        rolePositionComparison,
+        isAdministrator,
+        allowed,
+    });
+
+    return allowed;
 }
 
 async function ensureModerator(interaction) {
