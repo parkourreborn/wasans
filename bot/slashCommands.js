@@ -45,6 +45,7 @@ export const trials = [
     'Wisp',
 ];
 
+const trialChoices = trials.map((trialName) => ({ name: trialName, value: trialName }));
 const trialSet = new Set(trials);
 const paginationContexts = new Map();
 
@@ -266,7 +267,7 @@ function buildCommandDefinitions() {
                 option
                     .setName('trial')
                     .setDescription('Specific trial leaderboard')
-                    .addChoices(...trials.map((trialName) => ({ name: trialName, value: trialName })))
+                    .addChoices(...trialChoices)
                     .setRequired(false),
             ),
         new SlashCommandBuilder()
