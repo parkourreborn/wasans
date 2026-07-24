@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { resolvePlayerUrl, resolveSubmissionUrl } from './resolvers.js';
+import { resolvePlayerUrl, resolveSubmissionAssetUrl, resolveSubmissionUrl } from './resolvers.js';
 import { buildSubmissionModerationComponentsForSubmission } from './submissionModeration.js';
 
 function formatValue(value) {
@@ -111,7 +111,7 @@ export function buildSubmissionMessage(body) {
         );
     embed.data.description = '';
 
-    const assetUrl = `https://assets.wasans.tully.sh/scores/${encodeURIComponent(body.submission_id)}.mp4`;
+    const assetUrl = resolveSubmissionAssetUrl(body.submission_id);
 
     return {
         content: `${assetUrl}\n`,

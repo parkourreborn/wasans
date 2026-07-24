@@ -14,6 +14,7 @@ export const botConfig = {
     rank_milestones_channel_id: process.env.RANK_MILESTONES_CHANNEL_ID || '1258680561929814066',
     wr_ping_role_id: process.env.WR_PING_ROLE_ID || '1335389577883418736',
     submission_base_url: process.env.SUBMISSION_BASE_URL || 'https://wasans.tully.sh/submissions/',
+    submission_assets_base_url: process.env.SUBMISSION_ASSETS_BASE_URL || 'https://assets.wasans.tully.sh/scores/',
     player_base_url: process.env.PLAYER_BASE_URL || 'https://wasans.tully.sh/players/',
     submission_api_base_url: process.env.SUBMISSION_API_BASE_URL || 'https://wasans.tully.sh/v1/submissions/',
     bot_token: BOT_TOKEN,

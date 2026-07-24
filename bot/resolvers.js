@@ -25,6 +25,10 @@ export function resolveSubmissionUrl(submissionId) {
     return `${botConfig.submission_base_url}${encodeURIComponent(submissionId)}`;
 }
 
+export function resolveSubmissionAssetUrl(submissionId) {
+    return `${botConfig.submission_assets_base_url}${encodeURIComponent(submissionId)}.mp4`;
+}
+
 export function resolvePlayerUrl(playerId) {
     return `${botConfig.player_base_url}${encodeURIComponent(playerId)}`;
 }
