@@ -89,7 +89,9 @@ async function isModerator(interaction) {
 
     const moderatorRoleId = botConfig.moderator_role_id;
     if (!moderatorRoleId) {
-        console.error('[submissionModeration] MODERATOR_ROLE_ID is not configured');
+        await logger.error('Moderator permission check failed', 'MODERATOR_ROLE_ID is not configured', {
+            moderator_id: interaction.user.id,
+        }).catch(() => {});
         console.debug('[submissionModeration] Moderator permission check', {
             userId: interaction.user.id,
             highestRole: null,
@@ -107,7 +109,10 @@ async function isModerator(interaction) {
         try {
             member = await interaction.guild.members.fetch(interaction.user.id);
         } catch (error) {
-            console.error('[submissionModeration] Failed to fetch guild member for moderator check', error);
+            await logger.error('Moderator permission check failed', error.message, {
+                moderator_id: interaction.user.id,
+                stage: 'fetch_member',
+            }).catch(() => {});
             console.debug('[submissionModeration] Moderator permission check', {
                 userId: interaction.user.id,
                 highestRole: null,
@@ -126,12 +131,20 @@ async function isModerator(interaction) {
         try {
             moderatorRole = await interaction.guild.roles.fetch(moderatorRoleId);
         } catch (error) {
-            console.error('[submissionModeration] Failed to fetch moderator role for permission check', error);
+            await logger.error('Moderator permission check failed', error.message, {
+                moderator_id: interaction.user.id,
+                moderator_role_id: moderatorRoleId,
+                stage: 'fetch_role',
+            }).catch(() => {});
         }
     }
 
     if (!moderatorRole) {
-        console.error(`[submissionModeration] Moderator role ${moderatorRoleId} was not found`);
+        await logger.error('Moderator permission check failed', `Moderator role ${moderatorRoleId} was not found`, {
+            moderator_id: interaction.user.id,
+            moderator_role_id: moderatorRoleId,
+            stage: 'missing_role',
+        }).catch(() => {});
         console.debug('[submissionModeration] Moderator permission check', {
             userId: interaction.user.id,
             highestRole: member.roles.highest
