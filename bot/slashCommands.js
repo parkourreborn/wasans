@@ -141,6 +141,22 @@ function getTrialName(item) {
     );
 }
 
+function getSubmissionStatus(item) {
+    const state = String(
+        item?.state ||
+            item?.status ||
+            '',
+    ).trim();
+    if (!state) {
+        return 'Unknown';
+    }
+
+    return (
+        state.charAt(0).toUpperCase() +
+        state.slice(1).toLowerCase()
+    );
+}
+
 function toNumber(value) {
     const parsed = Number(value);
     return Number.isFinite(parsed)
@@ -442,40 +458,20 @@ function buildCommandDefinitions() {
     ];
 }
 
-function buildTableDescription(
-    columnOrder,
-    colWidths,
-    rows,
-) {
-    if (rows.length === 0) {
-        return null;
+function rankLabel(globalIndex) {
+    if (globalIndex === 0) {
+        return '🥇';
     }
 
-    const header = columnOrder
-        .map((col) =>
-            col.padEnd(colWidths[col]),
-        )
-        .join('  ')
-        .trimEnd();
-    const divider = columnOrder
-        .map((col) =>
-            '─'.repeat(colWidths[col]),
-        )
-        .join('  ');
-    const dataLines = rows.map((row) =>
-        columnOrder
-            .map((col) =>
-                (row[col] || 'N/A').padEnd(
-                    colWidths[col],
-                ),
-            )
-            .join('  ')
-            .trimEnd(),
-    );
+    if (globalIndex === 1) {
+        return '🥈';
+    }
 
-    return `\`\`\`\n${header}\n${divider}\n${dataLines.join(
-        '\n',
-    )}\n\`\`\``;
+    if (globalIndex === 2) {
+        return '🥉';
+    }
+
+    return `#${globalIndex + 1}`;
 }
 
 function buildPages(items, mapper) {
@@ -493,9 +489,7 @@ function buildPages(items, mapper) {
             offset,
             offset + PAGE_SIZE,
         );
-        const rows = [];
-        const columnOrder = [];
-        const colWidths = {};
+        const lines = [];
         const submissionOptions = [];
 
         for (
@@ -513,36 +507,14 @@ function buildPages(items, mapper) {
                 continue;
             }
 
-            if (
-                mapped.columns &&
-                typeof mapped.columns === 'object'
-            ) {
-                const rowValues = {};
-                for (const [
-                    name,
-                    rawValue,
-                ] of Object.entries(
-                    mapped.columns,
-                )) {
-                    if (!colWidths[name]) {
-                        columnOrder.push(
-                            name,
-                        );
-                        colWidths[name] =
-                            name.length;
-                    }
-
-                    const value = String(
-                        rawValue ?? '',
-                    )
-                        .trim() || 'N/A';
-                    colWidths[name] = Math.max(
-                        colWidths[name],
-                        value.length,
-                    );
-                    rowValues[name] = value;
-                }
-                rows.push(rowValues);
+            if (mapped.leaderboardEntry) {
+                const { name, stat } =
+                    mapped.leaderboardEntry;
+                lines.push(
+                    `${rankLabel(globalIndex)} ${name}`,
+                );
+                lines.push(`\`${stat}\``);
+                lines.push('');
             }
 
             if (mapped.submissionUuid) {
@@ -565,14 +537,15 @@ function buildPages(items, mapper) {
             }
         }
 
-        const description =
-            buildTableDescription(
-                columnOrder,
-                colWidths,
-                rows,
-            );
+        if (
+            lines.length > 0 &&
+            lines[lines.length - 1] === ''
+        ) {
+            lines.pop();
+        }
+
         pages.push({
-            description,
+            description: lines.join('\n'),
             submissionOptions,
         });
     }
@@ -644,14 +617,27 @@ function buildPageView(
         .setColor(context.color || 0x4bb503)
         .setTitle(context.title)
         .setFooter({
-            text: `Page ${currentPageIndex + 1}/${totalPages}`,
+            text: `${currentPageIndex + 1}/${totalPages}`,
         });
 
+    if (context.botName) {
+        const authorData = {
+            name: context.botName,
+        };
+        if (context.botAvatarUrl) {
+            authorData.iconURL =
+                context.botAvatarUrl;
+        }
+        embed.setAuthor(authorData);
+    }
+
     if (context.pages.length === 0) {
-        embed.setDescription(
-            context.emptyMessage ||
-                'No results found.',
-        );
+        const emptyDesc =
+            context.description
+                ? `${context.description}\n\n${context.emptyMessage || 'No results found.'}`
+                : context.emptyMessage ||
+                  'No results found.';
+        embed.setDescription(emptyDesc);
         return {
             embeds: [embed],
             components: [],
@@ -660,43 +646,63 @@ function buildPageView(
 
     const page =
         context.pages[currentPageIndex];
-    embed.setDescription(
+
+    const descParts = [];
+    if (context.description) {
+        descParts.push(context.description);
+        descParts.push('');
+    }
+    descParts.push(
         page.description ||
             context.emptyMessage ||
             'No results found.',
     );
+    embed.setDescription(
+        descParts.join('\n'),
+    );
 
-    const components = [];
-
-    if (totalPages > 1) {
-        components.push(
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(
-                        `${CUSTOM_ID_PREFIX}:page:${contextId}:${currentPageIndex - 1}`,
-                    )
-                    .setLabel('Previous')
-                    .setStyle(
-                        ButtonStyle.Secondary,
-                    )
-                    .setDisabled(
-                        currentPageIndex <= 0,
-                    ),
-                new ButtonBuilder()
-                    .setCustomId(
-                        `${CUSTOM_ID_PREFIX}:page:${contextId}:${currentPageIndex + 1}`,
-                    )
-                    .setLabel('Next')
-                    .setStyle(
-                        ButtonStyle.Secondary,
-                    )
-                    .setDisabled(
-                        currentPageIndex >=
-                            totalPages - 1,
-                    ),
-            ),
-        );
-    }
+    const pageLabel = `${currentPageIndex + 1}/${totalPages}`;
+    const components = [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(
+                    `${CUSTOM_ID_PREFIX}:page:${contextId}:${currentPageIndex - 1}`,
+                )
+                .setLabel('◀')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(
+                    currentPageIndex <= 0,
+                ),
+            new ButtonBuilder()
+                .setCustomId(
+                    `${CUSTOM_ID_PREFIX}:noop:${contextId}:refresh`,
+                )
+                .setLabel('🔄')
+                .setStyle(
+                    ButtonStyle.Secondary,
+                )
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId(
+                    `${CUSTOM_ID_PREFIX}:noop:${contextId}:indicator`,
+                )
+                .setLabel(pageLabel)
+                .setStyle(
+                    ButtonStyle.Secondary,
+                )
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId(
+                    `${CUSTOM_ID_PREFIX}:page:${contextId}:${currentPageIndex + 1}`,
+                )
+                .setLabel('▶')
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(
+                    currentPageIndex >=
+                        totalPages - 1,
+                ),
+        ),
+    ];
 
     if (page.submissionOptions.length > 0) {
         components.push(
@@ -757,12 +763,26 @@ async function sendPaginatedReply(
     interaction,
     context,
 ) {
+    const botUser =
+        interaction.client.user;
+    const enrichedContext = {
+        ...context,
+        botName:
+            botUser?.username ||
+            botUser?.displayName ||
+            'WASANS Bot',
+        botAvatarUrl:
+            botUser?.displayAvatarURL() ||
+            null,
+    };
     const contextId =
-        createPaginationContext(context);
+        createPaginationContext(
+            enrichedContext,
+        );
     await replyFromContext(
         interaction,
         contextId,
-        context,
+        enrichedContext,
         0,
     );
 }
@@ -823,21 +843,20 @@ async function handleLeaderboardCommand(
             interaction,
             {
                 ownerId: interaction.user.id,
-                title:
-                    'Overall Leaderboard',
+                title: 'Overall Leaderboard',
+                description:
+                    'View the overall WASANS leaderboard.',
                 pages: buildPages(
                     entries,
                     (item, index) => ({
-                        columns: {
-                            Rank: `#${index + 1}`,
-                            Plyr:
-                                getDisplayPlayerName(
-                                    item,
-                                ),
-                            Score: formatScore(
+                        leaderboardEntry: {
+                            name: getPlayerName(
+                                item,
+                            ),
+                            stat: `Score ${formatScore(
                                 item?.score ??
                                     item?.overall_score,
-                            ),
+                            )}`,
                         },
                     }),
                 ),
@@ -863,6 +882,7 @@ async function handleLeaderboardCommand(
         {
             ownerId: interaction.user.id,
             title: `${trial} Leaderboard`,
+            description: `View the ${trial} leaderboard.`,
             pages: buildPages(
                 entries,
                 (item, index) => {
@@ -870,32 +890,30 @@ async function handleLeaderboardCommand(
                         item?.rank ||
                         (index + 1);
                     const playerName =
-                        getDisplayPlayerName(
-                            item,
-                        );
+                        getPlayerName(item);
                     const submissionUuid =
                         getSubmissionUuid(
                             item,
                         );
                     return {
-                        columns: {
-                            Rank: `#${rank}`,
-                            Plyr: playerName,
-                            Score: formatScore(
-                                item?.score,
-                            ),
-                            Time: formatTime(
+                        leaderboardEntry: {
+                            name: playerName,
+                            stat: formatTime(
                                 item?.time ??
                                     item?.time_new,
                             ),
                         },
                         submissionUuid,
-                        submissionLabel: `#${rank} ${playerName}`,
+                        submissionLabel: truncate(
+                            `#${rank} ${playerName}`,
+                            100,
+                        ),
                         submissionDescription: `${trial} PB`,
                     };
                 },
             ),
-            emptyMessage: `No leaderboard entries ` +
+            emptyMessage:
+                `No leaderboard entries ` +
                 `found for ${trial}.`,
             ephemeral: true,
         },
@@ -955,9 +973,10 @@ async function handleSubmissionsCommand(
         interaction,
         {
             ownerId: interaction.user.id,
-            title: player
-                ? `Submissions for ${getDisplayPlayerName(player)}`
-                : 'Recent Submissions',
+            title: 'Recent Submissions',
+            description: player
+                ? `View ${getPlayerName(player)}'s recent submissions.`
+                : 'View recent submissions.',
             pages: buildPages(
                 submissions,
                 (submission) => {
@@ -966,7 +985,11 @@ async function handleSubmissionsCommand(
                             submission,
                         );
                     const playerName =
-                        getDisplayPlayerName(
+                        getPlayerName(
+                            submission,
+                        );
+                    const status =
+                        getSubmissionStatus(
                             submission,
                         );
                     const submissionUuid =
@@ -975,20 +998,22 @@ async function handleSubmissionsCommand(
                         );
 
                     return {
-                        columns: {
-                            Trial: trialName,
-                            Plyr: playerName,
-                            Time: formatTime(
+                        leaderboardEntry: {
+                            name: playerName,
+                            stat: `${trialName} • ${status}`,
+                        },
+                        submissionUuid,
+                        submissionLabel: truncate(
+                            `${trialName} • ${playerName}`,
+                            100,
+                        ),
+                        submissionDescription: truncate(
+                            formatTime(
                                 submission?.time ??
                                     submission?.time_new,
                             ),
-                        },
-                        submissionUuid,
-                        submissionLabel: `${trialName} • ${playerName}`,
-                        submissionDescription: `${formatTime(
-                            submission?.time ??
-                                submission?.time_new,
-                        )}`,
+                            100,
+                        ),
                     };
                 },
             ),
@@ -1098,15 +1123,14 @@ async function handlePbsCommand(
         interaction,
         {
             ownerId: interaction.user.id,
-            title: `PBs for ${getDisplayPlayerName(player)}`,
+            title: 'Personal Bests',
+            description: `View ${getPlayerName(player)}'s personal bests.`,
             pages: buildPages(pbs, (entry) => {
                 if (!entry.submission) {
                     return {
-                        columns: {
-                            Trial:
-                                entry.trialName,
-                            Score: 'N/A',
-                            Time: 'No PB found',
+                        leaderboardEntry: {
+                            name: entry.trialName,
+                            stat: 'No PB',
                         },
                     };
                 }
@@ -1115,30 +1139,25 @@ async function handlePbsCommand(
                     getSubmissionUuid(
                         entry.submission,
                     );
-                const score =
-                    entry.submission?.score;
+                const time = formatTime(
+                    entry.submission?.time ??
+                        entry.submission
+                            ?.time_new,
+                );
                 return {
-                    columns: {
-                        Trial:
-                            entry.trialName,
-                        Score: formatScore(
-                            score,
-                        ),
-                        Time: formatTime(
-                            entry.submission
-                                ?.time ??
-                                entry.submission
-                                    ?.time_new,
-                        ),
+                    leaderboardEntry: {
+                        name: entry.trialName,
+                        stat: time,
                     },
                     submissionUuid,
-                    submissionLabel:
+                    submissionLabel: truncate(
                         entry.trialName,
-                    submissionDescription: `PB • ${formatTime(
-                        entry.submission?.time ??
-                            entry.submission
-                                ?.time_new,
-                    )}`,
+                        100,
+                    ),
+                    submissionDescription: truncate(
+                        `PB • ${time}`,
+                        100,
+                    ),
                 };
             }),
             emptyMessage:
@@ -1166,33 +1185,37 @@ async function handleWrsCommand(
         {
             ownerId: interaction.user.id,
             title: 'World Records',
+            description:
+                'View the WASANS world records.',
             pages: buildPages(
                 records,
                 (record) => {
                     const trialName =
                         getTrialName(record);
                     const playerName =
-                        getDisplayPlayerName(
-                            record,
-                        );
+                        getPlayerName(record);
                     const submissionUuid =
                         getSubmissionUuid(
                             record,
                         );
+                    const time = formatTime(
+                        record?.time ??
+                            record?.time_new,
+                    );
                     return {
-                        columns: {
-                            Trial: trialName,
-                            Plyr: playerName,
-                            Time: formatTime(
-                                record?.time ??
-                                    record?.time_new,
-                            ),
+                        leaderboardEntry: {
+                            name: playerName,
+                            stat: `${trialName} • ${time}`,
                         },
                         submissionUuid,
-                        submissionLabel:
+                        submissionLabel: truncate(
                             trialName,
-                        submissionDescription:
+                            100,
+                        ),
+                        submissionDescription: truncate(
                             playerName,
+                            100,
+                        ),
                     };
                 },
             ),
@@ -1417,6 +1440,14 @@ async function handleComponentInteraction(
                 page,
             ),
         );
+        return true;
+    }
+
+    if (
+        parsed.action === 'noop' &&
+        interaction.isButton()
+    ) {
+        await interaction.deferUpdate();
         return true;
     }
 
