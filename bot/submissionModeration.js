@@ -19,6 +19,7 @@ const ACTION_TIME = 'time';
 const ACTION_NOTE = 'note';
 const ACTION_TIME_MODAL = 'time-modal';
 const ACTION_NOTE_MODAL = 'note-modal';
+const MODERATOR_NOTE_PREFIX = 'Moderator note:';
 
 function buildCustomId(action, submissionId) {
     return `${CUSTOM_ID_PREFIX}:${action}:${submissionId}`;
@@ -46,18 +47,18 @@ function getMessageLines(interaction) {
 function getCurrentTimeValue(interaction) {
     const lines = getMessageLines(interaction);
     const comparisonLine = lines.find((line) => line.includes('->')) || '';
-    const match = comparisonLine.match(/->\s*([0-9]+(?:\.[0-9]+)?)/);
+    const match = comparisonLine.match(/^\S+\s*->\s*([0-9]+(?:\.[0-9]+)?)$/);
     return match?.[1] || '';
 }
 
 function getCurrentNoteValue(interaction) {
     const lines = getMessageLines(interaction);
-    const noteLine = lines.find((line) => line.startsWith('Moderator note:'));
+    const noteLine = lines.find((line) => line.startsWith(MODERATOR_NOTE_PREFIX));
     if (!noteLine) {
         return '';
     }
 
-    const note = noteLine.slice('Moderator note:'.length).trim();
+    const note = noteLine.slice(MODERATOR_NOTE_PREFIX.length).trim();
     return note === 'N/A' ? '' : note;
 }
 
