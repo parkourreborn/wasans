@@ -15,6 +15,7 @@ import { resolveSubmissionUrl } from './resolvers.js';
 const API_BASE_URL = 'https://wasans.tully.sh/v1/';
 const PAGE_SIZE = 10;
 const CUSTOM_ID_PREFIX = 'wasans-slash';
+const MAX_PLAYER_NAME_LENGTH = 32;
 
 export const trials = [
     'Crystal',
@@ -90,6 +91,10 @@ function getPlayerName(item) {
     );
 }
 
+function getDisplayPlayerName(item) {
+    return truncate(getPlayerName(item), MAX_PLAYER_NAME_LENGTH);
+}
+
 function getPlayerUuid(item) {
     return item?.uuid || item?.id || item?.player_uuid || item?.player_id || null;
 }
@@ -131,19 +136,6 @@ function formatTime(value) {
     }
 
     return 'N/A';
-}
-
-function formatDate(value) {
-    if (!value) {
-        return 'Unknown date';
-    }
-
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-        return 'Unknown date';
-    }
-
-    return parsed.toISOString().replace('T', ' ').slice(0, 19);
 }
 
 function cleanNickname(value) {
@@ -273,7 +265,7 @@ function buildCommandDefinitions() {
                 option
                     .setName('trial')
                     .setDescription('Specific trial leaderboard')
-                    .setAutocomplete(true)
+                    .addChoices(...trials.map((trialName) => ({ name: trialName, value: trialName })))
                     .setRequired(false),
             ),
         new SlashCommandBuilder()
@@ -317,7 +309,7 @@ function buildPages(items, mapper) {
     const pages = [];
     for (let offset = 0; offset < items.length; offset += PAGE_SIZE) {
         const pageItems = items.slice(offset, offset + PAGE_SIZE);
-        const lines = [];
+        const fields = [];
         const submissionOptions = [];
 
         for (let index = 0; index < pageItems.length; index += 1) {
@@ -328,8 +320,12 @@ function buildPages(items, mapper) {
                 continue;
             }
 
-            if (mapped.line) {
-                lines.push(mapped.line);
+            if (mapped.field) {
+                fields.push({
+                    name: truncate(mapped.field.name || '\u200b', 256),
+                    value: truncate(mapped.field.value || '\u200b', 1024),
+                    inline: mapped.field.inline === true,
+                });
             }
 
             if (mapped.submissionUuid) {
@@ -343,7 +339,7 @@ function buildPages(items, mapper) {
             }
         }
 
-        pages.push({ lines, submissionOptions });
+        pages.push({ fields, submissionOptions });
     }
 
     return pages;
@@ -387,8 +383,7 @@ function buildPageView(contextId, context, requestedPageIndex) {
     const embed = new EmbedBuilder()
         .setColor(context.color || 0x4bb503)
         .setTitle(context.title)
-        .setFooter({ text: `Page ${currentPageIndex + 1}/${totalPages}` })
-        .setTimestamp();
+        .setFooter({ text: `Page ${currentPageIndex + 1}/${totalPages}` });
 
     if (context.pages.length === 0) {
         embed.setDescription(context.emptyMessage || 'No results found.');
@@ -396,7 +391,15 @@ function buildPageView(contextId, context, requestedPageIndex) {
     }
 
     const page = context.pages[currentPageIndex];
-    embed.setDescription(page.lines.join('\n') || context.emptyMessage || 'No results found.');
+    if (context.description) {
+        embed.setDescription(context.description);
+    }
+
+    if (page.fields.length > 0) {
+        embed.addFields(page.fields.slice(0, 25));
+    } else {
+        embed.setDescription(context.emptyMessage || 'No results found.');
+    }
 
     const components = [];
 
@@ -477,7 +480,7 @@ async function handleLeaderboardCommand(interaction) {
 
     if (trial && !trialSet.has(trial)) {
         await interaction.reply({
-            content: 'Invalid trial. Please choose one of the autocomplete options.',
+            content: 'Invalid trial. Please choose one of the available trial options.',
             flags: MessageFlags.Ephemeral,
         });
         return;
@@ -492,8 +495,12 @@ async function handleLeaderboardCommand(interaction) {
         await sendPaginatedReply(interaction, {
             ownerId: interaction.user.id,
             title: 'Overall Leaderboard',
+            description: '**Player** | **Score**',
             pages: buildPages(entries, (item, index) => ({
-                line: `**${index + 1}. ${getPlayerName(item)}** — ${formatScore(item?.score ?? item?.overall_score)}`,
+                field: {
+                    name: `#${index + 1}`,
+                    value: `${getDisplayPlayerName(item)} | ${formatScore(item?.score ?? item?.overall_score)}`,
+                },
             })),
             emptyMessage: 'No overall leaderboard entries found.',
             ephemeral: true,
@@ -508,12 +515,16 @@ async function handleLeaderboardCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: `${trial} Leaderboard`,
+        description: '**Player** | **Trial Score** | **Time**',
         pages: buildPages(entries, (item, index) => {
             const rank = item?.rank ?? index + 1;
-            const playerName = getPlayerName(item);
+            const playerName = getDisplayPlayerName(item);
             const submissionUuid = getSubmissionUuid(item);
             return {
-                line: `**#${rank} ${playerName}** — ${formatTime(item?.time ?? item?.time_new)} • ${formatScore(item?.score)}`,
+                field: {
+                    name: `#${rank}`,
+                    value: `${playerName} | ${formatScore(item?.score)} | ${formatTime(item?.time ?? item?.time_new)}`,
+                },
                 submissionUuid,
                 submissionLabel: `#${rank} ${playerName}`,
                 submissionDescription: `${trial} PB`,
@@ -549,19 +560,24 @@ async function handleSubmissionsCommand(interaction) {
 
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
-        title: player ? `Submissions for ${getPlayerName(player)}` : 'Recent Submissions',
-        pages: buildPages(submissions, (submission) => {
+        title: player ? `Submissions for ${getDisplayPlayerName(player)}` : 'Recent Submissions',
+        description: player ? '**Trial** | **Time** | **State**' : '**Trial** | **Player** | **Time** | **State**',
+        pages: buildPages(submissions, (submission, index) => {
             const trialName = getTrialName(submission);
-            const playerName = getPlayerName(submission);
+            const playerName = getDisplayPlayerName(submission);
             const state = submission?.state || 'unknown';
             const submissionUuid = getSubmissionUuid(submission);
-            const date = formatDate(submission?.created_at || submission?.submitted_at || submission?.timestamp);
 
             return {
-                line: `**${trialName}** — ${playerName} • ${formatTime(submission?.time ?? submission?.time_new)} • ${state} • ${date}`,
+                field: {
+                    name: `#${index + 1}`,
+                    value: player
+                        ? `${trialName} | ${formatTime(submission?.time ?? submission?.time_new)} | ${state}`
+                        : `${trialName} | ${playerName} | ${formatTime(submission?.time ?? submission?.time_new)} | ${state}`,
+                },
                 submissionUuid,
                 submissionLabel: `${trialName} • ${playerName}`,
-                submissionDescription: `${state} • ${date}`,
+                submissionDescription: `${state} • ${formatTime(submission?.time ?? submission?.time_new)}`,
             };
         }),
         emptyMessage: player ? 'No submissions found for this player.' : 'No submissions found.',
@@ -622,18 +638,25 @@ async function handlePbsCommand(interaction) {
 
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
-        title: `PBs for ${getPlayerName(player)}`,
+        title: `PBs for ${getDisplayPlayerName(player)}`,
+        description: '**Trial** | **Score** | **Time**',
         pages: buildPages(pbs, (entry) => {
             if (!entry.submission) {
                 return {
-                    line: `**${entry.trialName}** — No approved submission`,
+                    field: {
+                        name: entry.trialName,
+                        value: 'No approved submission',
+                    },
                 };
             }
 
             const submissionUuid = getSubmissionUuid(entry.submission);
             const score = entry.submission?.score;
             return {
-                line: `**${entry.trialName}** — ${formatTime(entry.submission?.time ?? entry.submission?.time_new)} • ${formatScore(score)}`,
+                field: {
+                    name: entry.trialName,
+                    value: `${formatScore(score)} | ${formatTime(entry.submission?.time ?? entry.submission?.time_new)}`,
+                },
                 submissionUuid,
                 submissionLabel: entry.trialName,
                 submissionDescription: `PB • ${formatTime(entry.submission?.time ?? entry.submission?.time_new)}`,
@@ -653,12 +676,16 @@ async function handleWrsCommand(interaction) {
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
         title: 'World Records',
+        description: '**Trial** | **Player** | **Time**',
         pages: buildPages(records, (record) => {
             const trialName = getTrialName(record);
-            const playerName = getPlayerName(record);
+            const playerName = getDisplayPlayerName(record);
             const submissionUuid = getSubmissionUuid(record);
             return {
-                line: `**${trialName}** — ${playerName} • ${formatTime(record?.time ?? record?.time_new)}`,
+                field: {
+                    name: trialName,
+                    value: `${playerName} | ${formatTime(record?.time ?? record?.time_new)}`,
+                },
                 submissionUuid,
                 submissionLabel: trialName,
                 submissionDescription: playerName,
@@ -691,7 +718,7 @@ async function handleStatsCommand(interaction) {
 
     const embed = new EmbedBuilder()
         .setColor(0x4bb503)
-        .setTitle(`Stats for ${getPlayerName(player)}`)
+        .setTitle(`Stats for ${getDisplayPlayerName(player)}`)
         .addFields(
             {
                 name: 'Current Score',
@@ -706,12 +733,11 @@ async function handleStatsCommand(interaction) {
             {
                 name: 'Most Recent Submission',
                 value: mostRecent
-                    ? `${getTrialName(mostRecent)} • ${formatTime(mostRecent?.time ?? mostRecent?.time_new)} • ${mostRecent?.state || 'unknown'} • ${formatDate(mostRecent?.created_at || mostRecent?.submitted_at || mostRecent?.timestamp)}`
+                    ? `${getTrialName(mostRecent)} | ${formatTime(mostRecent?.time ?? mostRecent?.time_new)} | ${mostRecent?.state || 'unknown'}`
                     : 'No submissions',
                 inline: false,
             },
-        )
-        .setTimestamp();
+        );
 
     const components = [];
     const mostRecentSubmissionUuid = mostRecent ? getSubmissionUuid(mostRecent) : null;
@@ -794,7 +820,11 @@ async function handleComponentInteraction(interaction) {
 
     if (parsed.action === 'page' && interaction.isButton()) {
         const page = Number(parsed.value || 0);
-        await interaction.update(buildPageView(parsed.contextId, context, page));
+        const view = buildPageView(parsed.contextId, context, page);
+        await interaction.update({
+            embeds: [view.embed],
+            components: view.components,
+        });
         return true;
     }
 
