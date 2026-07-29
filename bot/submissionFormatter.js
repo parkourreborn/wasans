@@ -60,9 +60,6 @@ export function buildSubmissionMessage(body) {
         } else if (body.previous_wr?.time !== undefined && body.previous_wr?.player_name) {
             lines.push(`Previous WR: ${body.previous_wr.time.toFixed(3)} by ${body.previous_wr.player_name}`);
         }
-        if (Number.isFinite(averageScoreDelta)) {
-            lines.push(`Average score decrease: ${body.average_score_delta.toFixed(3)}`);
-        }
     }
 
     lines.push(resolveSubmissionUrl(body.submission_id));
