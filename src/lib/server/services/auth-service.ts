@@ -9,6 +9,7 @@ import { getAvailablePlayerName } from "@/lib/server/player-name-service"
 import { legalVersion } from "@/lib/legal"
 import { normalizeLoginPlayerName } from "@/lib/player-name"
 import { generateUUID } from "@/lib/utils"
+import { trackPlayerIp } from "@/lib/server/player-ip-schema"
 
 type DiscordTokenResponse = {
   access_token: string
@@ -269,6 +270,8 @@ export async function completeDiscordOAuth(request: Request, env: CloudflareEnv)
     const discordUser = await getDiscordUser(token.access_token, token.token_type)
     const player = await findOrCreatePlayer(env.wasans, discordUser, token)
     const sessionToken = await createSession(env.wasans, player.uuid)
+
+    await trackPlayerIp(env.wasans, player.uuid, request)
 
     const destinationUrl = new URL(nextUrl, requestUrl.origin)
     const headers = new Headers({ location: destinationUrl.toString() })

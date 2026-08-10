@@ -35,6 +35,19 @@ CREATE TABLE auth_sessions (
   FOREIGN KEY (player_uuid) REFERENCES players(uuid)
 );
 
+CREATE TABLE player_ips (
+  player_uuid TEXT NOT NULL,
+  ip_address TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  first_seen TEXT NOT NULL,
+  last_seen TEXT NOT NULL,
+  PRIMARY KEY (player_uuid, ip_address),
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_ips_player_uuid ON player_ips(player_uuid);
+CREATE INDEX IF NOT EXISTS idx_player_ips_ip_address ON player_ips(ip_address);
+
 CREATE TABLE oauth_accounts (
   provider TEXT NOT NULL,
   provider_account_id TEXT NOT NULL,

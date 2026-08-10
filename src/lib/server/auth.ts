@@ -1,5 +1,6 @@
 import "server-only"
 import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
+import { trackPlayerIp } from "@/lib/server/player-ip-schema"
 
 export type AuthUser = {
   uuid: string
@@ -52,7 +53,7 @@ export async function getAuthUser(request: Request, db: D1Database) {
     return null
   }
 
-  return db.prepare(
+  const user = await db.prepare(
     `SELECT players.uuid,
             COALESCE(oauth_accounts.provider_account_id, players.player_id) AS player_id,
             players.discord_avatar,
@@ -71,6 +72,12 @@ export async function getAuthUser(request: Request, db: D1Database) {
   )
     .bind(playerUuid)
     .first<AuthUser>()
+
+  if (user) {
+    await trackPlayerIp(db, playerUuid, request)
+  }
+
+  return user
 }
 
 export function canModerate(user: AuthUser | null) {
