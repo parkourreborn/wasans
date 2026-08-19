@@ -18,6 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("font-sans", geist.variable, "dark")}>
         <head>
+          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1717866889959310" crossOrigin="anonymous"/>
           {/* <link rel="icon" type="image/png" sizes="16x16" href="https://tully.sh/icons/favicon-16x16.png" />
           <link rel="icon" type="image/png" sizes="32x32" href="https://tully.sh/icons/favicon-32x32.png" />
           <link rel="icon" type="image/x-icon" sizes="16x16" href="https://tully.sh/icons/favicon.ico" /> */}

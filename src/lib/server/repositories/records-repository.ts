@@ -23,6 +23,39 @@ export async function listWorldRecords(db: D1Database) {
   return rows.results || []
 }
 
+export async function getWorldRecordHistory(db: D1Database, trialName: string) {
+  await ensurePlayerAvatarColumns(db)
+
+  const rows = await db.prepare(
+    `SELECT
+       s.*,
+       players.score AS player_score,
+       players.player_id,
+       players.discord_avatar,
+       players.discord_discriminator
+     FROM submissions s
+     LEFT JOIN players ON players.uuid = s.player_uuid
+     WHERE s.trial_name = ?
+       AND s.state = 'approved'
+       AND NOT EXISTS (
+         SELECT 1
+         FROM submissions earlier
+         WHERE earlier.trial_name = s.trial_name
+           AND earlier.state = 'approved'
+           AND (
+                 earlier.date < s.date
+              OR (earlier.date = s.date AND earlier.uuid < s.uuid)
+           )
+           AND earlier.time <= s.time
+       )
+     ORDER BY s.date, s.uuid`
+  )
+    .bind(trialName)
+    .all()
+
+  return rows.results || []
+}
+
 export async function getWorldRecordByTrial(db: D1Database, trialName: string) {
   await ensurePlayerAvatarColumns(db)
 
