@@ -1,7 +1,7 @@
 "use client"
 
 import type { CSSProperties, ComponentType, ReactNode } from "react"
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -13,6 +13,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
@@ -29,6 +32,7 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   HelpCircleIcon,
+  HistoryIcon,
   HomeIcon,
   LogInIcon,
   MedalIcon,
@@ -74,32 +78,45 @@ const toolLinks = [
   { href: "/compare", label: "Compare", icon: ArrowRightLeftIcon },
 ]
 
-const boardLinks = [
-  { href: "/wrs", label: "World Records", icon: MedalIcon },
-  { href: "/submissions", label: "Submissions", icon: TimerIcon },
-  { href: "/players", label: "Leaderboard", icon: TrophyIcon },
-]
-
 type SidebarLinkItem = {
   href: string
   label: string
   icon: ComponentType<{ className?: string }>
 }
 
+type SidebarLinkGroup = SidebarLinkItem & {
+  children?: SidebarLinkItem[]
+}
+
+const boardLinks: SidebarLinkGroup[] = [
+  {
+    href: "/wrs",
+    label: "World Records",
+    icon: MedalIcon,
+    children: [{ href: "/wrs/history", label: "History", icon: HistoryIcon }],
+  },
+  { href: "/submissions", label: "Submissions", icon: TimerIcon },
+  { href: "/players", label: "Leaderboard", icon: TrophyIcon },
+]
+
 function SidebarNavItem({
   item,
   pathname,
   onClick,
   leading,
+  matchExact = false,
 }: {
   item: SidebarLinkItem
   pathname: string
   onClick?: () => void
   leading?: ReactNode
+  matchExact?: boolean
 }) {
   const Icon = item.icon
   const theme = getRouteTheme(item.href)
-  const active = isRouteActive(pathname, item.href)
+  // Items with their own sub-items only light up on an exact match, so the
+  // nested page is the single highlighted entry while you are on it.
+  const active = matchExact ? pathname === item.href : isRouteActive(pathname, item.href)
 
   const content = (
     <div className="relative flex min-w-0 items-center gap-2">
@@ -129,6 +146,27 @@ function SidebarNavItem({
         )}
       </SidebarMenuButton>
     </SidebarMenuItem>
+  )
+}
+
+function SidebarNavSubItem({ item, pathname }: { item: SidebarLinkItem; pathname: string }) {
+  const Icon = item.icon
+  const theme = getRouteTheme(item.href)
+
+  return (
+    <SidebarMenuSubItem>
+      <SidebarMenuSubButton
+        asChild
+        isActive={isRouteActive(pathname, item.href)}
+        className="data-active:bg-[color-mix(in_oklab,var(--page-accent)_14%,transparent)] data-active:font-semibold data-active:text-(--page-accent) data-active:[&>svg]:text-(--page-accent)"
+        style={{ ["--page-accent" as string]: theme.accent } as CSSProperties}
+      >
+        <Link href={item.href}>
+          <Icon />
+          <span>{item.label}</span>
+        </Link>
+      </SidebarMenuSubButton>
+    </SidebarMenuSubItem>
   )
 }
 
@@ -237,7 +275,20 @@ export function AppSidebar() {
             <SidebarSeparator />
 
             {boardLinks.map((item) => (
-              <SidebarNavItem key={item.href} item={item} pathname={pathname} />
+              <Fragment key={item.href}>
+                <SidebarNavItem
+                  item={item}
+                  pathname={pathname}
+                  matchExact={Boolean(item.children?.length)}
+                />
+                {item.children?.length && isRouteActive(pathname, item.href) ? (
+                  <SidebarMenuSub className="animate-subtle-in">
+                    {item.children.map((child) => (
+                      <SidebarNavSubItem key={child.href} item={child} pathname={pathname} />
+                    ))}
+                  </SidebarMenuSub>
+                ) : null}
+              </Fragment>
             ))}
 
             {(user?.permission ?? 0) >= 1 && (

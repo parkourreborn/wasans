@@ -9,9 +9,6 @@ import { PageHeader, PageShell, SubmissionList } from "@/components/custom/page-
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Spinner } from "@/components/ui/spinner"
-import { Toggle } from "@/components/ui/toggle"
-import { HistoryIcon } from "lucide-react"
 
 type Submission = {
   submission_uuid: string
@@ -29,16 +26,8 @@ type Submission = {
   moderator_username?: string | null
 }
 
-type HistoryRow = Omit<Submission, "submission_uuid"> & {
-  uuid: string
-}
-
 type SubmissionsResponse = {
   results: Submission[]
-}
-
-type HistoryResponse = {
-  results: HistoryRow[]
 }
 
 type CachedWrs = {
@@ -95,10 +84,6 @@ function formatDate(timestamp: string) {
   return `${month}-${day}-${year}`
 }
 
-function toSubmission({ uuid, ...rest }: HistoryRow): Submission {
-  return { ...rest, submission_uuid: uuid }
-}
-
 function loadCachedSubmissions() {
   if (typeof window === "undefined") {
     return null
@@ -121,9 +106,6 @@ export default function SubmissionsPage() {
   const router = useRouter()
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [historyOn, setHistoryOn] = useState(false)
-  const [history, setHistory] = useState<Record<string, Submission[]>>({})
-  const [historyLoading, setHistoryLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -132,18 +114,8 @@ export default function SubmissionsPage() {
   }, [submissions])
 
   const orderedSubmissions = useMemo(() => {
-    const current = [...submissions].sort((a, b) => compareByTrialOrder(a.trial_name, b.trial_name))
-
-    if (!historyOn) {
-      return current
-    }
-
-    return current.flatMap((submission) => {
-      const past = history[submission.trial_name] || []
-      const hasCurrent = past.some((row) => row.submission_uuid === submission.submission_uuid)
-      return hasCurrent ? past : [submission, ...past]
-    })
-  }, [submissions, historyOn, history])
+    return [...submissions].sort((a, b) => compareByTrialOrder(a.trial_name, b.trial_name))
+  }, [submissions])
 
   const filteredSubmissions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -167,41 +139,6 @@ export default function SubmissionsPage() {
       JSON.stringify(filteredSubmissions.map((submission) => submission.submission_uuid))
     )
   }, [filteredSubmissions, loading])
-
-  useEffect(() => {
-    if (!historyOn || Object.keys(history).length) {
-      return
-    }
-
-    const fetchHistory = async () => {
-      setHistoryLoading(true)
-
-      try {
-        const entries = await Promise.all(
-          trials.map(async (trial) => {
-            const response = await fetch(apiV1(`/records/world/history/${encodeURIComponent(trial)}`), {
-              cache: "no-cache",
-            })
-
-            if (!response.ok) {
-              return [trial, []] as const
-            }
-
-            const json = (await response.json()) as HistoryResponse
-            return [trial, (json.results || []).map(toSubmission).reverse()] as const
-          })
-        )
-
-        setHistory(Object.fromEntries(entries))
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setHistoryLoading(false)
-      }
-    }
-
-    fetchHistory()
-  }, [historyOn, history])
 
   useEffect(() => {
     const cachedResults = loadCachedSubmissions()
@@ -305,29 +242,14 @@ export default function SubmissionsPage() {
       <PageHeader title="World Records" />
 
       <div className="sticky top-14 z-30 rounded-3xl border border-border/60 bg-background/80 p-4 backdrop-blur-xl md:top-0">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search by trial name"
-            aria-label="Search world records by trial name"
-            className="h-10 w-full min-w-0 sm:flex-1"
-          />
-
-          <Toggle
-            variant="outline"
-            size="lg"
-            pressed={historyOn}
-            onPressedChange={setHistoryOn}
-            disabled={historyLoading}
-            aria-label="Show past world records"
-            className="h-10 w-full cursor-pointer sm:w-auto sm:shrink-0"
-          >
-            {historyLoading ? <Spinner className="size-4" /> : <HistoryIcon />}
-            History
-          </Toggle>
-        </div>
+        <Input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by trial name"
+          aria-label="Search world records by trial name"
+          className="h-10 w-full min-w-0"
+        />
       </div>
 
       <SubmissionList className="submissions-grid">
