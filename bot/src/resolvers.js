@@ -1,5 +1,5 @@
-import { botConfig, sortedRankRoles } from './botConfig.js';
-import { badRequest } from './errors.js';
+import { botConfig, sortedRankRoles } from './config.js';
+import { badRequest } from './api/errors.js';
 
 export function resolveStateTags(state, isWr) {
     const tags = [];

@@ -1,4 +1,10 @@
-import { BOT_TOKEN, DEFAULT_GUILD_ID } from './constants.js';
+export const PORT = Number(process.env.PORT || 4500);
+export const API_SECRET = process.env.API_SECRET || '';
+export const BOT_TOKEN = process.env.BOT_TOKEN || process.env.DISCORD_TOKEN || '';
+
+export const DEFAULT_GUILD_ID = '1257994787512913961';
+export const ALLOWED_USER_ID = '694274948071555154';
+export const LOGGING_CHANNEL_ID = '1525557722714607756';
 
 function csvToIds(value) {
     if (!value) return [];
@@ -18,7 +24,7 @@ export const botConfig = {
     player_base_url: process.env.PLAYER_BASE_URL || 'https://wasans.tully.sh/players/',
     submission_api_base_url: process.env.SUBMISSION_API_BASE_URL || 'https://wasans.tully.sh/v1/submissions/',
     bot_token: BOT_TOKEN,
-    api_secret: process.env.API_SECRET || '',
+    api_secret: API_SECRET,
     moderator_role_id: process.env.MODERATOR_ROLE_ID || '1340709947758874624',
     state_tags: {
         pending: process.env.TAG_PENDING_ID || '1351580041896656936',
@@ -53,19 +59,25 @@ export const botConfig = {
     },
 };
 
-const configuredRankingScope = botConfig.managed_role_scopes.ranking;
-if (configuredRankingScope.length === 0) {
+if (botConfig.managed_role_scopes.ranking.length === 0) {
     botConfig.managed_role_scopes.ranking = [
         ...Object.values(botConfig.role_ranks),
         botConfig.wasans_member_role_id,
     ];
 }
 
-const configuredMemberScope = botConfig.managed_role_scopes.member;
-if (configuredMemberScope.length === 0) {
+if (botConfig.managed_role_scopes.member.length === 0) {
     botConfig.managed_role_scopes.member = [botConfig.wasans_member_role_id];
 }
 
 export const sortedRankRoles = Object.entries(botConfig.role_ranks)
     .map(([score, roleId]) => ({ score: Number(score), roleId }))
     .sort((a, b) => a.score - b.score);
+
+if (!BOT_TOKEN) {
+    console.warn('[config] BOT_TOKEN (or DISCORD_TOKEN) is not set; Discord login will fail.');
+}
+
+if (!API_SECRET) {
+    console.warn('[config] API_SECRET is not set; all HTTP API requests will be rejected with 401/500.');
+}

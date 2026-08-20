@@ -32,3 +32,11 @@ export function errorBody(code, message) {
         },
     };
 }
+
+export function normalizeToApiError(error) {
+    if (error instanceof ApiError) {
+        return error;
+    }
+
+    return new ApiError(500, 'discord_error', error?.message || 'Unexpected error');
+}

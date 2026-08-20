@@ -1,7 +1,7 @@
 import { ChannelType, MessageFlags } from 'discord.js';
-import { client } from './discordClient.js';
-import { botConfig } from './botConfig.js';
-import { discordError, notFound } from './errors.js';
+import { botConfig } from '../config.js';
+import { client } from '../discordClient.js';
+import { discordError, notFound } from '../api/errors.js';
 
 function normalizeMessagePayload(content) {
     if (typeof content === 'string') {

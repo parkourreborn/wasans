@@ -1,6 +1,6 @@
-import { client } from './discordClient.js';
-import { LOGGING_CHANNEL_ID } from './constants.js';
 import { EmbedBuilder } from 'discord.js';
+import { LOGGING_CHANNEL_ID } from './config.js';
+import { client } from './discordClient.js';
 
 class Logger {
     constructor(channelId) {
@@ -15,11 +15,7 @@ class Logger {
     buildEmbed(level, color, title, description, meta) {
         const embed = new EmbedBuilder().setColor(color).setTimestamp();
 
-        if (title && String(title).trim()) {
-            embed.setTitle(String(title).trim());
-        } else {
-            embed.setTitle(level);
-        }
+        embed.setTitle(title && String(title).trim() ? String(title).trim() : level);
 
         if (description && String(description).trim()) {
             embed.setDescription(Logger.truncate(String(description).trim(), 4096));
@@ -63,8 +59,6 @@ class Logger {
     async error(title, description = '', meta = undefined) {
         await this.send('Error', 0xff2c2c, title, description, meta);
     }
-
 }
-
 
 export const logger = new Logger(LOGGING_CHANNEL_ID);

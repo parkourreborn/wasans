@@ -1,4 +1,4 @@
-import { logger } from './logging.js';
+import { logger } from '../logger.js';
 
 export async function handleAdminCommandMessage(message, allowedUserId) {
     if (!message.content.startsWith('!') || message.author.id !== allowedUserId) {

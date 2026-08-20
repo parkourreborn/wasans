@@ -1,9 +1,10 @@
 import http from 'http';
-import { API_SECRET } from './constants.js';
-import { unauthorized, errorBody } from './errors.js';
+import { API_SECRET } from '../config.js';
+import { logger } from '../logger.js';
+import { errorBody, normalizeToApiError, unauthorized } from './errors.js';
 import { getAuthHeader, jsonResponse, parseJsonBody } from './http.js';
-import { logger } from './logging.js';
-import { handleV2Route, isV2Path, normalizeToApiError } from './v2Router.js';
+import { handleV2Route, isV2Path } from './v2/router.js';
+import { handleV3Route, isV3Path } from './v3/router.js';
 
 async function logApiEvent(level, title, description = '', meta = undefined) {
     const line = `${title}${description ? `: ${description}` : ''}`;
@@ -16,15 +17,7 @@ async function logApiEvent(level, title, description = '', meta = undefined) {
     }
 
     try {
-        if (level === 'error') {
-            await logger.error(title, description, meta);
-            return;
-        }
-        if (level === 'warn') {
-            await logger.warn(title, description, meta);
-            return;
-        }
-        await logger.log(title, description, meta);
+        await logger[level](title, description, meta);
     } catch (error) {
         console.error('Failed to write remote log:', error.message);
     }
@@ -48,10 +41,7 @@ export const server = http.createServer(async (req, res) => {
         });
     });
 
-    await logApiEvent('log', 'Request received', `${method} ${pathname}`, {
-        method,
-        path: pathname,
-    });
+    await logApiEvent('log', 'Request received', `${method} ${pathname}`, { method, path: pathname });
 
     if (req.method !== 'POST') {
         await logApiEvent('warn', 'Request rejected', 'Only POST is supported');
@@ -73,12 +63,16 @@ export const server = http.createServer(async (req, res) => {
     try {
         const payload = await parseJsonBody(req);
 
-        if (!isV2Path(pathname)) {
+        let result;
+        if (isV2Path(pathname)) {
+            result = await handleV2Route(pathname, payload);
+        } else if (isV3Path(pathname)) {
+            result = await handleV3Route(pathname, payload);
+        } else {
             await logApiEvent('warn', 'Request rejected', 'Unknown route');
             return jsonResponse(res, 404, errorBody('not_found', 'Route not found'));
         }
 
-        const result = await handleV2Route(pathname, payload);
         return jsonResponse(res, 200, result);
     } catch (error) {
         const apiError = normalizeToApiError(error);

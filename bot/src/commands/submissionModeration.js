@@ -9,8 +9,8 @@ import {
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
-import { botConfig } from './botConfig.js';
-import { logger } from './logging.js';
+import { botConfig } from '../config.js';
+import { logger } from '../logger.js';
 
 const CUSTOM_ID_PREFIX = 'submission-moderation';
 const ACTION_APPROVE = 'approve';
@@ -83,21 +83,8 @@ async function replyEphemeral(interaction, content) {
     }
 }
 
-function logModeratorPermissionCheck(details) {
-    console.debug('[submissionModeration] Moderator permission check', details);
-}
-
 async function isModerator(interaction) {
     if (!interaction.inGuild() || !interaction.guild) {
-        logModeratorPermissionCheck({
-            userId: interaction.user?.id ?? null,
-            highestRole: null,
-            moderatorRoleId: botConfig.moderator_role_id || null,
-            moderatorRolePosition: null,
-            rolePositionComparison: null,
-            isAdministrator: false,
-            allowed: false,
-        });
         return false;
     }
 
@@ -106,15 +93,6 @@ async function isModerator(interaction) {
         await logger.error('Moderator permission check failed', 'MODERATOR_ROLE_ID is not configured', {
             moderator_id: interaction.user.id,
         }).catch(() => {});
-        logModeratorPermissionCheck({
-            userId: interaction.user.id,
-            highestRole: null,
-            moderatorRoleId: null,
-            moderatorRolePosition: null,
-            rolePositionComparison: null,
-            isAdministrator: false,
-            allowed: false,
-        });
         return false;
     }
 
@@ -127,15 +105,6 @@ async function isModerator(interaction) {
                 moderator_id: interaction.user.id,
                 stage: 'fetch_member',
             }).catch(() => {});
-            logModeratorPermissionCheck({
-                userId: interaction.user.id,
-                highestRole: null,
-                moderatorRoleId,
-                moderatorRolePosition: null,
-                rolePositionComparison: null,
-                isAdministrator: false,
-                allowed: false,
-            });
             return false;
         }
     }
@@ -159,46 +128,12 @@ async function isModerator(interaction) {
             moderator_role_id: moderatorRoleId,
             stage: 'missing_role',
         }).catch(() => {});
-        logModeratorPermissionCheck({
-            userId: interaction.user.id,
-            highestRole: member.roles.highest
-                ? {
-                    id: member.roles.highest.id,
-                    name: member.roles.highest.name,
-                    position: member.roles.highest.position,
-                }
-                : null,
-            moderatorRoleId,
-            moderatorRolePosition: null,
-            rolePositionComparison: null,
-            isAdministrator: member.permissions.has(PermissionFlagsBits.Administrator),
-            allowed: false,
-        });
         return false;
     }
-    const highestRole = member.roles.highest;
+
     const isAdministrator = member.permissions.has(PermissionFlagsBits.Administrator);
-    const rolePositionComparison = highestRole.comparePositionTo(moderatorRole);
-    const allowed = isAdministrator || rolePositionComparison >= 0;
-
-    logModeratorPermissionCheck({
-        userId: interaction.user.id,
-        highestRole: highestRole
-            ? {
-                id: highestRole.id,
-                name: highestRole.name,
-                position: highestRole.position,
-            }
-            : null,
-        moderatorRoleId: moderatorRole.id,
-        moderatorRolePosition: moderatorRole.position,
-        hasModeratorRole: member.roles.cache.has(moderatorRoleId),
-        rolePositionComparison,
-        isAdministrator,
-        allowed,
-    });
-
-    return allowed;
+    const rolePositionComparison = member.roles.highest.comparePositionTo(moderatorRole);
+    return isAdministrator || rolePositionComparison >= 0;
 }
 
 async function ensureModerator(interaction) {
@@ -216,17 +151,14 @@ async function patchSubmission(submissionId, body) {
         throw new Error('API_SECRET is not configured');
     }
 
-    const response = await fetch(
-        `${botConfig.submission_api_base_url}${encodeURIComponent(submissionId)}`,
-        {
-            method: 'PATCH',
-            headers: {
-                Authorization: ['Bearer', botConfig.api_secret].join(' '),
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body),
+    const response = await fetch(`${botConfig.submission_api_base_url}${encodeURIComponent(submissionId)}`, {
+        method: 'PATCH',
+        headers: {
+            Authorization: `Bearer ${botConfig.api_secret}`,
+            'Content-Type': 'application/json',
         },
-    );
+        body: JSON.stringify(body),
+    });
 
     const rawBody = await response.text();
     let parsedBody;

@@ -1,4 +1,4 @@
-import { botConfig } from './botConfig.js';
+import { botConfig } from '../config.js';
 import {
     addRoles,
     archiveThread,
@@ -14,19 +14,15 @@ import {
     updateNickname,
     updateThreadName,
     updateThreadStarterMessage,
-} from './discordApi.js';
+} from '../discord/api.js';
 import { badRequest, discordError, notFound } from './errors.js';
-import { logger } from './logging.js';
-import { resolveRoleScope, resolveRolesForRankingScore, resolveStateTags } from './resolvers.js';
-import { buildSubmissionMessage, buildSubmissionTitle } from './submissionFormatter.js';
-import { deleteSubmissionThread, getThreadIdBySubmissionId, setSubmissionThread } from './submissionStore.js';
+import { logger } from '../logger.js';
+import { resolveRoleScope, resolveRolesForRankingScore, resolveStateTags } from '../resolvers.js';
+import { buildSubmissionMessage, buildSubmissionTitle } from '../submissions/formatter.js';
+import { deleteSubmissionThread, getThreadIdBySubmissionId, setSubmissionThread } from '../submissions/store.js';
 
 function asSet(values) {
     return new Set(values || []);
-}
-
-function formatScore(score) {
-    return Number.isFinite(score) ? score.toFixed(3) : String(score);
 }
 
 function getCurrentRankingRoleId(roleIds) {
@@ -50,15 +46,21 @@ function getRankRoleScore(roleId) {
     return null;
 }
 
-export async function executeSubmissionSync(body) {
-    const options = body.options || {};
-    const createIfMissing = options.create_if_missing === true;
-    const sendWrPing = options.send_wr_ping === true;
+/**
+ * @param {object} body validated submissions/sync request body
+ * @param {object} [options]
+ * @param {boolean} [options.includeAverageScoreChange] v3 only — see formatter.buildSubmissionMessage
+ */
+export async function executeSubmissionSync(body, options = {}) {
+    const { includeAverageScoreChange = false } = options;
+    const syncOptions = body.options || {};
+    const createIfMissing = syncOptions.create_if_missing === true;
+    const sendWrPing = syncOptions.send_wr_ping === true;
 
     await logger.log('Submission sync started', `Submission ${body.submission_id}`);
 
     const title = buildSubmissionTitle(body);
-    const content = buildSubmissionMessage(body);
+    const content = buildSubmissionMessage(body, { includeAverageScoreChange });
     const tags = resolveStateTags(body.state, body.is_wr);
 
     let threadId = body.thread_id || getThreadIdBySubmissionId(body.submission_id);
@@ -202,9 +204,7 @@ export async function executeMemberSync(body) {
 
     const toAdd = [...desiredSet].filter((id) => !currentInScopeSet.has(id));
     const removeUnlisted = body.options?.remove_unlisted_in_scope !== false;
-    const toRemove = removeUnlisted
-        ? [...currentInScopeSet].filter((id) => !desiredSet.has(id))
-        : [];
+    const toRemove = removeUnlisted ? [...currentInScopeSet].filter((id) => !desiredSet.has(id)) : [];
 
     await addRoles(member, toAdd);
     await removeRoles(member, toRemove);
