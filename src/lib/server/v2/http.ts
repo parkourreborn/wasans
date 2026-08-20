@@ -162,39 +162,81 @@ export function jsonOk(
   return new Response(JSON.stringify(body), { status: options?.status ?? 200, headers })
 }
 
+async function resolveV2Context(request: Request): Promise<
+  { ok: true; ctx: V2Context } | { ok: false; response: Response }
+> {
+  const requestId = getRequestId(request)
+  const { env, ctx } = await getCloudflareContext({ async: true })
+
+  if (!env?.wasans) {
+    return { ok: false, response: jsonError("DB binding not available", 500, { code: "internal_error", requestId }) }
+  }
+
+  if (!env?.CACHE) {
+    return { ok: false, response: jsonError("Cache binding not available", 500, { code: "internal_error", requestId }) }
+  }
+
+  const secret = getJwtSecret(env)
+  const auth = await resolveV2Auth(request, secret)
+
+  return {
+    ok: true,
+    ctx: { request, env, db: env.wasans, cache: env.CACHE, ctx, requestId, auth },
+  }
+}
+
+function toErrorResponse(error: unknown, requestId: string) {
+  if (error instanceof ApiError) {
+    return jsonError(error.message, error.status, { code: error.code, requestId, details: error.details })
+  }
+
+  console.error(error)
+  return jsonError("Internal error", 500, { code: "internal_error", requestId })
+}
+
 // Wraps a v2 route handler with the boilerplate every v1 route repeats by
 // hand: request id, D1 binding presence check, JWT auth resolution, and
 // converting thrown ApiErrors (or unexpected errors) into the standard
-// error envelope. TParams covers dynamic segments (e.g. [trial], [uuid]).
-export function withV2Context<TParams = Record<string, never>>(
-  handler: (ctx: V2Context, params: TParams) => Promise<Response>
-) {
-  return async (request: Request, routeContext?: { params: Promise<TParams> }) => {
+// error envelope. For routes with no dynamic segments — the handler's
+// exported function must take exactly (request), matching what Next's
+// route-type validator expects for a static route path.
+export function withV2Context(handler: (ctx: V2Context) => Promise<Response>) {
+  return async (request: Request) => {
     const requestId = getRequestId(request)
 
     try {
-      const { env, ctx } = await getCloudflareContext({ async: true })
-
-      if (!env?.wasans) {
-        return jsonError("DB binding not available", 500, { code: "internal_error", requestId })
+      const resolved = await resolveV2Context(request)
+      if (!resolved.ok) {
+        return resolved.response
       }
 
-      if (!env?.CACHE) {
-        return jsonError("Cache binding not available", 500, { code: "internal_error", requestId })
-      }
-
-      const secret = getJwtSecret(env)
-      const auth = await resolveV2Auth(request, secret)
-      const params = routeContext ? await routeContext.params : ({} as TParams)
-
-      return await handler({ request, env, db: env.wasans, cache: env.CACHE, ctx, requestId, auth }, params)
+      return await handler(resolved.ctx)
     } catch (error) {
-      if (error instanceof ApiError) {
-        return jsonError(error.message, error.status, { code: error.code, requestId, details: error.details })
+      return toErrorResponse(error, requestId)
+    }
+  }
+}
+
+// Same as withV2Context, but for routes with dynamic segments (e.g.
+// [trial], [uuid]) — Next's route-type validator requires the exported
+// function's second parameter to be a required (non-optional) RouteContext,
+// so this is a separate wrapper rather than an optional-params overload.
+export function withV2Params<TParams>(
+  handler: (ctx: V2Context, params: TParams) => Promise<Response>
+) {
+  return async (request: Request, routeContext: { params: Promise<TParams> }) => {
+    const requestId = getRequestId(request)
+
+    try {
+      const resolved = await resolveV2Context(request)
+      if (!resolved.ok) {
+        return resolved.response
       }
 
-      console.error(error)
-      return jsonError("Internal error", 500, { code: "internal_error", requestId })
+      const params = await routeContext.params
+      return await handler(resolved.ctx, params)
+    } catch (error) {
+      return toErrorResponse(error, requestId)
     }
   }
 }

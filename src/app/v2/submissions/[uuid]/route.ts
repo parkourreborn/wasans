@@ -7,13 +7,13 @@ import { deleteSubmission, patchSubmission } from "@/lib/server/services/moderat
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
 import { bumpCacheGeneration, cacheKey, readThroughCache } from "@/lib/server/v2/cache"
-import { jsonOk, withV2Context } from "@/lib/server/v2/http"
+import { jsonOk, withV2Params } from "@/lib/server/v2/http"
 
 function isValidSubmissionUuid(uuid: string) {
   return /^[A-Za-z0-9_-]{6,64}$/.test(uuid)
 }
 
-export const GET = withV2Context<{ uuid: string }>(async (ctx, { uuid }) => {
+export const GET = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   if (!isValidSubmissionUuid(uuid)) {
     return validationError("Invalid submission uuid", ctx.requestId)
   }
@@ -24,7 +24,7 @@ export const GET = withV2Context<{ uuid: string }>(async (ctx, { uuid }) => {
   return jsonOk({ results: result ? [result] : [] }, { requestId: ctx.requestId })
 })
 
-export const PATCH = withV2Context<{ uuid: string }>(async (ctx, { uuid }) => {
+export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   if (!isValidSubmissionUuid(uuid)) {
     return validationError("Invalid submission uuid", ctx.requestId)
   }
@@ -80,7 +80,7 @@ export const PATCH = withV2Context<{ uuid: string }>(async (ctx, { uuid }) => {
   }
 })
 
-export const DELETE = withV2Context<{ uuid: string }>(async (ctx, { uuid }) => {
+export const DELETE = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   if (!isValidSubmissionUuid(uuid)) {
     return validationError("Invalid submission uuid", ctx.requestId)
   }

@@ -1,9 +1,9 @@
 import { parseBoolean, validationError } from "@/lib/server/http"
 import { buildPlayerDetail } from "@/lib/server/services/player-service"
 import { cacheKey, readThroughCache } from "@/lib/server/v2/cache"
-import { jsonOk, withV2Context } from "@/lib/server/v2/http"
+import { jsonOk, withV2Params } from "@/lib/server/v2/http"
 
-export const GET = withV2Context<{ uuid: string }>(async (ctx, { uuid }) => {
+export const GET = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   if (!/^[A-Za-z0-9_-]{6,64}$/.test(uuid) && uuid !== "0") {
     return validationError("Invalid player uuid", ctx.requestId)
   }

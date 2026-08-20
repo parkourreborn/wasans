@@ -2,9 +2,9 @@ import { jsonError } from "@/lib/server/http"
 import { insertAuditLog } from "@/lib/server/audit"
 import { TrialLifecycleError, bumpTrialVersion } from "@/lib/server/repositories/trial-repository"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
-import { jsonOk, requireV2Moderator, withV2Context } from "@/lib/server/v2/http"
+import { jsonOk, requireV2Moderator, withV2Params } from "@/lib/server/v2/http"
 
-export const POST = withV2Context<{ name: string }>(async (ctx, { name }) => {
+export const POST = withV2Params<{ name: string }>(async (ctx, { name }) => {
   const user = await requireV2Moderator(ctx)
   const trialName = decodeURIComponent(name)
 

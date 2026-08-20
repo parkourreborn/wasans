@@ -2,9 +2,9 @@ import { validationError } from "@/lib/server/http"
 import { insertAuditLog } from "@/lib/server/audit"
 import { FEATURE_FLAG_KEYS, type FeatureFlagKey, setFeatureFlag } from "@/lib/server/repositories/feature-flag-repository"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
-import { jsonOk, requireV2Owner, withV2Context } from "@/lib/server/v2/http"
+import { jsonOk, requireV2Owner, withV2Params } from "@/lib/server/v2/http"
 
-export const PATCH = withV2Context<{ key: string }>(async (ctx, { key }) => {
+export const PATCH = withV2Params<{ key: string }>(async (ctx, { key }) => {
   const user = await requireV2Owner(ctx)
 
   if (!FEATURE_FLAG_KEYS.includes(key as FeatureFlagKey)) {
