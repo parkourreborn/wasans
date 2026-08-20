@@ -84,39 +84,44 @@ export default function WorldRecordHistoryPage() {
   }, [filteredRecords, loading])
 
   useEffect(() => {
-    // Trials are fetched in their canonical order so the flattened list stays
-    // grouped by trial, with each trial's past records newest first.
     const load = async () => {
       setLoading(true)
       setError(null)
 
-      const entries = await Promise.all(
-        trials.map(async (trial) => {
-          try {
-            const response = await fetch(apiV2(`/records/world/history/${encodeURIComponent(trial)}`), { cache: "no-store" })
-            if (!response.ok) {
-              return null
-            }
-            const json = (await response.json()) as HistoryResponse
-            // The endpoint returns the record chain oldest first, so after
-            // reversing the first entry is the record that still stands. That
-            // one lives on the World Records page, so drop it here.
-            return (json.data || []).map(toSubmission).reverse().slice(1)
-          } catch (err) {
-            console.error(err)
-            return null
-          }
+      try {
+        const response = await fetch(apiV2("/records/world/history"), { cache: "no-store" })
+        if (!response.ok) {
+          throw new Error("Failed to load world record history")
+        }
+
+        const json = (await response.json()) as HistoryResponse
+        const rows = (json.data || []).map(toSubmission)
+
+        // The endpoint returns every trial's chain in one query, oldest
+        // first per trial. Group by trial (in canonical trial order so the
+        // flattened list stays grouped the way the page expects), then per
+        // trial drop the newest entry (the record that still stands — that
+        // one lives on the World Records page) and show the rest newest
+        // first.
+        const byTrial = new Map<string, Submission[]>()
+        for (const row of rows) {
+          const existing = byTrial.get(row.trial_name) ?? []
+          existing.push(row)
+          byTrial.set(row.trial_name, existing)
+        }
+
+        const ordered = trials.flatMap((trial) => {
+          const trialRows = byTrial.get(trial)
+          return trialRows ? [...trialRows].reverse().slice(1) : []
         })
-      )
 
-      if (entries.every((entry) => entry === null)) {
+        setRecords(ordered)
+      } catch (err) {
+        console.error(err)
         setError("Failed to load world record history")
+      } finally {
         setLoading(false)
-        return
       }
-
-      setRecords(entries.flatMap((entry) => entry || []))
-      setLoading(false)
     }
 
     load()
