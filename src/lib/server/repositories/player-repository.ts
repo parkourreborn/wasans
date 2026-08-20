@@ -74,6 +74,21 @@ export async function getPlayerByUuid(db: D1Database, uuid: string) {
     }>()
 }
 
+export async function countOwners(db: D1Database) {
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS count
+     FROM players
+     WHERE permission >= 2
+       AND COALESCE(account_status, 'active') = 'active'`
+  ).first<{ count: number }>()
+
+  return Number(row?.count ?? 0)
+}
+
+export async function setPlayerPermission(db: D1Database, uuid: string, permission: number) {
+  await db.prepare(`UPDATE players SET permission = ? WHERE uuid = ?`).bind(permission, uuid).run()
+}
+
 export async function getPlayerRank(db: D1Database, score: number) {
   await ensurePlayerAvatarColumns(db)
 

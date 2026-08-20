@@ -15,6 +15,7 @@ export type AuditAction =
   | "trial_retired"
   | "trial_version_bumped"
   | "feature_flag_changed"
+  | "player_permission_changed"
   | "site_error"
 
 export async function insertAuditLog(

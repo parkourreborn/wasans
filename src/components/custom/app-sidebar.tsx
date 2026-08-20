@@ -36,6 +36,7 @@ import {
   LogInIcon,
   MedalIcon,
   OctagonAlertIcon,
+  ShieldIcon,
   TimerIcon,
   TrophyIcon,
 } from "lucide-react"
@@ -298,6 +299,13 @@ export function AppSidebar() {
                   }
                 />
               </>
+            )}
+
+            {(user?.permission ?? 0) >= 2 && (
+              <SidebarNavItem
+                item={{ href: "/admin", label: "Admin", icon: ShieldIcon }}
+                pathname={pathname}
+              />
             )}
           </SidebarMenu>
         </SidebarGroup>

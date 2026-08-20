@@ -58,7 +58,6 @@ export default function InformationPage() {
       <PageHeader
         title="Information"
         description="Score explanation, role thresholds, frequently asked questions, and the short version of the Wasans lore in a single readable reference page."
-        aside={<StatCard label="Reference blocks" value="3 sections" meta="Score model, FAQ, and Discord role thresholds." />}
       />
 
       <SectionCard title="Wasans Score" description="Understand what the number means and where it comes from.">

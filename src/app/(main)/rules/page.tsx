@@ -71,7 +71,6 @@ export default function RulesPage() {
       <PageHeader
         title="Rules"
         description="One clean reference for run validity, submission expectations, and member application requirements."
-        aside={<StatCard label="Sections" value="4 blocks" meta="Run rules, submissions, applications, and FAQ." />}
       />
 
       <SectionCard title="Score and run rules" description="What makes a run valid and what automatically invalidates it.">
