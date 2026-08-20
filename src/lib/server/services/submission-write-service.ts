@@ -9,6 +9,8 @@ import {
   findPlayerByUuid,
   setSubmissionThreadId,
 } from "@/lib/server/repositories/submission-repository"
+import { getTrialLifecycle, type TrialLifecycleRow } from "@/lib/server/repositories/trial-repository"
+import { canAcceptNewSubmissions } from "@/lib/server/trial-lifecycle"
 
 export type IncomingSubmission = {
   trial_name?: unknown
@@ -142,6 +144,10 @@ export async function createSubmissionsFromRequest(db: D1Database, env: Cloudfla
 
     const requestedTrials = [...new Set(incomingSubmissions.map((submission) => String(submission?.trial_name || "")).filter(Boolean))]
     const personalBestMap = await findPersonalBestByTrials(db, user.uuid, requestedTrials)
+    const trialLifecycleEntries = await Promise.all(
+      requestedTrials.map(async (name) => [name, await getTrialLifecycle(db, name)] as const)
+    )
+    const trialLifecycleMap = new Map<string, TrialLifecycleRow | null>(trialLifecycleEntries)
 
     const created: Array<{ uuid: string; trial_name: string; proof_url: string; object_key?: string }> = []
 
@@ -155,6 +161,14 @@ export async function createSubmissionsFromRequest(db: D1Database, env: Cloudfla
 
       if (!isAllowedTrial(trialName)) {
         throw new Error(`Submission ${index + 1} has an invalid trial`)
+      }
+
+      const trialLifecycle = trialLifecycleMap.get(trialName)
+      if (!trialLifecycle) {
+        throw new Error(`Submission ${index + 1}'s trial isn't accepting submissions yet`)
+      }
+      if (!canAcceptNewSubmissions(trialLifecycle)) {
+        throw new Error(`Submission ${index + 1}'s trial has been removed and no longer accepts submissions`)
       }
 
       if (!Number.isFinite(time) || time <= 0) {
@@ -242,6 +256,7 @@ export async function createSubmissionsFromRequest(db: D1Database, env: Cloudfla
         playerName: player.player_name,
         time,
         now,
+        trialVersion: trialLifecycle.version,
       })
 
       await insertAuditLog(db, "submission_created", "submission", uuid, {

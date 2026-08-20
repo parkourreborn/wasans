@@ -128,14 +128,24 @@ export async function createSubmission(
     playerName: string
     time: number
     now: string
+    trialVersion: number
   }
 ) {
   await db.prepare(
     `INSERT INTO submissions (
-      uuid, player_uuid, trial_name, player_name, time, date, state
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      uuid, player_uuid, trial_name, player_name, time, date, state, trial_version
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(submission.uuid, submission.playerUuid, submission.trialName, submission.playerName, submission.time, submission.now, "pending")
+    .bind(
+      submission.uuid,
+      submission.playerUuid,
+      submission.trialName,
+      submission.playerName,
+      submission.time,
+      submission.now,
+      "pending",
+      submission.trialVersion
+    )
     .run()
 }
 

@@ -31,27 +31,10 @@ function getCookie(request: Request, name: string) {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null
 }
 
-export async function getAuthUser(request: Request, db: D1Database) {
+// Shared by v1 (session-cookie lookup) and v2 (JWT `sub` claim already gives
+// the uuid) — loads the display/permission row and records the request IP.
+export async function loadAuthUserByUuid(db: D1Database, playerUuid: string, request: Request) {
   await ensurePlayerAvatarColumns(db)
-
-  const sessionToken = getCookie(request, "wasans_session")
-  let playerUuid: string | null = null
-
-  if (sessionToken) {
-    const session = await db.prepare(
-      `SELECT player_uuid
-       FROM auth_sessions
-       WHERE token = ? AND CAST(expires_at AS INTEGER) > ?`
-    )
-      .bind(sessionToken, Math.floor(Date.now() / 1000))
-      .first<SessionRow>()
-
-    playerUuid = session?.player_uuid ?? null
-  }
-
-  if (!playerUuid) {
-    return null
-  }
 
   const user = await db.prepare(
     `SELECT players.uuid,
@@ -78,6 +61,31 @@ export async function getAuthUser(request: Request, db: D1Database) {
   }
 
   return user
+}
+
+export async function getAuthUser(request: Request, db: D1Database) {
+  await ensurePlayerAvatarColumns(db)
+
+  const sessionToken = getCookie(request, "wasans_session")
+  let playerUuid: string | null = null
+
+  if (sessionToken) {
+    const session = await db.prepare(
+      `SELECT player_uuid
+       FROM auth_sessions
+       WHERE token = ? AND CAST(expires_at AS INTEGER) > ?`
+    )
+      .bind(sessionToken, Math.floor(Date.now() / 1000))
+      .first<SessionRow>()
+
+    playerUuid = session?.player_uuid ?? null
+  }
+
+  if (!playerUuid) {
+    return null
+  }
+
+  return loadAuthUserByUuid(db, playerUuid, request)
 }
 
 export function canModerate(user: AuthUser | null) {

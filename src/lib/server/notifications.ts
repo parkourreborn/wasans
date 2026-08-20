@@ -14,7 +14,7 @@ export type ApprovedHighScoreRun = {
   discordUserId?: string,
   discord_avatar?: string | null
   discord_discriminator?: string | null
-  averageScoreDelta?: number
+  averageScoreChange?: number
   is_wr: boolean
   // optional previous WR info (when this run becomes a WR)
   previous_wr_submission_uuid?: string
@@ -81,7 +81,7 @@ function getRoleForScore(score: number) {
 
 
 export async function sendDiscordDm(userId: string, content: string) {
-  return sendBotApiRequest("/v2/messages/dm", {
+  return sendBotApiRequest("/v3/messages/dm", {
     discord_user_id: userId,
     content,
     options: {
@@ -111,7 +111,7 @@ type SubmissionSyncPayload = {
   time_old?: number
   score_new?: number
   score_old?: number
-  average_score_delta?: number
+  average_score_change?: number
   is_wr: boolean
   previous_wr?: {
     player_name?: string
@@ -138,7 +138,7 @@ type SubmissionSyncResponse = {
 }
 
 async function syncSubmissionThread(payload: SubmissionSyncPayload): Promise<SubmissionSyncResponse> {
-  return sendBotApiRequest("/v2/submissions/sync", payload) as Promise<SubmissionSyncResponse>
+  return sendBotApiRequest("/v3/submissions/sync", payload) as Promise<SubmissionSyncResponse>
 }
 
 // Discord bot API configuration
@@ -214,7 +214,7 @@ async function sendBotApiRequest(
 
 export async function deleteBotThread(threadId: string, submissionId = "unknown-submission"): Promise<boolean> {
   try {
-    await sendBotApiRequest("/v2/submissions/delete", {
+    await sendBotApiRequest("/v3/submissions/delete", {
       submission_id: submissionId,
       thread_id: threadId,
       mode: "delete",
@@ -247,8 +247,9 @@ export function reportMissingApprovedThread(run: ApprovedHighScoreRun) {
     }
   }
 
-  if (run.averageScoreDelta !== undefined) {
-    lines.push(`Average score decrease: ${run.averageScoreDelta.toFixed(3)}`)
+  if (run.averageScoreChange !== undefined) {
+    const sign = run.averageScoreChange >= 0 ? "+" : ""
+    lines.push(`Average score change: ${sign}${run.averageScoreChange.toFixed(3)}`)
   }
 
   const submissionUrl = `https://wasans.tully.sh/submissions/${run.submission_uuid}`
@@ -288,7 +289,7 @@ export function reportMissingApprovedThread(run: ApprovedHighScoreRun) {
       old_score_formatted: oldScoreFormatted,
       new_score: run.player_score,
       new_score_formatted: newScoreFormatted,
-      average_score_delta: run.averageScoreDelta,
+      average_score_change: run.averageScoreChange,
     },
     previous_wr: {
       submission_uuid: run.previous_wr_submission_uuid,
@@ -357,7 +358,7 @@ export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ thre
       time_old: run.oldTime,
       score_new: run.player_score,
       score_old: run.oldPlayerScore,
-      average_score_delta: run.averageScoreDelta,
+      average_score_change: run.averageScoreChange,
       is_wr: run.is_wr,
       previous_wr: {
         player_name: run.previous_wr_player_name,
@@ -398,7 +399,7 @@ export async function updateSubmissionThreadContent(
       time_old: run.oldTime,
       score_new: run.player_score,
       score_old: run.oldPlayerScore,
-      average_score_delta: run.averageScoreDelta,
+      average_score_change: run.averageScoreChange,
       is_wr: run.is_wr,
       previous_wr: {
         player_name: run.previous_wr_player_name,
@@ -461,16 +462,16 @@ export async function updateDiscordUsernameOnScoreChange(playerUuid: string, old
         const oldRoleName = roleNames[oldRoleId] ?? oldRoleId
         const newRoleName = roleNames[newRoleId] ?? newRoleId
 
-        await sendBotApiRequest("/v2/batch", {
+        await sendBotApiRequest("/v3/batch", {
           requests: [
             {
               id: "member-sync",
-              route: "/v2/members/sync",
+              route: "/v3/members/sync",
               body: memberSyncBody,
             },
             {
               id: "promotion-dm",
-              route: "/v2/messages/dm",
+              route: "/v3/messages/dm",
               body: {
                 discord_user_id: playerId,
                 content: `${isPromotion ? "🎉 ": "😭 "}You have been ${action} from ${oldRoleName} to ${newRoleName}!`,
@@ -485,7 +486,7 @@ export async function updateDiscordUsernameOnScoreChange(playerUuid: string, old
           },
         })
       } else {
-        await sendBotApiRequest("/v2/members/sync", memberSyncBody)
+        await sendBotApiRequest("/v3/members/sync", memberSyncBody)
       }
     } catch (error) {
       console.error("Failed to sync Discord member state on score change:", error)

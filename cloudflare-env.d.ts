@@ -12,6 +12,8 @@ declare namespace Cloudflare {
 		discordClientId: string;
 		discordClientSecret: string;
 		botApiKey: string;
+		JWT_SECRET: string;
+		CACHE: KVNamespace;
 	}
 }
 interface CloudflareEnv extends Cloudflare.Env {}

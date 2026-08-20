@@ -1,5 +1,6 @@
 import "server-only"
 import { insertAuditLog } from "@/lib/server/audit"
+import { validSubmissionSql } from "@/lib/server/trial-lifecycle"
 
 type WrRow = {
   submission_uuid: string
@@ -14,7 +15,12 @@ type AuditActor = {
   player_name: string
 }
 
+const candidateValidSql = validSubmissionSql("candidate", "t")
+const betterValidSql = validSubmissionSql("better", "tb")
+
 export async function refreshWorldRecords(db: D1Database, trialName?: string, actor?: AuditActor | null) {
+  const now = Math.floor(Date.now() / 1000)
+
   if (trialName) {
     const previous = await db.prepare(
       `SELECT submission_uuid, player_uuid, player_name, time, date
@@ -27,15 +33,19 @@ export async function refreshWorldRecords(db: D1Database, trialName?: string, ac
     await db.prepare(`DELETE FROM wrs WHERE trial_name = ?`).bind(trialName).run()
     await db.prepare(
       `INSERT INTO wrs (trial_name, submission_uuid, player_uuid, player_name, time, date)
-       SELECT trial_name, uuid, player_uuid, player_name, time, date
+       SELECT candidate.trial_name, candidate.uuid, candidate.player_uuid, candidate.player_name, candidate.time, candidate.date
        FROM submissions AS candidate
+       JOIN trials AS t ON t.name = candidate.trial_name
        WHERE candidate.trial_name = ?
          AND candidate.state = 'approved'
+         AND ${candidateValidSql}
          AND NOT EXISTS (
            SELECT 1
            FROM submissions AS better
+           JOIN trials AS tb ON tb.name = better.trial_name
            WHERE better.trial_name = candidate.trial_name
              AND better.state = 'approved'
+             AND ${betterValidSql}
              AND (
                better.time < candidate.time
                OR (
@@ -50,7 +60,7 @@ export async function refreshWorldRecords(db: D1Database, trialName?: string, ac
              )
          )`
     )
-      .bind(trialName)
+      .bind(trialName, now, now, now, now, now, now)
       .run()
 
     const current = await db.prepare(
@@ -106,14 +116,18 @@ export async function refreshWorldRecords(db: D1Database, trialName?: string, ac
   await db.prepare(`DELETE FROM wrs`).run()
   await db.prepare(
     `INSERT INTO wrs (trial_name, submission_uuid, player_uuid, player_name, time, date)
-     SELECT trial_name, uuid, player_uuid, player_name, time, date
+     SELECT candidate.trial_name, candidate.uuid, candidate.player_uuid, candidate.player_name, candidate.time, candidate.date
      FROM submissions AS candidate
+     JOIN trials AS t ON t.name = candidate.trial_name
      WHERE candidate.state = 'approved'
+       AND ${candidateValidSql}
        AND NOT EXISTS (
          SELECT 1
          FROM submissions AS better
+         JOIN trials AS tb ON tb.name = better.trial_name
          WHERE better.trial_name = candidate.trial_name
            AND better.state = 'approved'
+           AND ${betterValidSql}
            AND (
              better.time < candidate.time
              OR (
@@ -127,5 +141,7 @@ export async function refreshWorldRecords(db: D1Database, trialName?: string, ac
              )
            )
        )`
-  ).run()
+  )
+    .bind(now, now, now, now, now, now)
+    .run()
 }
