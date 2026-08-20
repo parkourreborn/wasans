@@ -55,7 +55,7 @@ function getCookie(request: Request, name: string) {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null
 }
 
-function getSafeNextUrl(value: string | null) {
+export function getSafeNextUrl(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
     return "/"
   }
@@ -63,13 +63,13 @@ function getSafeNextUrl(value: string | null) {
   return value
 }
 
-function redirectWithAuthError(requestUrl: URL, message: string) {
+export function redirectWithAuthError(requestUrl: URL, message: string) {
   const nextUrl = new URL("/", requestUrl.origin)
   nextUrl.searchParams.set("auth_error", message)
   return Response.redirect(nextUrl, 302)
 }
 
-async function exchangeCodeForToken(code: string, redirectUri: string, clientId: string, clientSecret: string) {
+export async function exchangeCodeForToken(code: string, redirectUri: string, clientId: string, clientSecret: string) {
   const body = new URLSearchParams({
     client_id: clientId,
     client_secret: clientSecret,
@@ -94,7 +94,7 @@ async function exchangeCodeForToken(code: string, redirectUri: string, clientId:
   return response.json() as Promise<DiscordTokenResponse>
 }
 
-async function getDiscordUser(accessToken: string, tokenType: string) {
+export async function getDiscordUser(accessToken: string, tokenType: string) {
   const response = await fetch(discordMeUrl, {
     headers: {
       authorization: `${tokenType} ${accessToken}`,
@@ -109,7 +109,7 @@ async function getDiscordUser(accessToken: string, tokenType: string) {
   return response.json() as Promise<DiscordUserResponse>
 }
 
-async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUserResponse, token: DiscordTokenResponse) {
+export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUserResponse, token: DiscordTokenResponse) {
   await ensurePlayerAvatarColumns(db)
 
   const linkedPlayer = await db.prepare(

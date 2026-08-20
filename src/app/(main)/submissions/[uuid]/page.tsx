@@ -30,7 +30,7 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react"
-import { apiV1 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 
@@ -48,7 +48,8 @@ type SubmissionValue = {
 }
 
 type SubmissionResponse = {
-  results: SubmissionValue[]
+  data?: { results: SubmissionValue[] }
+  error?: { message?: string }
 }
 
 type WorldRecordValue = {
@@ -58,8 +59,8 @@ type WorldRecordValue = {
 }
 
 type WorldRecordsResponse = {
-  results?: WorldRecordValue[]
-  error?: string
+  data?: WorldRecordValue[]
+  error?: { message?: string }
 }
 
 type AuthUser = {
@@ -68,7 +69,7 @@ type AuthUser = {
 }
 
 type AuthResponse = {
-  user: AuthUser | null
+  data?: { user: AuthUser | null }
 }
 
 const submissionUuidListKey = "submission_uuids"
@@ -178,8 +179,8 @@ export default function Home() {
 
       try {
         const [submissionResponse, wrResponse] = await Promise.all([
-          fetch(apiV1(`/submissions/${uuid}`)),
-          fetch(apiV1("/records/world"), { cache: "force-cache" }),
+          fetch(apiV2(`/submissions/${uuid}`)),
+          fetch(apiV2("/records/world"), { cache: "force-cache" }),
         ])
 
         const submissionJson: unknown = await submissionResponse.json().catch(() => null)
@@ -191,11 +192,11 @@ export default function Home() {
         }
 
         if (wrResponse.ok) {
-          setWorldRecords(wrJson?.results || [])
+          setWorldRecords(wrJson?.data || [])
         }
 
         const responseData = submissionJson as SubmissionResponse
-        setSubmission(responseData.results?.[0] ?? null)
+        setSubmission(responseData.data?.results?.[0] ?? null)
       } catch (err) {
         setError("Unable to load submission data.")
         console.error(err)
@@ -210,11 +211,11 @@ export default function Home() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch(apiV1("/auth/me"))
+        const response = await fetch(apiV2("/auth/me"))
         const json = (await response.json()) as AuthResponse
 
         if (response.ok) {
-          setAuthUser(json.user)
+          setAuthUser(json.data?.user ?? null)
         }
       } catch (err) {
         console.error(err)
@@ -231,7 +232,7 @@ export default function Home() {
     setError(null)
 
     try {
-      const response = await fetch(apiV1(`/submissions/${uuid}`), {
+      const response = await fetch(apiV2(`/submissions/${uuid}`), {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
@@ -242,14 +243,14 @@ export default function Home() {
           ...(state === "denied" && reason ? { moderator_note: reason } : {}),
         }),
       })
-      const json = (await response.json().catch(() => null)) as SubmissionResponse & { error?: string } | null
+      const json = (await response.json().catch(() => null)) as SubmissionResponse | null
 
       if (!response.ok) {
-        setError(json?.error || "Unable to update submission")
+        setError(json?.error?.message || "Unable to update submission")
         return
       }
 
-      setSubmission(json?.results?.[0] ?? null)
+      setSubmission(json?.data?.results?.[0] ?? null)
       if (state === "denied") {
         setDenyDialogOpen(false)
         setModeratorNote("")
@@ -267,7 +268,7 @@ export default function Home() {
     setError(null)
 
     try {
-      const response = await fetch(apiV1(`/submissions/${uuid}`), {
+      const response = await fetch(apiV2(`/submissions/${uuid}`), {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
@@ -277,14 +278,14 @@ export default function Home() {
           moderator_note: note,
         }),
       })
-      const json = (await response.json().catch(() => null)) as SubmissionResponse & { error?: string } | null
+      const json = (await response.json().catch(() => null)) as SubmissionResponse | null
 
       if (!response.ok) {
-        setError(json?.error || "Unable to update submission")
+        setError(json?.error?.message || "Unable to update submission")
         return
       }
 
-      setSubmission(json?.results?.[0] ?? null)
+      setSubmission(json?.data?.results?.[0] ?? null)
       setNoteDialogOpen(false)
       setModeratorNote("")
     } catch (err) {
@@ -338,7 +339,7 @@ export default function Home() {
     setEditTimeError(null)
 
     try {
-      const response = await fetch(apiV1(`/submissions/${uuid}`), {
+      const response = await fetch(apiV2(`/submissions/${uuid}`), {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
@@ -348,16 +349,16 @@ export default function Home() {
       })
 
       const json = (await response.json().catch(() => null)) as
-        | SubmissionResponse & { error?: string }
+        | SubmissionResponse
         | null
 
       if (!response.ok) {
-        const message = json?.error || "Unable to update submission time"
+        const message = json?.error?.message || "Unable to update submission time"
         setEditTimeError(message)
         return
       }
 
-      setSubmission(json?.results?.[0] ?? submission)
+      setSubmission(json?.data?.results?.[0] ?? submission)
       setEditTimeDialogOpen(false)
     } catch (err) {
       console.error(err)
@@ -372,14 +373,14 @@ export default function Home() {
     setError(null)
 
     try {
-      const response = await fetch(apiV1(`/submissions/${uuid}`), {
+      const response = await fetch(apiV2(`/submissions/${uuid}`), {
         method: "DELETE",
         headers: authHeaders,
       })
-      const json = (await response.json().catch(() => null)) as { error?: string } | null
+      const json = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
 
       if (!response.ok) {
-        setError(json?.error || "Unable to delete submission")
+        setError(json?.error?.message || "Unable to delete submission")
         return
       }
 
@@ -645,7 +646,7 @@ export default function Home() {
                         onClick={() => setEditTimeDialogOpen(false)}
                       >
                         <div
-                          className="w-full max-w-lg rounded-3xl border border-border bg-background p-6 shadow-2xl"
+                          className="w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-lg"
                           onClick={(event) => event.stopPropagation()}
                         >
                           <div className="flex items-start justify-between gap-4">

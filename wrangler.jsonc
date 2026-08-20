@@ -43,5 +43,11 @@
 			"database_id": "64fda1ee-ce43-4f8e-9e89-57fc8f695cc1",
 			"remote": true
 		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "CACHE",
+			"id": "43bbb60d00184f3d90a64d69a894208d"
+		}
 	]
 }

@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { apiV1 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
+import { captureVideoFrame } from "@/lib/video-thumbnail"
 import { SubmissionCard } from "@/components/custom/submission-card"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -51,23 +52,23 @@ type WorldRecord = {
 }
 
 type SubmissionsResponse = {
-  results: Submission[]
-  count: number
+  data: Submission[]
+  meta?: { count?: number }
 }
 
 type WorldRecordsResponse = {
-  results: WorldRecord[]
+  data: WorldRecord[]
 }
 
 type AuthResponse = {
-  user?: {
-    uuid: string
-    player_name: string
-    score: number
-    permission: number
+  data?: {
+    user?: {
+      uuid: string
+      player_name: string
+      score: number
+      permission: number
+    } | null
   }
-  error?: string
-  needs_player_name?: boolean
 }
 
 const submissionUuidListKey = "submission_uuids"
@@ -191,7 +192,7 @@ function SubmissionsPage() {
         }
 
         const submissionsResponse = await fetch(
-          `${apiV1("/submissions")}?${params.toString()}`,
+          `${apiV2("/submissions")}?${params.toString()}`,
           { cache: "no-store" }
         )
 
@@ -204,8 +205,8 @@ function SubmissionsPage() {
         }
 
         const submissionsJson = (await submissionsResponse.json()) as SubmissionsResponse
-        setSubmissions(submissionsJson.results || [])
-        const count = submissionsJson.count ?? 0
+        setSubmissions(submissionsJson.data || [])
+        const count = submissionsJson.meta?.count ?? 0
         setResultCount(count)
         setTotalPages(Math.max(1, Math.ceil(count / 50)))
       } catch (err) {
@@ -226,23 +227,23 @@ function SubmissionsPage() {
     const fetchMeta = async () => {
       try {
         const [wrsResponse, authResponse] = await Promise.all([
-          fetch(apiV1("/records/world"), { cache: "force-cache" }),
-          fetch(apiV1("/auth/me")),
+          fetch(apiV2("/records/world"), { cache: "force-cache" }),
+          fetch(apiV2("/auth/me")),
         ])
 
         if (wrsResponse.ok) {
           const wrsJson = (await wrsResponse.json()) as WorldRecordsResponse
-          setWrSubmissionIds(new Set((wrsJson.results || []).map((wr) => wr.submission_uuid)))
+          setWrSubmissionIds(new Set((wrsJson.data || []).map((wr) => wr.submission_uuid)))
           setWorldRecordTimes(
-            Object.fromEntries((wrsJson.results || []).map((wr) => [wr.trial_name, Number(wr.time)]))
+            Object.fromEntries((wrsJson.data || []).map((wr) => [wr.trial_name, Number(wr.time)]))
           )
         }
 
         if (authResponse.ok) {
           const authJson = (await authResponse.json()) as AuthResponse
 
-          if (authJson.user) {
-            window.localStorage.setItem("player_uuid", authJson.user.uuid)
+          if (authJson.data?.user) {
+            window.localStorage.setItem("player_uuid", authJson.data?.user.uuid)
             setIsAuthenticated(true)
           } else {
             setIsAuthenticated(false)
@@ -307,6 +308,8 @@ function SubmissionsPage() {
     setUploadProgress(0)
     setUploadStatus("Preparing upload...")
 
+    const previewBlob = await captureVideoFrame(parsedFileData.file).catch(() => null)
+
     return new Promise<void>((resolve, reject) => {
       const formData = new FormData()
       formData.append("submissions", JSON.stringify([{
@@ -315,6 +318,9 @@ function SubmissionsPage() {
         proof_url: ""
       }]))
       formData.append("proof_file_0", parsedFileData.file)
+      if (previewBlob) {
+        formData.append("preview_file_0", previewBlob, "preview.jpg")
+      }
 
       const request = new XMLHttpRequest()
 
@@ -336,10 +342,10 @@ function SubmissionsPage() {
       }
 
       request.onload = () => {
-        let json: { error?: string } | null = null
+        let json: { error?: { message?: string } } | null = null
 
         try {
-          json = JSON.parse(request.responseText || "null") as { error?: string } | null
+          json = JSON.parse(request.responseText || "null") as { error?: { message?: string } } | null
         } catch {
           json = null
         }
@@ -360,7 +366,7 @@ function SubmissionsPage() {
           return
         }
 
-        reject(new Error(json?.error || "Unable to create submission"))
+        reject(new Error(json?.error?.message || "Unable to create submission"))
       }
 
       request.onerror = () => {
@@ -373,7 +379,7 @@ function SubmissionsPage() {
 
       setUploadProgress(0)
       setUploadStatus("Starting upload...")
-      request.open("POST", apiV1("/submissions"))
+      request.open("POST", apiV2("/submissions"))
       request.send(formData)
     }).catch((err) => {
       console.error("Upload error:", err)
@@ -426,7 +432,7 @@ function SubmissionsPage() {
           </div>
         </div>
       )}
-      <div className="sticky top-14 z-30 space-y-3 rounded-3xl border border-border/60 bg-background/80 p-4 backdrop-blur-xl md:top-0">
+      <div className="sticky top-14 z-30 space-y-3 rounded-lg border border-border bg-background p-4 md:top-0">
       <div className="flex flex-col gap-3">
         {filteredPlayerName && (
           <div className="flex items-center gap-4">
@@ -507,7 +513,7 @@ function SubmissionsPage() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction asChild>
                   <a
-                    href={apiV1("/auth/discord/start")}
+                    href={apiV2("/auth/discord/start")}
                     className="inline-flex w-full items-center justify-center"
                   >
                     Login with Discord
@@ -600,7 +606,7 @@ function SubmissionsPage() {
           <SubmissionList className="submissions-grid">
             {Array.from({ length: 6 }).map((_, index) => (
               <div key={index} className="submission-grid-item">
-                <Card className="h-full overflow-hidden border-border/60 bg-background/55">
+                <Card className="h-full overflow-hidden border-border">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
                     <Skeleton className="flex-1 rounded-lg" />
                     <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
@@ -649,7 +655,7 @@ function SubmissionsPage() {
                   scoreText={scoreFor(worldRecordTimes[submission.trial_name], submission.time, submission.trial_name as TrialName)}
                   moderatorNote={submission.moderator_note}
                   moderatorUsername={submission.moderator_username}
-                  className="h-full hover:shadow-lg transition-shadow overflow-hidden"
+                  className="h-full overflow-hidden transition-colors hover:border-foreground/30"
                   onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
                 />
               ))}

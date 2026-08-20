@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { apiV1 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
 import { PageHeader, PageShell } from "@/components/custom/page-shell"
 import calculateScore from "@/lib/calc-score"
 import { trials as trialNames, TrialName } from "@/lib/trials"
@@ -104,8 +104,8 @@ type PlayerTrialTime = {
 }
 
 type ListResponse<T> = {
-  results?: T[]
-  error?: string
+  data?: T[]
+  error?: { message?: string }
 }
 
 function ComparePageClient() {
@@ -152,12 +152,12 @@ function ComparePageClient() {
   React.useEffect(() => {
     const loadPlayers = async () => {
       try {
-        const response = await fetch(apiV1("/players"), { cache: "force-cache" })
+        const response = await fetch(apiV2("/players"), { cache: "force-cache" })
         const json = (await response.json()) as ListResponse<PlayerItem>
         if (!response.ok) {
-          throw new Error(json.error || "Unable to load players")
+          throw new Error(json.error?.message || "Unable to load players")
         }
-        setPlayers(json.results || [])
+        setPlayers(json.data || [])
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load players")
       } finally {
@@ -167,12 +167,12 @@ function ComparePageClient() {
 
     const loadWorldRecords = async () => {
       try {
-        const response = await fetch(apiV1("/records/world"), { cache: "force-cache" })
+        const response = await fetch(apiV2("/records/world"), { cache: "force-cache" })
         const json = (await response.json()) as ListResponse<WorldRecordValue>
         if (!response.ok) {
-          throw new Error(json.error || "Unable to load WRs")
+          throw new Error(json.error?.message || "Unable to load WRs")
         }
-        setWorldRecords(json.results || [])
+        setWorldRecords(json.data || [])
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load WRs")
       }
@@ -193,14 +193,14 @@ function ComparePageClient() {
 
       try {
         const requests = [playerAUuid, playerBUuid].filter(Boolean).map((uuid) =>
-          fetch(`${apiV1("/submissions")}?player_uuid=${encodeURIComponent(uuid)}&state=approved&page=1&limit=50`, {
+          fetch(`${apiV2("/submissions")}?player_uuid=${encodeURIComponent(uuid)}&state=approved&page=1&limit=50`, {
             cache: "no-store",
           }).then(async (response) => {
             const json = (await response.json()) as ListResponse<SubmissionValue>
             if (!response.ok) {
-              throw new Error(json.error || "Unable to load player submissions")
+              throw new Error(json.error?.message || "Unable to load player submissions")
             }
-            return { uuid, results: json.results || [] }
+            return { uuid, results: json.data || [] }
           })
         )
 
@@ -271,7 +271,7 @@ function ComparePageClient() {
         ) : null}
 
         <div className="grid gap-2">
-          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
+          <div className="rounded-lg border border-border px-3 py-2.5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Players</p>
@@ -313,20 +313,20 @@ function ComparePageClient() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <Table className="min-w-full border-separate border-spacing-0">
+            <Table className="min-w-full">
                   <TableHeader>
-                    <TableRow className="bg-muted/70">
-                      <TableHead className="rounded-tl-xl px-2 py-1.5">Trial</TableHead>
+                    <TableRow className="bg-muted">
+                      <TableHead className="px-2 py-1.5">Trial</TableHead>
                       <TableHead className="px-2 py-1.5">WR</TableHead>
                       <TableHead className="px-2 py-1.5">{playerAName || "Player A"}</TableHead>
-                      <TableHead className="rounded-tr-xl px-2 py-1.5">{playerBName || "Player B"}</TableHead>
+                      <TableHead className="px-2 py-1.5">{playerBName || "Player B"}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.map((row) => (
-                      <TableRow key={row.trial} className="bg-background">
+                      <TableRow key={row.trial}>
                         <TableCell className="px-2 py-1 text-xs font-semibold leading-none uppercase">{row.trial}</TableCell>
-                        <TableCell className="px-2 py-1 text-left text-xs font-medium text-sky-600">
+                        <TableCell className="px-2 py-1 text-left text-xs font-medium text-primary">
                           {row.wrTime > 0 ? formatTime(row.wrTime) : "0.000"}
                         </TableCell>
 

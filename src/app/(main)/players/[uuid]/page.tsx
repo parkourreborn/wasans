@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { apiV1 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { TrialName, trials } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
@@ -73,23 +73,9 @@ type SubmissionValue = {
   moderator_username?: string | null
 }
 
-type PlayerDetailResponse = {
-  player?: PlayerInfo | null
-  error?: string
-}
-
-type WorldRecordsResponse = {
-  results?: WorldRecordValue[]
-  error?: string
-}
-
-type SubmissionsResponse = {
-  results?: SubmissionValue[]
-  count?: number
-  page?: number
-  limit?: number
-  error?: string
-}
+type PlayerDetailResponse = { data?: { player: PlayerInfo | null }; error?: { message?: string } }
+type WorldRecordsResponse = { data?: WorldRecordValue[]; error?: { message?: string } }
+type SubmissionsResponse = { data?: SubmissionValue[]; meta?: { count?: number }; error?: { message?: string } }
 
 type ViewMode = "submissions" | "pbs"
 
@@ -103,15 +89,8 @@ function compareByTrialOrder(aTrialName: string, bTrialName: string) {
   if (aOrder == null && bOrder == null) {
     return aTrialName.localeCompare(bTrialName)
   }
-
-  if (aOrder == null) {
-    return 1
-  }
-
-  if (bOrder == null) {
-    return -1
-  }
-
+  if (aOrder == null) return 1
+  if (bOrder == null) return -1
   return aOrder - bOrder
 }
 
@@ -127,17 +106,17 @@ async function fetchAllPlayerSubmissions(playerUuid: string) {
       limit: String(limit),
     })
 
-    const response = await fetch(`${apiV1("/submissions")}?${params.toString()}`, { cache: "no-store" })
+    const response = await fetch(`${apiV2("/submissions")}?${params.toString()}`, { cache: "no-store" })
     const json = (await response.json()) as SubmissionsResponse
 
     if (!response.ok) {
-      throw new Error(json.error || "Unable to load submissions")
+      throw new Error(json.error?.message || "Unable to load submissions")
     }
 
-    const pageResults = json.results || []
+    const pageResults = json.data || []
     all.push(...pageResults)
 
-    const total = Number(json.count || all.length)
+    const total = Number(json.meta?.count || all.length)
     if (all.length >= total || pageResults.length < limit) {
       break
     }
@@ -168,8 +147,8 @@ export default function PlayerProfilePage() {
 
       try {
         const [playerResponse, wrResponse, submissionRows] = await Promise.all([
-          fetch(`${apiV1(`/players/${encodeURIComponent(uuid)}`)}?include=pbs`, { cache: "no-store" }),
-          fetch(apiV1("/records/world"), { cache: "force-cache" }),
+          fetch(`${apiV2(`/players/${encodeURIComponent(uuid)}`)}?include=pbs`, { cache: "no-store" }),
+          fetch(apiV2("/records/world"), { cache: "no-store" }),
           fetchAllPlayerSubmissions(uuid),
         ])
 
@@ -177,15 +156,15 @@ export default function PlayerProfilePage() {
         const wrJson = (await wrResponse.json()) as WorldRecordsResponse
 
         if (!playerResponse.ok) {
-          throw new Error(playerJson.error || "Unable to load player")
+          throw new Error(playerJson.error?.message || "Unable to load player")
         }
 
         if (!wrResponse.ok) {
-          throw new Error(wrJson.error || "Unable to load world records")
+          throw new Error(wrJson.error?.message || "Unable to load world records")
         }
 
-        setPlayer(playerJson.player || null)
-        setWorldRecords(wrJson.results || [])
+        setPlayer(playerJson.data?.player || null)
+        setWorldRecords(wrJson.data || [])
         setSubmissions(submissionRows)
       } catch (err) {
         console.error(err)
@@ -220,10 +199,7 @@ export default function PlayerProfilePage() {
         ? Number(calculateScore(wr, time, trialName).toFixed(3))
         : 0
 
-      return {
-        ...pb,
-        score,
-      }
+      return { ...pb, score }
     })
   }, [player?.pbs, wrByTrial])
 
@@ -236,10 +212,7 @@ export default function PlayerProfilePage() {
         ? Number(calculateScore(wr, time, trialName).toFixed(3))
         : 0
 
-      return {
-        ...submission,
-        score,
-      }
+      return { ...submission, score }
     })
   }, [submissions, wrByTrial])
 
@@ -306,11 +279,6 @@ export default function PlayerProfilePage() {
           <Skeleton className="h-28 w-full" />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-          <Skeleton className="h-28 w-full" />
-          <Skeleton className="h-28 w-full" />
-        </div>
-
         <SubmissionList className="space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <Skeleton className="h-10 w-72" />
@@ -319,7 +287,7 @@ export default function PlayerProfilePage() {
           <div className="submissions-grid">
             {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="submission-grid-item">
-                <Card className="h-full overflow-hidden border-border/60 bg-background/55">
+                <Card className="h-full overflow-hidden">
                   <CardContent className="flex h-full min-h-0 gap-4 p-4">
                     <Skeleton className="flex-1 rounded-lg" />
                     <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
@@ -379,7 +347,7 @@ export default function PlayerProfilePage() {
 
   return (
     <PageShell>
-      <div className="space-y-4 rounded-3xl border border-border/60 bg-background/55 p-4 shadow-[0_24px_70px_-44px_rgba(0,0,0,0.72)] backdrop-blur-xl">
+      <div className="space-y-4 rounded-lg border border-border p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-center gap-4">
             <PlayerAvatar
@@ -391,13 +359,11 @@ export default function PlayerProfilePage() {
               className="size-20 shrink-0 lg:size-24"
             />
             <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-                  {player.player_name} ({formatPlayerScore(player.score)})
-                </h1>
-              </div>
+              <h1 className="truncate text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+                {player.player_name} ({formatPlayerScore(player.score)})
+              </h1>
               <p className="text-sm text-muted-foreground">Joined {formatDate(player.date_joined)}</p>
-              <div className="inline-flex items-center rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur-xl">
+              <div className="inline-flex items-center rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">
                 Rank #{player.rank}
               </div>
             </div>
@@ -411,7 +377,7 @@ export default function PlayerProfilePage() {
         </div>
       </div>
 
-      <div className="sticky top-14 z-30 space-y-4 rounded-3xl border border-border/60 bg-background/80 p-4 backdrop-blur-xl md:top-0">
+      <div className="sticky top-14 z-30 space-y-4 rounded-lg border border-border bg-background p-4 md:top-0">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <Input
             type="search"
@@ -457,7 +423,7 @@ export default function PlayerProfilePage() {
               />
             ))
           ) : (
-            <div className="rounded-2xl border border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground backdrop-blur-xl">
+            <div className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
               No matching submissions.
             </div>
           )
@@ -482,7 +448,7 @@ export default function PlayerProfilePage() {
             />
           ))
         ) : (
-          <div className="rounded-2xl border border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground backdrop-blur-xl">
+          <div className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
             No matching personal bests.
           </div>
         )}

@@ -12,3 +12,8 @@ export function apiV1(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`
   return `${getApiBaseUrl()}/v1${normalizedPath}`
 }
+
+export function apiV2(path: string) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`
+  return `${getApiBaseUrl()}/v2${normalizedPath}`
+}

@@ -1,7 +1,9 @@
 import "server-only"
 import calculateScore from "../calc-score"
 import { TrialName } from "../trials"
-import { updateDiscordUsernameOnScoreChange } from "./notifications"
+import { syncDiscordMembersOnScoreChange } from "./notifications"
+import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
+import { validSubmissionSql } from "@/lib/server/trial-lifecycle"
 
 type BestSubmissionRow = {
   trial_name: TrialName
@@ -45,24 +47,27 @@ export async function refreshPlayerScores(
     return [] as Array<{ uuid: string; score: number }>
   }
 
+  const now = Math.floor(Date.now() / 1000)
   const placeholders = uniquePlayerUuids.map(() => "?").join(",")
-  const [{ results: wrRows }, trialCountRow, { results: pbsRows }, { results: fallbackRows }, { results: currentScoresRows }] = await Promise.all([
+  const fallbackValidSql = validSubmissionSql("submissions", "t")
+  const [{ results: wrRows }, trialCount, { results: pbsRows }, { results: fallbackRows }, { results: currentScoresRows }] = await Promise.all([
     db.prepare(`SELECT trial_name, time FROM wrs`).all<WorldRecordRow>(),
-    db.prepare(`SELECT COUNT(*) AS count FROM trials`).first<{ count: number }>(),
+    getCountedTrialCount(db, now),
     db.prepare(`SELECT player_uuid, trial_name, time FROM pbs WHERE player_uuid IN (${placeholders})`).bind(...uniquePlayerUuids).all<BestSubmissionRowWithPlayer>(),
     db.prepare(
-      `SELECT player_uuid, trial_name, MIN(time) as time
+      `SELECT submissions.player_uuid AS player_uuid, submissions.trial_name AS trial_name, MIN(submissions.time) as time
        FROM submissions
-       WHERE player_uuid IN (${placeholders})
-         AND state = 'approved'
-       GROUP BY player_uuid, trial_name`
+       JOIN trials AS t ON t.name = submissions.trial_name
+       WHERE submissions.player_uuid IN (${placeholders})
+         AND submissions.state = 'approved'
+         AND ${fallbackValidSql}
+       GROUP BY submissions.player_uuid, submissions.trial_name`
     )
-      .bind(...uniquePlayerUuids)
+      .bind(...uniquePlayerUuids, now, now, now)
       .all<BestSubmissionRowWithPlayer>(),
     db.prepare(`SELECT uuid, score FROM players WHERE uuid IN (${placeholders})`).bind(...uniquePlayerUuids).all<PlayerScoreRow>(),
   ])
 
-  const trialCount = Number(trialCountRow?.count ?? 0)
   const wrs = new Map(wrRows.map((row) => [row.trial_name, Number(row.time)]))
   const pbsByPlayer = new Map<string, BestSubmissionRow[]>()
   const fallbackByPlayer = new Map<string, BestSubmissionRow[]>()
@@ -120,11 +125,7 @@ export async function refreshPlayerScores(
   }
 
   if (discordUpdates.length > 0) {
-    await Promise.all(
-      discordUpdates.map(({ playerUuid, oldScore }) =>
-        updateDiscordUsernameOnScoreChange(playerUuid, oldScore)
-      )
-    )
+    await syncDiscordMembersOnScoreChange(discordUpdates)
   }
 
   return refreshedPlayers
@@ -168,7 +169,15 @@ export async function refreshAllPlayerScores(
   }
 }
 
-export async function refreshScoresForTrial(db: D1Database, trialName: string) {
+// Refreshes scores only for players who actually have a current PB on this
+// trial — the complete set affected by a WR change on it — in one batched
+// refreshPlayerScores call, instead of recomputing every player on the site
+// (refreshAllPlayerScores) or looping one-refresh-per-player.
+export async function refreshScoresForTrial(
+  db: D1Database,
+  trialName: string,
+  options: RefreshPlayerScoreOptions = {}
+) {
   const { results } = await db.prepare(
     `SELECT DISTINCT player_uuid
      FROM pbs
@@ -177,7 +186,10 @@ export async function refreshScoresForTrial(db: D1Database, trialName: string) {
     .bind(trialName)
     .all<{ player_uuid: string }>()
 
-  for (const row of results) {
-    await refreshPlayerScore(db, row.player_uuid, { discordUpdateMode: "none" })
+  const playerUuids = (results || []).map((row) => row.player_uuid)
+  if (!playerUuids.length) {
+    return
   }
+
+  await refreshPlayerScores(db, playerUuids, options)
 }

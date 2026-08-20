@@ -9,7 +9,7 @@ type PageShellProps = {
 
 export function PageShell({ children, className }: PageShellProps) {
   return (
-    <div className={cn("stagger-in mx-auto flex w-full max-w-[95vw] flex-col gap-4 px-3 pb-6 pt-3 md:gap-5 md:px-4 lg:px-5", className)}>
+    <div className={cn("mx-auto flex w-full max-w-[95vw] flex-col gap-4 px-3 pb-6 pt-3 md:gap-5 md:px-4 lg:px-5", className)}>
       {children}
     </div>
   )
@@ -24,12 +24,19 @@ type PageHeaderProps = {
   className?: string
 }
 
-export function PageHeader({ title, description, eyebrow, actions, className }: PageHeaderProps) {
-  return actions ? (
-    <section className={cn("animate-subtle-in flex flex-wrap items-center gap-3", className)}>
-      {actions}
+export function PageHeader({ title, description, eyebrow, actions, aside, className }: PageHeaderProps) {
+  return (
+    <section className={cn("flex flex-wrap items-start justify-between gap-3", className)}>
+      <div className="space-y-1">
+        {eyebrow ? (
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">{eyebrow}</p>
+        ) : null}
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {description ? <p className="max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
+      </div>
+      {actions || aside ? <div className="flex flex-wrap items-center gap-2">{actions ?? aside}</div> : null}
     </section>
-  ) : null
+  )
 }
 
 type SectionCardProps = {
@@ -43,7 +50,7 @@ type SectionCardProps = {
 
 export function SectionCard({ title, description, action, children, className, contentClassName }: SectionCardProps) {
   return (
-    <Card className={cn("animate-subtle-in overflow-hidden border-border/70 bg-background/55", className)}>
+    <Card className={cn("overflow-hidden", className)}>
       {title || description || action ? (
         <CardHeader className="flex flex-col gap-4 border-b border-border/60 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
@@ -67,7 +74,7 @@ type StatCardProps = {
 
 export function StatCard({ label, value, meta, className }: StatCardProps) {
   return (
-    <Card className={cn("border-border/70 bg-background/55", className)}>
+    <Card className={className}>
       <CardContent className="space-y-2 p-4 md:p-5">
         <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
         <div className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">{value}</div>
@@ -95,7 +102,7 @@ export function SubmissionList({ children, className }: SubmissionListProps) {
 
 export function ErrorState({ title = "Something went wrong", message, actions, className }: ErrorStateProps) {
   return (
-    <Card className={cn("border-border/70 bg-background/55", className)}>
+    <Card className={className}>
       <CardContent className="flex min-h-48 flex-col items-center justify-center gap-3 p-6 text-center">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold tracking-tight">{title}</h2>

@@ -1,22 +1,20 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import Link from "next/link";
-import { apiV1 } from "@/lib/api";
-import { TrialName, trials as trialNames } from "@/lib/trials";
-import { PageHeader, PageShell } from "@/components/custom/page-shell";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import * as React from "react"
+import Link from "next/link"
+import { apiV2 } from "@/lib/api"
+import { TrialName, trials as trialNames } from "@/lib/trials"
+import { PageHeader, PageShell } from "@/components/custom/page-shell"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import {
-  RefreshCcw,
-} from "lucide-react";
+} from "@/components/ui/select"
+import { RefreshCcw } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -24,138 +22,129 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import calculateScore from "@/lib/calc-score";
+} from "@/components/ui/table"
+import calculateScore from "@/lib/calc-score"
 
 const scoreFor = (wr: number, your_time: number, trial: TrialName) => {
-  if (your_time < wr) return 0;
-  return Number(calculateScore(wr, your_time, trial).toFixed(3));
-};
+  if (your_time < wr) return 0
+  return Number(calculateScore(wr, your_time, trial).toFixed(3))
+}
 
 type WorldRecordValue = {
-  trial_name: string;
-  time: number | string;
-  submission_uuid: string;
-};
+  trial_name: string
+  time: number | string
+  submission_uuid: string
+}
 
-type WorldRecordsResponse = {
-  results?: WorldRecordValue[];
-  error?: string;
-};
+type WorldRecordsResponse = { data?: WorldRecordValue[]; error?: { message?: string } }
 
 type SubmissionValue = {
-  trial_name: string;
-  time: number | string;
-  state: string;
-  submission_uuid?: string;
-  date?: string;
-};
+  trial_name: string
+  time: number | string
+  state: string
+  submission_uuid?: string
+  date?: string
+}
 
-type SubmissionsResponse = {
-  player?: {
-    pbs?: SubmissionValue[];
-  } | null;
-  error?: string;
-};
+type PlayerDetailResponse = {
+  data?: { player: { pbs?: SubmissionValue[] } | null }
+  error?: { message?: string }
+}
 
-type AuthResponse = {
-  user?: AuthUser | null;
-};
+type AuthResponse = { data?: { user: AuthUser | null } }
 
 type AuthUser = {
-  uuid?: string;
-  player_uuid?: string;
-  role?: string;
-};
+  uuid?: string
+  player_uuid?: string
+  permission?: number
+}
 
-const trialKey = (trial: string) => trial.toUpperCase();
-const zeroTimes = Object.fromEntries(trialNames.map((trial) => [trialKey(trial), "0.000"]));
-const CALCULATOR_LOCAL_STORAGE_KEY = "calculator_saved_times";
+const trialKey = (trial: string) => trial.toUpperCase()
+const zeroTimes = Object.fromEntries(trialNames.map((trial) => [trialKey(trial), "0.000"]))
+const CALCULATOR_LOCAL_STORAGE_KEY = "calculator_saved_times"
 
 function getInitialTimes() {
   if (typeof window === "undefined") {
-    return zeroTimes;
+    return zeroTimes
   }
 
   try {
-    const saved = window.localStorage.getItem(CALCULATOR_LOCAL_STORAGE_KEY);
+    const saved = window.localStorage.getItem(CALCULATOR_LOCAL_STORAGE_KEY)
     if (!saved) {
-      return zeroTimes;
+      return zeroTimes
     }
 
-    const parsed = JSON.parse(saved) as Record<string, string>;
+    const parsed = JSON.parse(saved) as Record<string, string>
     return {
       ...zeroTimes,
       ...Object.fromEntries(
         Object.entries(parsed).map(([key, value]) => [key, typeof value === "string" ? value : String(value)])
       ),
-    };
+    }
   } catch (err) {
-    console.error("Failed to restore saved calculator times", err);
-    return zeroTimes;
+    console.error("Failed to restore saved calculator times", err)
+    return zeroTimes
   }
 }
 
 function getPlayerUuid() {
   if (typeof window === "undefined") {
-    return "";
+    return ""
   }
 
-  return window.localStorage.getItem("player_uuid") || "";
+  return window.localStorage.getItem("player_uuid") || ""
 }
 
-export default function Home() {
-  const [worldRecords, setWorldRecords] = React.useState<Array<WorldRecordValue>>([]);
-  const [loadingWorldRecords, setLoadingWorldRecords] = React.useState(true);
-  const [worldRecordError, setWorldRecordError] = React.useState<string | null>(null);
-  const [loadingUserTimes, setLoadingUserTimes] = React.useState(true);
-  const [userTimesError, setUserTimesError] = React.useState<string | null>(null);
-  const [times, setTimes] = React.useState<Record<string, string>>(getInitialTimes);
-  const [pbs, setPbs] = React.useState<Record<string, string>>(zeroTimes);
-  const [selectedPlayerUuid, setSelectedPlayerUuid] = React.useState("");
-  const [players, setPlayers] = React.useState<Array<{ uuid: string; player_name: string; score: number }>>([]);
-  const [authUser, setAuthUser] = React.useState<AuthUser | null>(null);
-  const [authChecked, setAuthChecked] = React.useState(false);
-  const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
+export default function CalculatorPage() {
+  const [worldRecords, setWorldRecords] = React.useState<Array<WorldRecordValue>>([])
+  const [loadingWorldRecords, setLoadingWorldRecords] = React.useState(true)
+  const [worldRecordError, setWorldRecordError] = React.useState<string | null>(null)
+  const [loadingUserTimes, setLoadingUserTimes] = React.useState(true)
+  const [userTimesError, setUserTimesError] = React.useState<string | null>(null)
+  const [times, setTimes] = React.useState<Record<string, string>>(getInitialTimes)
+  const [pbs, setPbs] = React.useState<Record<string, string>>(zeroTimes)
+  const [selectedPlayerUuid, setSelectedPlayerUuid] = React.useState("")
+  const [players, setPlayers] = React.useState<Array<{ uuid: string; player_name: string; score: number }>>([])
+  const [authUser, setAuthUser] = React.useState<AuthUser | null>(null)
+  const [authChecked, setAuthChecked] = React.useState(false)
+  const [saveMessage, setSaveMessage] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     const loadWorldRecords = async () => {
       try {
-        const response = await fetch(apiV1("/records/world"), { cache: "force-cache" });
-        const json = (await response.json()) as WorldRecordsResponse;
+        const response = await fetch(apiV2("/records/world"), { cache: "no-store" })
+        const json = (await response.json()) as WorldRecordsResponse
 
         if (!response.ok) {
-          throw new Error(json.error || "Unable to load world records");
+          throw new Error(json.error?.message || "Unable to load world records")
         }
 
-        setWorldRecords(
-          json.results || []
-        );
+        setWorldRecords(json.data || [])
       } catch (err) {
-        console.error(err);
-        setWorldRecordError(err instanceof Error ? err.message : "Unable to load world records");
+        console.error(err)
+        setWorldRecordError(err instanceof Error ? err.message : "Unable to load world records")
       } finally {
-        setLoadingWorldRecords(false);
+        setLoadingWorldRecords(false)
       }
-    };
+    }
 
-    loadWorldRecords();
-  }, []);
+    loadWorldRecords()
+  }, [])
 
   React.useEffect(() => {
     const loadPlayers = async () => {
       try {
-        const response = await fetch(apiV1("/players"), { cache: "no-store" })
+        const response = await fetch(apiV2("/players"), { cache: "no-store" })
         const json = (await response.json()) as {
-          results?: Array<{ uuid: string; player_name: string; score: number }>
-          error?: string
+          data?: Array<{ uuid: string; player_name: string; score: number }>
+          error?: { message?: string }
         }
 
         if (!response.ok) {
-          throw new Error(json.error || "Unable to load players")
+          throw new Error(json.error?.message || "Unable to load players")
         }
 
-        const playerList = json.results || []
+        const playerList = json.data || []
         setPlayers(playerList)
 
         const params = new URLSearchParams(window.location.search)
@@ -181,28 +170,28 @@ export default function Home() {
   React.useEffect(() => {
     const loadAuth = async () => {
       try {
-        const response = await fetch(apiV1("/auth/me"), { cache: "no-store" });
-        const authJson = (await response.json().catch(() => null)) as AuthResponse | null;
-        setAuthUser(authJson?.user ?? null);
+        const response = await fetch(apiV2("/auth/me"), { cache: "no-store" })
+        const authJson = (await response.json().catch(() => null)) as AuthResponse | null
+        setAuthUser(authJson?.data?.user ?? null)
       } catch (err) {
-        console.error(err);
-        setAuthUser(null);
+        console.error(err)
+        setAuthUser(null)
       } finally {
-        setAuthChecked(true);
+        setAuthChecked(true)
       }
-    };
+    }
 
-    loadAuth();
-  }, []);
+    loadAuth()
+  }, [])
 
   const handleSaveTimes = () => {
     if (typeof window === "undefined") {
-      return;
+      return
     }
 
-    window.localStorage.setItem(CALCULATOR_LOCAL_STORAGE_KEY, JSON.stringify(times));
-    setSaveMessage("Times saved locally.");
-  };
+    window.localStorage.setItem(CALCULATOR_LOCAL_STORAGE_KEY, JSON.stringify(times))
+    setSaveMessage("Times saved locally.")
+  }
 
   React.useEffect(() => {
     const loadUserTimes = async () => {
@@ -217,22 +206,21 @@ export default function Home() {
         }
 
         const response = await fetch(
-          `${apiV1(`/players/${encodeURIComponent(playerUuid)}`)}?include=pbs`,
+          `${apiV2(`/players/${encodeURIComponent(playerUuid)}`)}?include=pbs`,
           { cache: "no-store" }
         )
-        const json = (await response.json()) as SubmissionsResponse
+        const json = (await response.json()) as PlayerDetailResponse
 
         if (!response.ok) {
           throw new Error("Unable to load personal bests")
         }
 
-        if (!json.player) {
+        if (!json.data?.player) {
           throw new Error("Player not found")
         }
 
         const bestTimes: Record<string, number> = {}
-
-        const pbRows = json.player.pbs || []
+        const pbRows = json.data.player.pbs || []
 
         for (const pb of pbRows) {
           const trial = trialKey(pb.trial_name)
@@ -265,18 +253,18 @@ export default function Home() {
   const rows = React.useMemo(
     () =>
       trialNames.map((trialName) => {
-        const trial = trialKey(trialName);
-        const wrEntry = worldRecords.find((u) => trialKey(u.trial_name) === trial);
-        const wr = Number(wrEntry?.time || 0);
-        const your_time_value = times[trial] ?? "";
-        const your_time = Number(your_time_value);
+        const trial = trialKey(trialName)
+        const wrEntry = worldRecords.find((u) => trialKey(u.trial_name) === trial)
+        const wr = Number(wrEntry?.time || 0)
+        const your_time_value = times[trial] ?? ""
+        const your_time = Number(your_time_value)
         const isValidTime =
           typeof wr === "number" &&
           Number.isFinite(wr) &&
           wr > 0 &&
           your_time_value.trim() !== "" &&
           !Number.isNaN(your_time) &&
-          your_time >= wr;
+          your_time >= wr
 
         return {
           trial,
@@ -284,28 +272,23 @@ export default function Home() {
           wrSubmissionUuid: wrEntry?.submission_uuid || "",
           your_time_value,
           score: isValidTime ? scoreFor(wr, your_time, trialName) : 0,
-        };
+        }
       }),
     [times, worldRecords]
-  );
+  )
 
   const averageScore = React.useMemo(() => {
-    if (!rows.length) return 0;
-    return Number(
-      (rows.reduce((sum, row) => sum + row.score, 0) / rows.length).toFixed(3)
-    );
-  }, [rows]);
+    if (!rows.length) return 0
+    return Number((rows.reduce((sum, row) => sum + row.score, 0) / rows.length).toFixed(3))
+  }, [rows])
 
   const resetTimes = (trial: string) => {
-    setTimes((current) => ({
-      ...current,
-      [trial]: pbs[trial],
-    }));
-  };
+    setTimes((current) => ({ ...current, [trial]: pbs[trial] }))
+  }
 
   const handleTimeChange = (trial: string, value: string) => {
-    setTimes((current) => ({ ...current, [trial]: value }));
-  };
+    setTimes((current) => ({ ...current, [trial]: value }))
+  }
 
   const statusMessage = worldRecordError
     ? worldRecordError
@@ -327,7 +310,7 @@ export default function Home() {
         ) : null}
 
         <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
+          <div className="rounded-lg border border-border px-3 py-2.5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Filter</p>
@@ -356,31 +339,31 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
+          <div className="rounded-lg border border-border px-3 py-2.5">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Final score</p>
             <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{averageScore.toFixed(3)}</p>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <Table className="min-w-full border-separate border-spacing-0">
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <Table className="min-w-full">
             <TableHeader>
-              <TableRow className="bg-muted/70">
-                <TableHead className="rounded-tl-xl px-2 py-1.5">Trial</TableHead>
+              <TableRow className="bg-muted">
+                <TableHead className="px-2 py-1.5">Trial</TableHead>
                 <TableHead className="px-2 py-1.5">WR</TableHead>
                 <TableHead className="px-2 py-1.5">Time</TableHead>
-                <TableHead className="rounded-tr-xl px-2 py-1.5 text-right">Score</TableHead>
+                <TableHead className="px-2 py-1.5 text-right">Score</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
-                <TableRow key={row.trial} className="bg-background">
+                <TableRow key={row.trial}>
                   <TableCell className="px-2 py-1 text-xs font-semibold leading-none">{row.trial}</TableCell>
-                  <TableCell className="px-2 py-1 text-left text-xs font-medium text-sky-600">
+                  <TableCell className="px-2 py-1 text-left text-xs font-medium text-primary">
                     {row.wrSubmissionUuid ? (
                       <Link
                         href={`/submissions/${encodeURIComponent(row.wrSubmissionUuid)}`}
-                        className="underline underline-offset-4 transition hover:text-sky-700"
+                        className="underline underline-offset-4"
                       >
                         {row.wr ? row.wr.toFixed(3) : "0.000"}
                       </Link>
@@ -411,7 +394,7 @@ export default function Home() {
                       </button>
                     </div>
                   </TableCell>
-                  <TableCell className="px-2 py-1 text-right text-xs font-semibold text-emerald-600">
+                  <TableCell className="px-2 py-1 text-right text-xs font-semibold">
                     {row.score.toFixed(3)}
                   </TableCell>
                 </TableRow>
@@ -421,5 +404,5 @@ export default function Home() {
         </div>
       </div>
     </PageShell>
-  );
+  )
 }

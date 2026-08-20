@@ -6,9 +6,10 @@ import { canModerate } from "@/lib/server/auth"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
 import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
-import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
+import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
+import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
 import {
   deleteBotThread,
   getRankLabel,
@@ -271,35 +272,47 @@ export async function resolveModeratorUser(
   }
 }
 
-async function calculateAverageScoreDeltaForWrChange(
+// Computes each player's score delta caused by a WR change on one trial —
+// calculateScore(newWr, theirPbTime) - calculateScore(oldWr, theirPbTime),
+// divided by the trial count since that's how it rolls into their overall
+// average — then averages that across every player (players with no PB on
+// this trial have a delta of 0, and are still counted in the average, since
+// "average across all users" includes everyone, not just participants).
+async function calculateAverageScoreChangeForWrChange(
   db: D1Database,
   trialName: string,
   oldWr: number | null,
   newWr: number
 ) {
-  const playerCountRow = await db.prepare(`SELECT COUNT(*) AS count FROM players`).first<{ count: number }>()
+  const trial = trialName as TrialName
+  const now = Math.floor(Date.now() / 1000)
+
+  const [playerCountRow, trialCount, pbResult] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) AS count FROM players`).first<{ count: number }>(),
+    getCountedTrialCount(db, now),
+    db.prepare(`SELECT time FROM pbs WHERE trial_name = ?`).bind(trialName).all<{ time: number }>(),
+  ])
+
   const playerCount = Number(playerCountRow?.count ?? 0)
 
-  if (!playerCount) {
+  if (!playerCount || trialCount <= 0) {
     return 0
   }
 
-  const deltaRow = await db.prepare(
-    `SELECT SUM(
-       ((? / time) * (? / time) * (? / time))
-       - CASE WHEN ? > 0 THEN ((? / time) * (? / time) * (? / time)) ELSE 0 END
-     ) AS total_delta
-     FROM pbs
-     WHERE trial_name = ?`
-  )
-    .bind(newWr, newWr, newWr, oldWr ?? 0, oldWr ?? 0, oldWr ?? 0, oldWr ?? 0, trialName)
-    .first<{ total_delta: number | null }>()
+  let totalDelta = 0
 
-  const totalDelta = Number(deltaRow?.total_delta ?? 0)
-  const trialCountRow = await db.prepare(`SELECT COUNT(*) AS count FROM trials`).first<{ count: number }>()
-  const trialCount = Number(trialCountRow?.count ?? 1)
+  for (const row of pbResult.results || []) {
+    const time = Number(row.time)
+    if (!Number.isFinite(time) || time <= 0) {
+      continue
+    }
 
-  return Number((totalDelta / playerCount / trialCount).toFixed(3))
+    const newScore = calculateScore(newWr, time, trial)
+    const oldScore = oldWr && oldWr > 0 ? calculateScore(oldWr, time, trial) : 0
+    totalDelta += (newScore - oldScore) / trialCount
+  }
+
+  return Number((totalDelta / playerCount).toFixed(4))
 }
 
 export async function patchSubmission(
@@ -393,7 +406,7 @@ export async function patchSubmission(
   ctx.waitUntil((async () => {
     try {
       const db = env.wasans
-      const [previousWrResult, oldPbResult, trialCountRow] = await Promise.all([
+      const [previousWrResult, oldPbResult, trialCount] = await Promise.all([
         db.prepare(
           `SELECT w.trial_name, w.submission_uuid, w.player_uuid, w.player_name, w.time, w.date, s.thread_id AS previous_thread_id
           FROM wrs w
@@ -403,14 +416,13 @@ export async function patchSubmission(
         db.prepare(`SELECT trial_name, time FROM pbs WHERE player_uuid = ?`)
           .bind(submission.player_uuid)
           .all<ScorePbRow>(),
-        db.prepare(`SELECT COUNT(*) AS count FROM trials`).first<{ count: number }>(),
+        getCountedTrialCount(db, Math.floor(Date.now() / 1000)),
       ])
 
       const previousWrRows = previousWrResult.results || []
       const oldPbRows = oldPbResult.results || []
       const previousWrRow = previousWrRows.find((row) => row.trial_name === submission.trial_name) ?? null
       const beforeWrTimes = new Map<TrialName, number>(previousWrRows.map((row) => [row.trial_name, Number(row.time)] as const))
-      const trialCount = Number(trialCountRow?.count ?? 0)
       const beforeScore = scoreFromPbs(oldPbRows, beforeWrTimes, trialCount)
 
       const previousPbRow = previousState === "approved"
@@ -519,14 +531,22 @@ export async function patchSubmission(
         timeChanged,
         noteChanged,
       })
+      const shouldCreateThread = !hasExistingThread && (
+        submissionIsWr
+        || (newState === "approved" && previousState !== "approved")
+      )
+
+      // Computed once, up front — before any score refresh / Discord
+      // username sync runs below — and reused for both the "update an
+      // existing thread" and "create a new thread" paths, rather than
+      // recomputing it a second time after scores have already moved.
+      let averageScoreChange: number | undefined
+      if (submissionIsWr && wrRow && (shouldUpdateThread || shouldCreateThread)) {
+        const oldWr = previousWrRow?.time ?? null
+        averageScoreChange = await calculateAverageScoreChangeForWrChange(db, submission.trial_name, oldWr, wrRow.time).catch(() => undefined)
+      }
 
       if (shouldUpdateThread && submission.thread_id) {
-        let averageScoreDelta: number | undefined
-        if (submissionIsWr && wrRow) {
-          const oldWr = previousWrRow?.time ?? null
-          averageScoreDelta = await calculateAverageScoreDeltaForWrChange(db, submission.trial_name, oldWr, wrRow.time).catch(() => undefined)
-        }
-
         const previousToShow = previousWrRow?.submission_uuid === uuid ? wrRow : previousWrRow
         const previousWrThreadId = previousToShow?.previous_thread_id ?? undefined
         const updateOldTime = previousPbRow?.time ?? oldPb?.time
@@ -541,7 +561,7 @@ export async function patchSubmission(
           oldPlayerScore: playerScoreBefore,
           oldTime: updateOldTime,
           discordUserId: String(oldPlayer?.player_id),
-          averageScoreDelta,
+          averageScoreChange,
           is_wr: submissionIsWr,
           previous_wr_submission_uuid: previousToShow?.submission_uuid,
           previous_wr_time: previousToShow?.time,
@@ -552,15 +572,10 @@ export async function patchSubmission(
         }).catch(() => false)
       }
 
-      const shouldCreateThread = !hasExistingThread && (
-        submissionIsWr
-        || (newState === "approved" && previousState !== "approved")
-      )
-
       if (scoreRecalculationNeeded) {
         await refreshPlayerPbs(db, submission.player_uuid)
         if (shouldRefreshEveryone) {
-          await refreshAllPlayerScores(db, { discordUpdateMode: "all" })
+          await refreshScoresForTrial(db, submission.trial_name, { discordUpdateMode: "all" })
         } else if (wasApproved || isApproved) {
           await refreshPlayerScore(db, submission.player_uuid)
         }
@@ -569,11 +584,6 @@ export async function patchSubmission(
       if (!shouldCreateThread || !wrRow) {
         return
       }
-
-      const oldWr = previousWrRow?.time ?? null
-      const averageScoreDelta = submissionIsWr
-        ? await calculateAverageScoreDeltaForWrChange(db, submission.trial_name, oldWr, wrRow.time).catch(() => undefined)
-        : undefined
 
       const approvedRun = {
         submission_uuid: updatedSubmission.uuid,
@@ -585,7 +595,7 @@ export async function patchSubmission(
         oldPlayerScore: playerScoreBefore,
         oldTime: oldPb?.time,
         discordUserId: String(oldPlayer?.player_id),
-        averageScoreDelta,
+        averageScoreChange,
         is_wr: submissionIsWr,
         previous_wr_submission_uuid: previousWrRow?.submission_uuid,
         previous_wr_time: previousWrRow?.time,
@@ -649,9 +659,9 @@ export async function deleteSubmission(
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       if (isWr && wrTrialName) {
         await refreshWorldRecords(env.wasans, wrTrialName, user)
-        // Only refresh all scores if a world record was deleted
-        // refreshWorldRecords will handle updating the affected trial
-        await refreshAllPlayerScores(env.wasans)
+        // Only players with a PB on the affected trial can have had their
+        // score change, so only refresh those instead of every player.
+        await refreshScoresForTrial(env.wasans, wrTrialName, { discordUpdateMode: "all" })
       } else {
         // For non-WR deletions, only refresh the deleting player's score
         await refreshPlayerScore(env.wasans, submission.player_uuid)

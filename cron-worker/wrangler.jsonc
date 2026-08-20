@@ -1,0 +1,9 @@
+{
+	"$schema": "../node_modules/wrangler/config-schema.json",
+	"name": "wasans-trial-sweep",
+	"main": "src/index.js",
+	"compatibility_date": "2026-04-25",
+	"triggers": {
+		"crons": ["0 6 * * *"]
+	}
+}
