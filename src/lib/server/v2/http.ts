@@ -1,6 +1,7 @@
 import "server-only"
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { getRequestId, jsonError, type ApiErrorCode } from "@/lib/server/http"
+import { canModerate, isOwner, loadAuthUserByUuid, type AuthUser } from "@/lib/server/auth"
 import { signJwt, verifyJwt } from "./jwt"
 
 export { getRequestId } from "@/lib/server/http"
@@ -16,6 +17,7 @@ export type V2Context = {
   env: CloudflareEnv
   db: D1Database
   cache: KVNamespace
+  ctx: ExecutionContext
   requestId: string
   auth: V2Auth | null
 }
@@ -33,6 +35,41 @@ export class ApiError extends Error {
     this.code = code
     this.details = details
   }
+}
+
+// Loads the full AuthUser for the current JWT and throws a standard 401/403
+// ApiError if they're missing or don't have the required permission tier —
+// used by every moderator/owner-gated v2 route instead of repeating the
+// load-and-check boilerplate.
+export async function requireV2User(ctx: V2Context): Promise<AuthUser> {
+  if (!ctx.auth) {
+    throw new ApiError("Authentication required", 401, "unauthorized")
+  }
+
+  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request)
+  if (!user) {
+    throw new ApiError("Authentication required", 401, "unauthorized")
+  }
+
+  return user
+}
+
+export async function requireV2Moderator(ctx: V2Context): Promise<AuthUser> {
+  const user = await requireV2User(ctx)
+  if (!canModerate(user)) {
+    throw new ApiError("Moderator permission is required", 403, "forbidden")
+  }
+
+  return user
+}
+
+export async function requireV2Owner(ctx: V2Context): Promise<AuthUser> {
+  const user = await requireV2User(ctx)
+  if (!isOwner(user)) {
+    throw new ApiError("Owner permission is required", 403, "forbidden")
+  }
+
+  return user
 }
 
 function getCookie(request: Request, name: string) {
@@ -136,7 +173,7 @@ export function withV2Context<TParams = Record<string, never>>(
     const requestId = getRequestId(request)
 
     try {
-      const { env } = await getCloudflareContext({ async: true })
+      const { env, ctx } = await getCloudflareContext({ async: true })
 
       if (!env?.wasans) {
         return jsonError("DB binding not available", 500, { code: "internal_error", requestId })
@@ -150,7 +187,7 @@ export function withV2Context<TParams = Record<string, never>>(
       const auth = await resolveV2Auth(request, secret)
       const params = routeContext ? await routeContext.params : ({} as TParams)
 
-      return await handler({ request, env, db: env.wasans, cache: env.CACHE, requestId, auth }, params)
+      return await handler({ request, env, db: env.wasans, cache: env.CACHE, ctx, requestId, auth }, params)
     } catch (error) {
       if (error instanceof ApiError) {
         return jsonError(error.message, error.status, { code: error.code, requestId, details: error.details })

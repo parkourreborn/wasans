@@ -9,37 +9,27 @@ type ScoreVideoPreviewProps = {
 
 export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [shouldLoad, setShouldLoad] = useState(false)
+  const [isVisible, setIsVisible] = useState(false)
+  const [previewFailed, setPreviewFailed] = useState(false)
   const settings = useSettings()
   const disableSubmissionThumbnails = settings?.disableSubmissionThumbnails ?? false
 
   useEffect(() => {
-    if (disableSubmissionThumbnails) {
-      setShouldLoad(false)
-      return
-    }
-
     const container = containerRef.current
-
     if (!container) {
       return
     }
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        setShouldLoad(entry.isIntersecting)
-      },
-      {
-        rootMargin: "200px",
-      }
+      ([entry]) => setIsVisible(entry.isIntersecting),
+      { rootMargin: "200px" }
     )
 
     observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
 
-    return () => {
-      observer.disconnect()
-    }
-  }, [disableSubmissionThumbnails])
+  const shouldLoad = isVisible && !disableSubmissionThumbnails
 
   return (
     <div ref={containerRef} className="aspect-video max-h-full w-full overflow-hidden rounded-lg bg-muted">
@@ -48,7 +38,17 @@ export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
           Thumbnails disabled
         </div>
       ) : null}
-      {!disableSubmissionThumbnails && shouldLoad && (
+      {shouldLoad && !previewFailed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`https://assets.wasans.tully.sh/scores/${submissionUuid}-preview.jpg`}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setPreviewFailed(true)}
+        />
+      ) : null}
+      {shouldLoad && previewFailed ? (
         <video
           src={`https://assets.wasans.tully.sh/scores/${submissionUuid}.mp4`}
           className="h-full w-full object-cover"
@@ -58,7 +58,7 @@ export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
           preload="metadata"
           aria-hidden="true"
         />
-      )}
+      ) : null}
     </div>
   )
 }

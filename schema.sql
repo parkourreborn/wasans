@@ -215,3 +215,26 @@ CREATE TABLE refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family_id ON refresh_tokens(family_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_player_uuid ON refresh_tokens(player_uuid);
+
+-- Trial lifecycle (see migrations/0002_trial_lifecycle.sql)
+ALTER TABLE trials ADD COLUMN status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE trials ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE trials ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE trials ADD COLUMN version_changed_at INTEGER;
+ALTER TABLE trials ADD COLUMN removed_at INTEGER;
+UPDATE trials SET added_at = CAST(strftime('%s', 'now') AS INTEGER) - 31536000 WHERE added_at = 0;
+ALTER TABLE submissions ADD COLUMN trial_version INTEGER NOT NULL DEFAULT 1;
+CREATE INDEX IF NOT EXISTS idx_submissions_trial_name_version ON submissions(trial_name, trial_version);
+
+-- Feature flags (see migrations/0003_feature_flags.sql)
+DROP TABLE IF EXISTS feature_flags;
+CREATE TABLE feature_flags (
+  key TEXT PRIMARY KEY,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  updated_at INTEGER NOT NULL,
+  updated_by TEXT
+);
+
+INSERT OR IGNORE INTO feature_flags (key, enabled, updated_at) VALUES
+  ('submissions_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER)),
+  ('moderation_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER));

@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { apiV1 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
 import { trials } from "@/lib/trials"
+import { useApiGet } from "@/hooks/use-api"
 import { SubmissionCard } from "@/components/custom/submission-card"
-import { PageHeader, PageShell, SubmissionList } from "@/components/custom/page-shell"
+import { ErrorState, PageHeader, PageShell, SubmissionList } from "@/components/custom/page-shell"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -26,18 +27,11 @@ type Submission = {
   moderator_username?: string | null
 }
 
-type SubmissionsResponse = {
-  results: Submission[]
+type WorldRecordsResponse = {
+  data: Submission[]
 }
 
-type CachedWrs = {
-  results: Submission[]
-  timestamp: number
-}
-
-const WR_CACHE_KEY = "wasans_wrs_cache"
 const submissionUuidListKey = "submission_uuids"
-
 const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
 
 function compareByTrialOrder(aTrialName: string, bTrialName: string) {
@@ -47,15 +41,8 @@ function compareByTrialOrder(aTrialName: string, bTrialName: string) {
   if (aOrder == null && bOrder == null) {
     return aTrialName.localeCompare(bTrialName)
   }
-
-  if (aOrder == null) {
-    return 1
-  }
-
-  if (bOrder == null) {
-    return -1
-  }
-
+  if (aOrder == null) return 1
+  if (bOrder == null) return -1
   return aOrder - bOrder
 }
 
@@ -67,8 +54,7 @@ function formatTime(rawTime: number | string) {
   }
 
   const [, seconds, ms] = match
-  const formattedMs = ms.padEnd(3, "0")
-  return `${String(Number(seconds))}.${formattedMs}`
+  return `${String(Number(seconds))}.${ms.padEnd(3, "0")}`
 }
 
 function formatDate(timestamp: string) {
@@ -80,123 +66,48 @@ function formatDate(timestamp: string) {
   const date = new Date(unixTime * 1000)
   const month = String(date.getMonth() + 1).padStart(2, "0")
   const day = String(date.getDate()).padStart(2, "0")
-  const year = date.getFullYear()
-  return `${month}-${day}-${year}`
+  return `${month}-${day}-${date.getFullYear()}`
 }
 
-function loadCachedSubmissions() {
-  if (typeof window === "undefined") {
-    return null
-  }
-
-  try {
-    const raw = window.localStorage.getItem(WR_CACHE_KEY)
-    if (!raw) {
-      return null
-    }
-
-    const parsed = JSON.parse(raw) as CachedWrs
-    return Array.isArray(parsed?.results) ? parsed.results : null
-  } catch {
-    return null
-  }
-}
-
-export default function SubmissionsPage() {
+export default function WorldRecordsPage() {
   const router = useRouter()
-  const [submissions, setSubmissions] = useState<Submission[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data, loading, error } = useApiGet<WorldRecordsResponse>(apiV2("/records/world"))
+  const submissions = data?.data ?? []
 
-  const wrIds = useMemo(() => {
-    return new Set(submissions.map((submission) => submission.submission_uuid))
-  }, [submissions])
+  const wrIds = useMemo(() => new Set(submissions.map((submission) => submission.submission_uuid)), [submissions])
 
-  const orderedSubmissions = useMemo(() => {
-    return [...submissions].sort((a, b) => compareByTrialOrder(a.trial_name, b.trial_name))
-  }, [submissions])
+  const orderedSubmissions = useMemo(
+    () => [...submissions].sort((a, b) => compareByTrialOrder(a.trial_name, b.trial_name)),
+    [submissions]
+  )
 
   const filteredSubmissions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
-
     if (!normalizedQuery) {
       return orderedSubmissions
     }
-
-    return orderedSubmissions.filter((submission) =>
-      submission.trial_name.toLowerCase().includes(normalizedQuery)
-    )
+    return orderedSubmissions.filter((submission) => submission.trial_name.toLowerCase().includes(normalizedQuery))
   }, [searchQuery, orderedSubmissions])
 
   useEffect(() => {
     if (typeof window === "undefined" || loading) {
       return
     }
-
-    window.localStorage.setItem(
-      submissionUuidListKey,
-      JSON.stringify(filteredSubmissions.map((submission) => submission.submission_uuid))
-    )
+    window.localStorage.setItem(submissionUuidListKey, JSON.stringify(filteredSubmissions.map((s) => s.submission_uuid)))
   }, [filteredSubmissions, loading])
-
-  useEffect(() => {
-    const cachedResults = loadCachedSubmissions()
-
-    if (cachedResults?.length) {
-      setSubmissions(cachedResults)
-      setLoading(false)
-    }
-
-    const fetchSubmissions = async () => {
-      try {
-        const response = await fetch(apiV1("/records/world"), { cache: "no-cache" })
-        if (!response.ok) {
-          if (!cachedResults) {
-            setError("Failed to load submissions")
-          }
-          return
-        }
-
-        const json = (await response.json()) as SubmissionsResponse
-        const results = json.results || []
-        setSubmissions(results)
-
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(
-            WR_CACHE_KEY,
-            JSON.stringify({ results, timestamp: Date.now() })
-          )
-        }
-      } catch (err) {
-        if (!cachedResults) {
-          setError("Error loading submissions")
-        }
-        console.error(err)
-      } finally {
-        if (!cachedResults) {
-          setLoading(false)
-        }
-      }
-    }
-
-    fetchSubmissions()
-  }, [])
 
   if (loading) {
     return (
       <PageShell>
-        <PageHeader
-          title="World Records"
-        />
-        <div className="rounded-3xl border border-border/60 bg-background/55 p-4 backdrop-blur-xl">
+        <PageHeader title="World Records" />
+        <div className="rounded-lg border border-border p-4">
           <Skeleton className="h-10 w-full md:w-72" />
         </div>
-
         <SubmissionList className="submissions-grid">
           {Array.from({ length: 4 }).map((_, index) => (
             <div key={index} className="submission-grid-item">
-              <Card className="h-full overflow-hidden border-border/60 bg-background/55">
+              <Card className="h-full overflow-hidden">
                 <CardContent className="flex h-full min-h-0 gap-4 p-4">
                   <Skeleton className="flex-1 rounded-lg" />
                   <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">
@@ -219,20 +130,8 @@ export default function SubmissionsPage() {
   if (error) {
     return (
       <PageShell>
-        <div className="rounded-3xl border border-border/60 bg-background/55 p-6 text-sm text-destructive backdrop-blur-xl">
-          Unable to load the record board right now.
-          <div className="mt-2">{error}</div>
-        </div>
-      </PageShell>
-    )
-  }
-
-  if (submissions.length === 0) {
-    return (
-      <PageShell>
-        <div className="rounded-3xl border border-border/60 bg-background/55 p-6 text-sm text-muted-foreground backdrop-blur-xl">
-          No approved world records are available yet.
-        </div>
+        <PageHeader title="World Records" />
+        <ErrorState message={error} />
       </PageShell>
     )
   }
@@ -241,7 +140,7 @@ export default function SubmissionsPage() {
     <PageShell>
       <PageHeader title="World Records" />
 
-      <div className="sticky top-14 z-30 rounded-3xl border border-border/60 bg-background/80 p-4 backdrop-blur-xl md:top-0">
+      <div className="sticky top-14 z-30 rounded-lg border border-border bg-background p-4 md:top-0">
         <Input
           type="search"
           value={searchQuery}
@@ -254,7 +153,7 @@ export default function SubmissionsPage() {
 
       <SubmissionList className="submissions-grid">
         {filteredSubmissions.length === 0 ? (
-          <div className="flex min-h-48 w-full items-center justify-center rounded-2xl border border-dashed border-border/70 bg-background/40 backdrop-blur-xl">
+          <div className="flex min-h-48 w-full items-center justify-center rounded-lg border border-dashed border-border">
             <p className="text-muted-foreground">No matching world records</p>
           </div>
         ) : (
@@ -275,7 +174,6 @@ export default function SubmissionsPage() {
               isWr={wrIds.has(submission.submission_uuid)}
               moderatorNote={submission.moderator_note}
               moderatorUsername={submission.moderator_username}
-              className="h-full cursor-pointer overflow-hidden border-border/60 bg-background/55 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]"
               onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
             />
           ))

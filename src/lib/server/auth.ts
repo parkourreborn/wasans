@@ -88,6 +88,16 @@ export async function getAuthUser(request: Request, db: D1Database) {
   return loadAuthUserByUuid(db, playerUuid, request)
 }
 
-export function canModerate(user: AuthUser | null) {
-  return Boolean(user && user.permission >= 1)
+// players.permission tiers: 0 = member, 1 = moderator, 2 = owner. Owners are
+// moderators too (canModerate is still >= 1) but additionally get feature
+// flag control (see src/lib/server/repositories/feature-flag-repository.ts).
+export const PERMISSION_MODERATOR = 1
+export const PERMISSION_OWNER = 2
+
+export function canModerate(user: { permission: number } | null) {
+  return Boolean(user && user.permission >= PERMISSION_MODERATOR)
+}
+
+export function isOwner(user: { permission: number } | null) {
+  return Boolean(user && user.permission >= PERMISSION_OWNER)
 }

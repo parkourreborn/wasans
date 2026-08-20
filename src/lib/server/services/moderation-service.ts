@@ -6,7 +6,7 @@ import { canModerate } from "@/lib/server/auth"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
 import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
-import { refreshAllPlayerScores, refreshPlayerScore } from "@/lib/server/player-scores"
+import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
@@ -531,14 +531,22 @@ export async function patchSubmission(
         timeChanged,
         noteChanged,
       })
+      const shouldCreateThread = !hasExistingThread && (
+        submissionIsWr
+        || (newState === "approved" && previousState !== "approved")
+      )
+
+      // Computed once, up front — before any score refresh / Discord
+      // username sync runs below — and reused for both the "update an
+      // existing thread" and "create a new thread" paths, rather than
+      // recomputing it a second time after scores have already moved.
+      let averageScoreChange: number | undefined
+      if (submissionIsWr && wrRow && (shouldUpdateThread || shouldCreateThread)) {
+        const oldWr = previousWrRow?.time ?? null
+        averageScoreChange = await calculateAverageScoreChangeForWrChange(db, submission.trial_name, oldWr, wrRow.time).catch(() => undefined)
+      }
 
       if (shouldUpdateThread && submission.thread_id) {
-        let averageScoreChange: number | undefined
-        if (submissionIsWr && wrRow) {
-          const oldWr = previousWrRow?.time ?? null
-          averageScoreChange = await calculateAverageScoreChangeForWrChange(db, submission.trial_name, oldWr, wrRow.time).catch(() => undefined)
-        }
-
         const previousToShow = previousWrRow?.submission_uuid === uuid ? wrRow : previousWrRow
         const previousWrThreadId = previousToShow?.previous_thread_id ?? undefined
         const updateOldTime = previousPbRow?.time ?? oldPb?.time
@@ -564,15 +572,10 @@ export async function patchSubmission(
         }).catch(() => false)
       }
 
-      const shouldCreateThread = !hasExistingThread && (
-        submissionIsWr
-        || (newState === "approved" && previousState !== "approved")
-      )
-
       if (scoreRecalculationNeeded) {
         await refreshPlayerPbs(db, submission.player_uuid)
         if (shouldRefreshEveryone) {
-          await refreshAllPlayerScores(db, { discordUpdateMode: "all" })
+          await refreshScoresForTrial(db, submission.trial_name, { discordUpdateMode: "all" })
         } else if (wasApproved || isApproved) {
           await refreshPlayerScore(db, submission.player_uuid)
         }
@@ -581,11 +584,6 @@ export async function patchSubmission(
       if (!shouldCreateThread || !wrRow) {
         return
       }
-
-      const oldWr = previousWrRow?.time ?? null
-      const averageScoreChange = submissionIsWr
-        ? await calculateAverageScoreChangeForWrChange(db, submission.trial_name, oldWr, wrRow.time).catch(() => undefined)
-        : undefined
 
       const approvedRun = {
         submission_uuid: updatedSubmission.uuid,
@@ -661,9 +659,9 @@ export async function deleteSubmission(
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       if (isWr && wrTrialName) {
         await refreshWorldRecords(env.wasans, wrTrialName, user)
-        // Only refresh all scores if a world record was deleted
-        // refreshWorldRecords will handle updating the affected trial
-        await refreshAllPlayerScores(env.wasans)
+        // Only players with a PB on the affected trial can have had their
+        // score change, so only refresh those instead of every player.
+        await refreshScoresForTrial(env.wasans, wrTrialName, { discordUpdateMode: "all" })
       } else {
         // For non-WR deletions, only refresh the deleting player's score
         await refreshPlayerScore(env.wasans, submission.player_uuid)

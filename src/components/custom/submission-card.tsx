@@ -59,7 +59,7 @@ export function SubmissionCard({
         }
       }}
     >
-      <Card className={className || "h-full hover:shadow-lg transition-shadow overflow-hidden"}>
+      <Card className={className || "h-full overflow-hidden transition-colors hover:border-foreground/30"}>
         <CardContent className="flex h-full min-h-0 gap-4 p-4">
           <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
             <ScoreVideoPreview submissionUuid={submissionUuid} />

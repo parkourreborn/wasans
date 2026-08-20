@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { PageHeader, PageShell } from "@/components/custom/page-shell"
 
 type AuthUser = {
   uuid: string
@@ -227,35 +228,33 @@ export default function LogsPage() {
 
   if (!user || user.permission < 1) {
     return (
-      <div className="space-y-4 p-6">
-        <h1 className="text-3xl font-bold">Logs</h1>
+      <PageShell>
+        <PageHeader title="Logs" />
         <p className="text-sm text-muted-foreground">You do not have permission to view this page.</p>
-      </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold">Logs</h1>
+    <PageShell>
+      <PageHeader
+        title="Logs"
+        description="Moderator dashboard for audit activity, site errors, failed requests, and client crashes."
+        actions={
+          <>
             {summary?.errors ? (
               <Badge variant="destructive">
                 <AlertTriangleIcon />
                 {summary.errors} errors
               </Badge>
             ) : null}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Moderator dashboard for audit activity, site errors, failed requests, and client crashes.
-          </p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => void loadLogs()} disabled={refreshing}>
-          <RefreshCcwIcon />
-          Refresh
-        </Button>
-      </div>
+            <Button type="button" variant="outline" onClick={() => void loadLogs()} disabled={refreshing}>
+              <RefreshCcwIcon />
+              Refresh
+            </Button>
+          </>
+        }
+      />
 
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
@@ -282,7 +281,7 @@ export default function LogsPage() {
         </div>
       </div>
 
-      <div className="sticky top-14 z-30 space-y-3 rounded-md border border-border bg-background/85 p-4 backdrop-blur-xl md:top-0">
+      <div className="sticky top-14 z-30 space-y-3 rounded-md border border-border bg-background p-4 md:top-0">
         <div className="flex items-center gap-2 text-sm font-medium">
           <FilterIcon className="size-4" />
           Diagnostics
@@ -434,6 +433,6 @@ export default function LogsPage() {
           </TableBody>
         </Table>
       </div>
-    </div>
+    </PageShell>
   )
 }

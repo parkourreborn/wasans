@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
-import { apiV1 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
 import { TrialName, trials } from "@/lib/trials"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
@@ -32,6 +32,7 @@ import { Spinner } from "@/components/ui/spinner"
 import calculateScore from "@/lib/calc-score"
 import { createFile } from "mp4box"
 import { getSubmissionErrorMessage } from "@/lib/submission-errors"
+import { captureVideoFrame } from "@/lib/video-thumbnail"
 
 type SubmissionDraft = {
   id: string
@@ -54,14 +55,16 @@ type WorldRecordValue = {
 }
 
 type ListResponse<T> = {
-  results?: T[]
+  data?: T[]
   error?: string | { message?: string }
 }
 
 type AuthResponse = {
-  user?: {
-    uuid: string
-  } | null
+  data?: {
+    user?: {
+      uuid: string
+    } | null
+  }
 }
 
 type UploadState = {
@@ -212,7 +215,7 @@ async function getWorldRecords() {
     return cachedWorldRecords
   }
 
-  worldRecordsRequest ??= fetch(apiV1("/records/world"), { cache: "force-cache" })
+  worldRecordsRequest ??= fetch(apiV2("/records/world"), { cache: "force-cache" })
     .then(async (response) => {
       const json = (await response.json()) as ListResponse<WorldRecordValue>
 
@@ -221,7 +224,7 @@ async function getWorldRecords() {
       }
 
       cachedWorldRecords = Object.fromEntries(
-        (json.results || []).map((record) => [
+        (json.data || []).map((record) => [
           record.trial_name,
           Number(record.time),
         ])
@@ -250,12 +253,18 @@ function formatTime(value: number) {
   return value.toFixed(3).replace(/\.?0+$/, "")
 }
 
-function uploadSubmissions(
+async function uploadSubmissions(
   submissions: SubmissionDraft[],
   onProgress: (progress: number, status: UploadState["status"], message?: string) => void,
   hasMedalLink: boolean,
   idempotencyKey: string
 ) {
+  const previewBlobs = await Promise.all(
+    submissions.map((submission) =>
+      submission.proof_file ? captureVideoFrame(submission.proof_file).catch(() => null) : Promise.resolve(null)
+    )
+  )
+
   return new Promise<ListResponse<unknown>>((resolve, reject) => {
     const payload = submissions.map((submission) => ({
       trial_name: submission.trial_name,
@@ -270,6 +279,9 @@ function uploadSubmissions(
     submissions.forEach((submission, index) => {
       if (submission.proof_file) {
         formData.append(`proof_file_${index}`, submission.proof_file)
+      }
+      if (previewBlobs[index]) {
+        formData.append(`preview_file_${index}`, previewBlobs[index] as Blob, "preview.jpg")
       }
     })
 
@@ -322,7 +334,7 @@ function uploadSubmissions(
     }
 
     onProgress(0, "uploading", "Preparing upload")
-    request.open("POST", apiV1("/submissions"))
+    request.open("POST", apiV2("/submissions"))
     request.setRequestHeader("Idempotency-Key", idempotencyKey)
     request.send(formData)
   })
@@ -345,19 +357,19 @@ export default function NewSubmissionPage() {
   useEffect(() => {
     const loadContext = async () => {
       try {
-        const authResponse = await fetch(apiV1("/auth/me"))
+        const authResponse = await fetch(apiV2("/auth/me"))
         const authJson = (await authResponse.json().catch(() => null)) as AuthResponse | null
-        const activePlayerUuid = authJson?.user?.uuid || ""
+        const activePlayerUuid = authJson?.data?.user?.uuid || ""
 
         if (!authResponse.ok || !activePlayerUuid) {
           setError("Sign in with Discord to create submissions.")
           return
         }
 
-        setAuthUser(authJson?.user || null)
+        setAuthUser(authJson?.data?.user || null)
 
         const [pbResponse, wrValues] = await Promise.all([
-          fetch(`${apiV1("/submissions")}?player_uuid=${encodeURIComponent(activePlayerUuid)}&state=approved&page=1&limit=100`),
+          fetch(`${apiV2("/submissions")}?player_uuid=${encodeURIComponent(activePlayerUuid)}&state=approved&page=1&limit=100`),
           getWorldRecords(),
         ])
         const pbJson = (await pbResponse.json()) as ListResponse<SubmissionValue>
@@ -368,7 +380,7 @@ export default function NewSubmissionPage() {
 
         const nextPersonalBests: Record<string, number> = {}
 
-        for (const submission of pbJson.results || []) {
+        for (const submission of pbJson.data || []) {
           if (submission.state === "denied") {
             continue
           }
@@ -627,7 +639,7 @@ export default function NewSubmissionPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction asChild>
               <a
-                href={apiV1("/auth/discord/start")}
+                href={apiV2("/auth/discord/start")}
                 className="inline-flex w-full items-center justify-center"
               >
                 Sign in with Discord

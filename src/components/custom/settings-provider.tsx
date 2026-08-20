@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input"
 import { SidebarMenuButton } from "@/components/ui/sidebar"
 import { Switch } from "@/components/ui/switch"
 import { accountDeletePhrase } from "@/lib/account-deletion"
-import { apiV1 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
 import { validatePlayerName } from "@/lib/player-name"
 
 type SettingsContextValue = {
@@ -48,7 +48,7 @@ type SettingsUser = {
 }
 
 type AccountResponse = {
-  user?: SettingsUser
+  data?: { user?: SettingsUser }
   error?: {
     code?: string
     message?: string
@@ -163,7 +163,7 @@ export function FloatingSettingsModal({
 
     setUpdatingScore(true)
 
-    const response = await fetch(apiV1("/auth/me/score"), {
+    const response = await fetch(apiV2("/auth/me/score"), {
       method: "POST",
       cache: "no-store",
     }).catch(() => null)
@@ -215,7 +215,7 @@ export function FloatingSettingsModal({
     setAccountError(null)
 
     try {
-      const response = await fetch(apiV1("/account"), {
+      const response = await fetch(apiV2("/account"), {
         method: "PATCH",
         cache: "no-store",
         headers: { "content-type": "application/json" },
@@ -232,7 +232,7 @@ export function FloatingSettingsModal({
         throw new Error(json?.error?.message || "Username update failed")
       }
 
-      const nextUser = json?.user || { ...user, player_name: name.playerName }
+      const nextUser = json?.data?.user || { ...user, player_name: name.playerName }
       onUserUpdate?.(nextUser)
       setPlayerName(nextUser.player_name)
       setEditingName(false)
@@ -253,7 +253,7 @@ export function FloatingSettingsModal({
     setAccountError(null)
 
     try {
-      const response = await fetch(apiV1("/auth/logout"), {
+      const response = await fetch(apiV2("/auth/logout"), {
         method: "POST",
         cache: "no-store",
       })
@@ -291,7 +291,7 @@ export function FloatingSettingsModal({
     }
 
     try {
-      const response = await fetch(apiV1(action === "deactivate" ? "/account/deactivate" : "/account"), {
+      const response = await fetch(apiV2(action === "deactivate" ? "/account/deactivate" : "/account"), {
         method: action === "deactivate" ? "POST" : "DELETE",
         cache: "no-store",
         headers: action === "delete" ? { "content-type": "application/json" } : undefined,

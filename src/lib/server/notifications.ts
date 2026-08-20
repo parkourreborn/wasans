@@ -421,77 +421,103 @@ export async function updateSubmissionThreadContent(
 }
 
 
-export async function updateDiscordUsernameOnScoreChange(playerUuid: string, oldScore = 0) {
+type BatchRequestItem = { id: string; route: string; body: Record<string, unknown> }
+
+// Syncs Discord nickname/rank-role state for many players in as few HTTP
+// calls to the bot as possible: one DB query for all their current rows,
+// then their member-sync (+ optional promotion/demotion DM) requests are
+// packed into /v3/batch calls instead of firing one HTTP request per player.
+export async function syncDiscordMembersOnScoreChange(players: Array<{ playerUuid: string; oldScore: number }>) {
+  const uniquePlayers = players.filter((entry) => entry.playerUuid)
+  if (!uniquePlayers.length) {
+    return
+  }
+
   try {
     const { env } = await getCloudflareContext({ async: true })
     await ensurePlayerAvatarColumns(env.wasans)
-    const row = await env.wasans.prepare(
-      `SELECT player_id, score, player_name, account_status FROM players WHERE uuid = ?`)
-      .bind(playerUuid)
-      .first<{ player_id: string, score: number, player_name: string, account_status?: string | null }>()
 
-    if (!row || (row.account_status || "active") !== "active") {
-      return
-    }
+    const placeholders = uniquePlayers.map(() => "?").join(",")
+    const { results } = await env.wasans.prepare(
+      `SELECT uuid, player_id, score, player_name, account_status FROM players WHERE uuid IN (${placeholders})`
+    )
+      .bind(...uniquePlayers.map((entry) => entry.playerUuid))
+      .all<{ uuid: string; player_id: string; score: number; player_name: string; account_status?: string | null }>()
 
-    const playerId = row.player_id
-    const score = row.score
-    const playerName = row.player_name
-    const oldRoleId = getRoleForScore(oldScore)
-    const newRoleId = getRoleForScore(score)
+    const rowByUuid = new Map((results || []).map((row) => [row.uuid, row]))
+    const items: BatchRequestItem[] = []
+    let counter = 0
 
-    const memberSyncBody = {
-      discord_user_id: playerId,
-      scope: "ranking",
-      score,
-      nickname: `${playerName} (${score.toFixed(3)})`,
-      options: {
-        update_nickname: true,
-        remove_unlisted_in_scope: true,
-      },
-    }
+    for (const { playerUuid, oldScore } of uniquePlayers) {
+      const row = rowByUuid.get(playerUuid)
+      if (!row || (row.account_status || "active") !== "active") {
+        continue
+      }
 
-    const roleChanged = Boolean(oldRoleId && newRoleId && oldRoleId !== newRoleId)
+      const playerId = row.player_id
+      const score = row.score
+      const playerName = row.player_name
+      const oldRoleId = getRoleForScore(oldScore)
+      const newRoleId = getRoleForScore(score)
+      const roleChanged = Boolean(oldRoleId && newRoleId && oldRoleId !== newRoleId)
 
-    try {
+      counter += 1
+      items.push({
+        id: `member-sync-${counter}`,
+        route: "/v3/members/sync",
+        body: {
+          discord_user_id: playerId,
+          scope: "ranking",
+          score,
+          nickname: `${playerName} (${score.toFixed(3)})`,
+          options: {
+            update_nickname: true,
+            remove_unlisted_in_scope: true,
+          },
+        },
+      })
+
       if (roleChanged && oldRoleId && newRoleId) {
-        const oldIndex = getRoleIndex(oldRoleId)
-        const newIndex = getRoleIndex(newRoleId)
-        const isPromotion = newIndex > oldIndex
+        const isPromotion = getRoleIndex(newRoleId) > getRoleIndex(oldRoleId)
         const action = isPromotion ? "promoted" : "demoted"
         const oldRoleName = roleNames[oldRoleId] ?? oldRoleId
         const newRoleName = roleNames[newRoleId] ?? newRoleId
 
-        await sendBotApiRequest("/v3/batch", {
-          requests: [
-            {
-              id: "member-sync",
-              route: "/v3/members/sync",
-              body: memberSyncBody,
+        items.push({
+          id: `promotion-dm-${counter}`,
+          route: "/v3/messages/dm",
+          body: {
+            discord_user_id: playerId,
+            content: `${isPromotion ? "🎉 " : "😭 "}You have been ${action} from ${oldRoleName} to ${newRoleName}!`,
+            options: {
+              fail_if_cannot_dm: false,
             },
-            {
-              id: "promotion-dm",
-              route: "/v3/messages/dm",
-              body: {
-                discord_user_id: playerId,
-                content: `${isPromotion ? "🎉 ": "😭 "}You have been ${action} from ${oldRoleName} to ${newRoleName}!`,
-                options: {
-                  fail_if_cannot_dm: false,
-                },
-              },
-            },
-          ],
-          options: {
-            continue_on_error: true,
           },
         })
-      } else {
-        await sendBotApiRequest("/v3/members/sync", memberSyncBody)
       }
-    } catch (error) {
-      console.error("Failed to sync Discord member state on score change:", error)
+    }
+
+    if (!items.length) {
+      return
+    }
+
+    // Keep each HTTP call to the bot a reasonable size instead of sending
+    // one enormous request during a mass rescore (e.g. a WR change).
+    const CHUNK_SIZE = 100
+    for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+      const chunk = items.slice(i, i + CHUNK_SIZE)
+      await sendBotApiRequest("/v3/batch", {
+        requests: chunk,
+        options: { continue_on_error: true },
+      }).catch((error) => {
+        console.error("Failed to sync Discord member state batch:", error)
+      })
     }
   } catch (error) {
-    console.error("updateDiscordUsernameOnScoreChange failed:", error)
+    console.error("syncDiscordMembersOnScoreChange failed:", error)
   }
+}
+
+export async function updateDiscordUsernameOnScoreChange(playerUuid: string, oldScore = 0) {
+  await syncDiscordMembersOnScoreChange([{ playerUuid, oldScore }])
 }

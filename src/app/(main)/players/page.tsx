@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { apiV1 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { ErrorState, PageHeader, PageShell } from "@/components/custom/page-shell"
 import { Card, CardContent } from "@/components/ui/card"
@@ -18,8 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { trials } from "@/lib/trials"
-import { TrialName } from "@/lib/trials"
+import { trials, TrialName } from "@/lib/trials"
 
 type OverallPlayer = {
   uuid: string
@@ -42,17 +41,8 @@ type TrialPlayer = {
   rank: number | null
 }
 
-type PlayersResponse = {
-  results?: OverallPlayer[]
-  count?: number
-  error?: string
-}
-
-type TrialLeaderboardResponse = {
-  results?: TrialPlayer[]
-  total?: number
-  error?: string
-}
+type PlayersResponse = { data?: OverallPlayer[]; error?: { message?: string } }
+type TrialLeaderboardResponse = { data?: { wr?: unknown; results?: TrialPlayer[] }; error?: { message?: string } }
 
 type Mode = "overall" | "trial"
 
@@ -95,8 +85,6 @@ export default function PlayersPage() {
     })
   }, [rows, searchQuery])
 
-  const populatedRows = rows.filter((row) => row.rank != null || row.overallScore != null || row.trialTime != null)
-
   useEffect(() => {
     const loadRows = async () => {
       if (!hasLoadedRowsRef.current) {
@@ -108,14 +96,14 @@ export default function PlayersPage() {
 
       try {
         if (mode === "overall") {
-          const response = await fetch(`${apiV1("/players")}?page=1&limit=500`, { cache: "no-store" })
+          const response = await fetch(`${apiV2("/players")}?page=1&limit=500`, { cache: "no-store" })
           const json = (await response.json()) as PlayersResponse
 
           if (!response.ok) {
-            throw new Error(json.error || "Unable to load players")
+            throw new Error(json.error?.message || "Unable to load players")
           }
 
-          const result = (json.results || []).map((row, index) => ({
+          const result = (json.data || []).map((row, index) => ({
             playerUuid: row.uuid,
             playerName: row.player_name,
             playerId: row.player_id,
@@ -130,16 +118,16 @@ export default function PlayersPage() {
           return
         }
 
-        const response = await fetch(`${apiV1(`/leaderboards/trials/${encodeURIComponent(trialName)}`)}?page=1&limit=500`, {
+        const response = await fetch(`${apiV2(`/leaderboards/trials/${encodeURIComponent(trialName)}`)}?page=1&limit=500`, {
           cache: "no-store",
         })
         const json = (await response.json()) as TrialLeaderboardResponse
 
         if (!response.ok) {
-          throw new Error(json.error || "Unable to load trial leaderboard")
+          throw new Error(json.error?.message || "Unable to load trial leaderboard")
         }
 
-        const result = (json.results || []).map((row, index) => ({
+        const result = (json.data?.results || []).map((row, index) => ({
           playerUuid: row.player_uuid,
           playerId: row.player_id,
           playerAvatar: row.discord_avatar,
@@ -170,26 +158,19 @@ export default function PlayersPage() {
       <PageShell>
         <PageHeader title="Players" />
 
-        <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Skeleton className="h-9 w-36" />
-                <Skeleton className="h-9 w-56" />
-              </div>
-              <Skeleton className="h-9 w-full lg:max-w-sm" />
+        <div className="rounded-lg border border-border px-3 py-2.5">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Skeleton className="h-9 w-36" />
+              <Skeleton className="h-9 w-56" />
             </div>
-          </div>
-
-          <div className="rounded-2xl border border-border/60 bg-background/55 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/45">
-            <Skeleton className="h-5 w-24" />
-            <Skeleton className="mt-1 h-8 w-20" />
+            <Skeleton className="h-9 w-full lg:max-w-sm" />
           </div>
         </div>
 
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, index) => (
-            <Card key={index} className="overflow-hidden border-border/60 bg-background/55">
+            <Card key={index} className="overflow-hidden">
               <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   <Skeleton className="size-10 rounded-full" />
@@ -230,7 +211,7 @@ export default function PlayersPage() {
     <PageShell>
       <PageHeader title="Players" />
 
-      <div className="sticky top-14 z-30 rounded-2xl border border-border/60 bg-background/80 px-3 py-2.5 backdrop-blur-xl supports-backdrop-filter:bg-background/60 md:top-0">
+      <div className="sticky top-14 z-30 rounded-lg border border-border bg-background px-3 py-2.5 md:top-0">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
           <Input
             type="search"
@@ -270,25 +251,19 @@ export default function PlayersPage() {
       </div>
 
       {isFetching ? (
-        <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner className="size-4" /> Updating results...
         </div>
       ) : null}
 
-        {isFetching ? (
-          <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-4" /> Updating results...
-          </div>
-        ) : null}
-
       {filteredRows.length === 0 ? (
-        <div className="flex min-h-48 w-full items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/15">
+        <div className="flex min-h-48 w-full items-center justify-center rounded-lg border border-dashed border-border">
           <p className="text-muted-foreground">No matching players.</p>
         </div>
       ) : (
         <div className="space-y-2">
           {filteredRows.map((row) => (
-            <Card key={`${mode}-${row.playerUuid}`} className="overflow-hidden border-border/60 bg-background/55 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_24px_52px_-34px_rgba(0,0,0,0.85)]">
+            <Card key={`${mode}-${row.playerUuid}`} className="overflow-hidden transition-colors hover:border-foreground/30">
               <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   <PlayerAvatar

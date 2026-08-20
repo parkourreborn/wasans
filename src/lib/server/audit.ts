@@ -11,6 +11,10 @@ export type AuditAction =
   | "wr_created"
   | "wr_deleted"
   | "wr_changed"
+  | "trial_created"
+  | "trial_retired"
+  | "trial_version_bumped"
+  | "feature_flag_changed"
   | "site_error"
 
 export async function insertAuditLog(

@@ -13,6 +13,7 @@ declare namespace Cloudflare {
 		discordClientSecret: string;
 		botApiKey: string;
 		JWT_SECRET: string;
+		CRON_SECRET: string;
 		CACHE: KVNamespace;
 	}
 }

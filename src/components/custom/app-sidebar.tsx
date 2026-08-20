@@ -1,6 +1,6 @@
 "use client"
 
-import type { CSSProperties, ComponentType, ReactNode } from "react"
+import type { ComponentType, ReactNode } from "react"
 import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -23,8 +23,7 @@ import {
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { FloatingSettingsModal } from "@/components/custom/settings-provider"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
-import { apiV1 } from "@/lib/api"
-import { getRouteTheme, isRouteActive } from "@/lib/route-theme"
+import { apiV1, apiV2 } from "@/lib/api"
 import {
   ArrowRightLeftIcon,
   BookIcon,
@@ -52,7 +51,7 @@ type AuthUser = {
 }
 
 type AuthResponse = {
-  user: AuthUser | null
+  data?: { user: AuthUser | null }
 }
 
 type AuditSummaryResponse = {
@@ -66,6 +65,14 @@ type AuditSummaryResponse = {
 
 const discordInviteUrl = "https://discord.gg/9pnRYDU6wg"
 const lastSeenErrorStorageKey = "wasans:last-seen-error-at"
+
+function isRouteActive(pathname: string, href: string) {
+  if (href === "/") {
+    return pathname === "/"
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
 
 const primaryLinks = [
   { href: "/", label: "Overview", icon: HomeIcon },
@@ -113,30 +120,18 @@ function SidebarNavItem({
   matchExact?: boolean
 }) {
   const Icon = item.icon
-  const theme = getRouteTheme(item.href)
-  // Items with their own sub-items only light up on an exact match, so the
-  // nested page is the single highlighted entry while you are on it.
   const active = matchExact ? pathname === item.href : isRouteActive(pathname, item.href)
 
   const content = (
-    <div className="relative flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       {leading ?? <Icon className="shrink-0" />}
       <span className="truncate">{item.label}</span>
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 -bottom-1 h-0.5 origin-left scale-x-0 rounded-full bg-(--page-accent) transition-transform duration-200 ease-out group-hover/menu-button:scale-x-100 group-focus-visible/menu-button:scale-x-100 group-data-[active=true]/menu-button:scale-x-100"
-      />
     </div>
   )
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        isActive={active}
-        className="relative overflow-visible data-[active=true]:bg-[color-mix(in_oklab,var(--page-accent)_14%,transparent)] data-[active=true]:font-semibold data-[active=true]:text-(--page-accent)"
-        style={{ ["--page-accent" as string]: theme.accent } as CSSProperties}
-      >
+      <SidebarMenuButton asChild isActive={active}>
         {onClick ? (
           <button type="button" className="flex w-full items-center gap-2 text-left cursor-pointer" onClick={onClick}>
             {content}
@@ -151,16 +146,10 @@ function SidebarNavItem({
 
 function SidebarNavSubItem({ item, pathname }: { item: SidebarLinkItem; pathname: string }) {
   const Icon = item.icon
-  const theme = getRouteTheme(item.href)
 
   return (
     <SidebarMenuSubItem>
-      <SidebarMenuSubButton
-        asChild
-        isActive={isRouteActive(pathname, item.href)}
-        className="data-active:bg-[color-mix(in_oklab,var(--page-accent)_14%,transparent)] data-active:font-semibold data-active:text-(--page-accent) data-active:[&>svg]:text-(--page-accent)"
-        style={{ ["--page-accent" as string]: theme.accent } as CSSProperties}
-      >
+      <SidebarMenuSubButton asChild isActive={isRouteActive(pathname, item.href)}>
         <Link href={item.href}>
           <Icon />
           <span>{item.label}</span>
@@ -182,11 +171,11 @@ export function AppSidebar() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const response = await fetch(apiV1("/auth/me"))
+        const response = await fetch(apiV2("/auth/me"))
         const json = (await response.json()) as AuthResponse
 
         if (response.ok) {
-          setUser(json.user)
+          setUser(json.data?.user ?? null)
         }
       } catch (err) {
         console.error(err)
@@ -282,7 +271,7 @@ export function AppSidebar() {
                   matchExact={Boolean(item.children?.length)}
                 />
                 {item.children?.length && isRouteActive(pathname, item.href) ? (
-                  <SidebarMenuSub className="animate-subtle-in">
+                  <SidebarMenuSub>
                     {item.children.map((child) => (
                       <SidebarNavSubItem key={child.href} item={child} pathname={pathname} />
                     ))}
@@ -339,14 +328,14 @@ export function AppSidebar() {
                 {formatPlayerNameWithScore(user.player_name, user.score)}
               </Link>
               <p className="truncate text-xs text-muted-foreground">
-                {user.permission >= 1 ? "Moderator" : "Member"}
+                {user.permission >= 2 ? "Owner" : user.permission >= 1 ? "Moderator" : "Member"}
               </p>
             </div>
           </div>
         ) : (
           <div className="group-data-[collapsible=icon]:hidden">
             <a
-              href={apiV1("/auth/discord/start")}
+              href={apiV2("/auth/discord/start")}
               target="_blank"
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >

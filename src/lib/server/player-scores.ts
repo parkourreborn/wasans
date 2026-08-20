@@ -1,7 +1,7 @@
 import "server-only"
 import calculateScore from "../calc-score"
 import { TrialName } from "../trials"
-import { updateDiscordUsernameOnScoreChange } from "./notifications"
+import { syncDiscordMembersOnScoreChange } from "./notifications"
 import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
 import { validSubmissionSql } from "@/lib/server/trial-lifecycle"
 
@@ -125,11 +125,7 @@ export async function refreshPlayerScores(
   }
 
   if (discordUpdates.length > 0) {
-    await Promise.all(
-      discordUpdates.map(({ playerUuid, oldScore }) =>
-        updateDiscordUsernameOnScoreChange(playerUuid, oldScore)
-      )
-    )
+    await syncDiscordMembersOnScoreChange(discordUpdates)
   }
 
   return refreshedPlayers
@@ -173,7 +169,15 @@ export async function refreshAllPlayerScores(
   }
 }
 
-export async function refreshScoresForTrial(db: D1Database, trialName: string) {
+// Refreshes scores only for players who actually have a current PB on this
+// trial — the complete set affected by a WR change on it — in one batched
+// refreshPlayerScores call, instead of recomputing every player on the site
+// (refreshAllPlayerScores) or looping one-refresh-per-player.
+export async function refreshScoresForTrial(
+  db: D1Database,
+  trialName: string,
+  options: RefreshPlayerScoreOptions = {}
+) {
   const { results } = await db.prepare(
     `SELECT DISTINCT player_uuid
      FROM pbs
@@ -182,7 +186,10 @@ export async function refreshScoresForTrial(db: D1Database, trialName: string) {
     .bind(trialName)
     .all<{ player_uuid: string }>()
 
-  for (const row of results) {
-    await refreshPlayerScore(db, row.player_uuid, { discordUpdateMode: "none" })
+  const playerUuids = (results || []).map((row) => row.player_uuid)
+  if (!playerUuids.length) {
+    return
   }
+
+  await refreshPlayerScores(db, playerUuids, options)
 }

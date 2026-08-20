@@ -55,13 +55,13 @@ body {
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--primary) 55%, transparent);
+  background: color-mix(in oklab, var(--primary) 45%, transparent);
   color: var(--primary-foreground);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #5f5f5f transparent;
+  scrollbar-color: #8a8a8a transparent;
 }
 
 *::-webkit-scrollbar {
@@ -75,81 +75,87 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #5f5f5f;
+  background: #8a8a8a;
   border-radius: 999px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: #7a7a7a;
+  background: #a0a0a0;
 }
 
+/*
+  Minimal, near-grayscale palette with a single accent color (warm amber),
+  used sparingly for links, active nav state, and WR/highlight badges. No
+  per-route theming, gradients, or glass/blur panels — this is a plain
+  functional tool, not a landing page.
+*/
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.16 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.16 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.16 0 0);
+  --primary: oklch(0.6 0.14 60);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.48 0 0);
+  --accent: oklch(0.95 0 0);
+  --accent-foreground: oklch(0.2 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: oklch(0.9 0 0);
+  --input: oklch(0.9 0 0);
+  --ring: oklch(0.6 0.14 60);
+  --chart-1: oklch(0.6 0.14 60);
+  --chart-2: oklch(0.55 0 0);
+  --chart-3: oklch(0.4 0 0);
+  --chart-4: oklch(0.7 0 0);
+  --chart-5: oklch(0.25 0 0);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.98 0 0);
+  --sidebar-foreground: oklch(0.16 0 0);
+  --sidebar-primary: oklch(0.6 0.14 60);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0 0);
+  --sidebar-accent-foreground: oklch(0.2 0 0);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0.6 0.14 60);
 }
 
 .dark {
-  --background: oklch(0.19 0.018 255);
-  --foreground: oklch(0.96 0.01 95);
-  --card: oklch(0.24 0.02 255);
-  --card-foreground: oklch(0.96 0.01 95);
-  --popover: oklch(0.23 0.02 255);
-  --popover-foreground: oklch(0.96 0.01 95);
-  --primary: oklch(0.79 0.1 78);
-  --primary-foreground: oklch(0.18 0.015 255);
-  --secondary: oklch(0.29 0.018 255);
-  --secondary-foreground: oklch(0.96 0.01 95);
-  --muted: oklch(0.265 0.014 255);
-  --muted-foreground: oklch(0.74 0.012 95);
-  --accent: oklch(0.35 0.03 205);
-  --accent-foreground: oklch(0.96 0.01 95);
+  --background: oklch(0.16 0 0);
+  --foreground: oklch(0.94 0 0);
+  --card: oklch(0.2 0 0);
+  --card-foreground: oklch(0.94 0 0);
+  --popover: oklch(0.2 0 0);
+  --popover-foreground: oklch(0.94 0 0);
+  --primary: oklch(0.78 0.11 70);
+  --primary-foreground: oklch(0.16 0 0);
+  --secondary: oklch(0.26 0 0);
+  --secondary-foreground: oklch(0.94 0 0);
+  --muted: oklch(0.24 0 0);
+  --muted-foreground: oklch(0.66 0 0);
+  --accent: oklch(0.26 0 0);
+  --accent-foreground: oklch(0.94 0 0);
   --destructive: oklch(0.67 0.18 26);
-  --border: oklch(0.34 0.018 255 / 60%);
-  --input: oklch(0.32 0.016 255 / 75%);
-  --ring: oklch(0.69 0.06 78);
-  --chart-1: oklch(0.79 0.1 78);
-  --chart-2: oklch(0.69 0.09 205);
-  --chart-3: oklch(0.72 0.11 150);
-  --chart-4: oklch(0.67 0.14 26);
-  --chart-5: oklch(0.61 0.09 305);
-  --sidebar: oklch(0.225 0.02 255);
-  --sidebar-foreground: oklch(0.96 0.01 95);
-  --sidebar-primary: oklch(0.79 0.1 78);
-  --sidebar-primary-foreground: oklch(0.18 0.015 255);
-  --sidebar-accent: oklch(0.28 0.016 255);
-  --sidebar-accent-foreground: oklch(0.96 0.01 95);
-  --sidebar-border: oklch(0.34 0.018 255 / 60%);
-  --sidebar-ring: oklch(0.69 0.06 78);
+  --border: oklch(0.32 0 0 / 60%);
+  --input: oklch(0.3 0 0 / 75%);
+  --ring: oklch(0.78 0.11 70);
+  --chart-1: oklch(0.78 0.11 70);
+  --chart-2: oklch(0.7 0 0);
+  --chart-3: oklch(0.55 0 0);
+  --chart-4: oklch(0.4 0 0);
+  --chart-5: oklch(0.85 0 0);
+  --sidebar: oklch(0.19 0 0);
+  --sidebar-foreground: oklch(0.94 0 0);
+  --sidebar-primary: oklch(0.78 0.11 70);
+  --sidebar-primary-foreground: oklch(0.16 0 0);
+  --sidebar-accent: oklch(0.26 0 0);
+  --sidebar-accent-foreground: oklch(0.94 0 0);
+  --sidebar-border: oklch(0.32 0 0 / 60%);
+  --sidebar-ring: oklch(0.78 0.11 70);
 }
 
 @layer base {
@@ -165,49 +171,6 @@ body {
   a {
     @apply transition-colors;
   }
-}
-
-.glass-panel {
-  background: color-mix(in oklab, var(--card) 88%, transparent);
-  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
-  box-shadow: 0 28px 70px -40px rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(18px);
-}
-
-@keyframes subtle-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-subtle-in {
-  animation: subtle-in 220ms ease-out both;
-}
-
-.stagger-in > * {
-  animation: subtle-in 220ms ease-out both;
-}
-
-.stagger-in > *:nth-child(2) {
-  animation-delay: 40ms;
-}
-
-.stagger-in > *:nth-child(3) {
-  animation-delay: 80ms;
-}
-
-.stagger-in > *:nth-child(4) {
-  animation-delay: 120ms;
-}
-
-/* Sticky elements should not be animated with transforms; this breaks sticky in some browsers. */
-.stagger-in > .sticky {
-  animation: none;
 }
 
 .submissions-grid {
