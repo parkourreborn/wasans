@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import {  Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { ClientErrorLogger } from "@/components/custom/client-error-logger";
+import { V2AuthRefresh } from "@/components/custom/v2-auth-refresh";
 import "./globals.css";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
@@ -26,6 +27,7 @@ export default function RootLayout({
         </head>
       <body>
         <ClientErrorLogger />
+        <V2AuthRefresh />
         {children}
       </body>
     </html>
