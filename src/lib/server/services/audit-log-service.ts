@@ -56,47 +56,49 @@ export async function getAuditLogs(request: Request, db: D1Database) {
   const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
   const dayAgo = Math.floor(Date.now() / 1000) - 86400
 
-  const [rows, count, summary, latestError] = await Promise.all([
+  // 4 independent reads over the same table with different filters/aggregates
+  // — none needs another's result — sent as one D1 batch round trip.
+  const [rows, count, summary, latestError] = await db.batch([
     db.prepare(
       `SELECT id, created_at, actor_uuid, actor_name, action, entity_type, entity_uuid, target_type, target_uuid, details
        FROM audit_logs
        ${whereSql}
        ORDER BY created_at DESC
        LIMIT ? OFFSET ?`
-    )
-      .bind(...bindings, limit, offset)
-      .all(),
-    db.prepare(`SELECT COUNT(*) as total FROM audit_logs ${whereSql}`)
-      .bind(...bindings)
-      .first<{ total: number }>(),
+    ).bind(...bindings, limit, offset),
+    db.prepare(`SELECT COUNT(*) as total FROM audit_logs ${whereSql}`).bind(...bindings),
     db.prepare(
       `SELECT
         COUNT(*) as total,
         SUM(CASE WHEN action = 'site_error' THEN 1 ELSE 0 END) as errors,
         SUM(CASE WHEN action = 'site_error' AND created_at >= ? THEN 1 ELSE 0 END) as errors_24h
        FROM audit_logs`
-    ).bind(dayAgo).first<{ total: number; errors: number | null; errors_24h: number | null }>(),
+    ).bind(dayAgo),
     db.prepare(
       `SELECT id, created_at
        FROM audit_logs
        WHERE action = 'site_error'
        ORDER BY created_at DESC
        LIMIT 1`
-    ).first<{ id: number; created_at: number }>(),
+    ),
   ])
+
+  const count0 = count.results[0] as { total: number } | undefined
+  const summary0 = summary.results[0] as { total: number; errors: number | null; errors_24h: number | null } | undefined
+  const latestError0 = latestError.results[0] as { id: number; created_at: number } | undefined
 
   return {
     status: 200 as const,
     body: {
       results: rows.results || [],
-      total: count?.total ?? 0,
+      total: count0?.total ?? 0,
       page,
       limit,
       summary: {
-        total: summary?.total ?? 0,
-        errors: summary?.errors ?? 0,
-        errors_24h: summary?.errors_24h ?? 0,
-        latest_error: latestError || null,
+        total: summary0?.total ?? 0,
+        errors: summary0?.errors ?? 0,
+        errors_24h: summary0?.errors_24h ?? 0,
+        latest_error: latestError0 || null,
       },
     },
   }

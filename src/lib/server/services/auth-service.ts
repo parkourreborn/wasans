@@ -110,6 +110,29 @@ export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUse
   const now = Math.floor(Date.now() / 1000)
   const accessTokenExpiresAt = now + token.expires_in
 
+  const buildOauthAccountStatement = (playerUuid: string) =>
+    db.prepare(
+      `INSERT INTO oauth_accounts (
+        provider, provider_account_id, player_uuid, access_token, refresh_token, expires_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(provider, provider_account_id) DO UPDATE SET
+        player_uuid = excluded.player_uuid,
+        access_token = excluded.access_token,
+        refresh_token = excluded.refresh_token,
+        expires_at = excluded.expires_at,
+        updated_at = excluded.updated_at`
+    )
+      .bind(
+        "discord",
+        discordUser.id,
+        playerUuid,
+        token.access_token,
+        token.refresh_token || null,
+        accessTokenExpiresAt,
+        now,
+        now
+      )
+
   if (!player) {
     const basePlayerName = normalizeLoginPlayerName(discordUser.global_name || discordUser.username)
     if (!basePlayerName) {
@@ -118,15 +141,21 @@ export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUse
     const playerName = await getAvailablePlayerName(db, basePlayerName)
 
     const playerUuid = generateUUID()
-    await db.prepare(
-      `INSERT INTO players (
-        uuid, player_id, discord_avatar, discord_discriminator, player_name, date_joined, permission,
-        account_status, legal_terms_accepted_at, legal_privacy_accepted_at, legal_version
+
+    // The player row and its oauth link are independent writes (the oauth
+    // row uses the client-generated playerUuid, not anything the INSERT
+    // returns), so they go in one D1 batch instead of two round trips.
+    await db.batch([
+      db.prepare(
+        `INSERT INTO players (
+          uuid, player_id, discord_avatar, discord_discriminator, player_name, date_joined, permission,
+          account_status, legal_terms_accepted_at, legal_privacy_accepted_at, legal_version
+        )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(playerUuid, discordUser.id, discordUser.avatar || null, discordUser.discriminator || null, playerName, now, 0, "active", now, now, legalVersion)
-      .run()
+        .bind(playerUuid, discordUser.id, discordUser.avatar || null, discordUser.discriminator || null, playerName, now, 0, "active", now, now, legalVersion),
+      buildOauthAccountStatement(playerUuid),
+    ])
 
     player = {
       uuid: playerUuid,
@@ -138,47 +167,26 @@ export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUse
       permission: 0,
     }
   } else {
-    await db.prepare(
-      `UPDATE players
-       SET discord_avatar = ?,
-           discord_discriminator = ?,
-           account_status = 'active',
-           deactivated_at = NULL,
-           deleted_at = NULL,
-           legal_terms_accepted_at = ?,
-           legal_privacy_accepted_at = ?,
-           legal_version = ?
-       WHERE uuid = ?`
-    )
-      .bind(discordUser.avatar || null, discordUser.discriminator || null, now, now, legalVersion, player.uuid)
-      .run()
+    await db.batch([
+      db.prepare(
+        `UPDATE players
+         SET discord_avatar = ?,
+             discord_discriminator = ?,
+             account_status = 'active',
+             deactivated_at = NULL,
+             deleted_at = NULL,
+             legal_terms_accepted_at = ?,
+             legal_privacy_accepted_at = ?,
+             legal_version = ?
+         WHERE uuid = ?`
+      )
+        .bind(discordUser.avatar || null, discordUser.discriminator || null, now, now, legalVersion, player.uuid),
+      buildOauthAccountStatement(player.uuid),
+    ])
 
     player.discord_avatar = discordUser.avatar || null
     player.discord_discriminator = discordUser.discriminator || null
   }
-
-  await db.prepare(
-    `INSERT INTO oauth_accounts (
-      provider, provider_account_id, player_uuid, access_token, refresh_token, expires_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(provider, provider_account_id) DO UPDATE SET
-      player_uuid = excluded.player_uuid,
-      access_token = excluded.access_token,
-      refresh_token = excluded.refresh_token,
-      expires_at = excluded.expires_at,
-      updated_at = excluded.updated_at`
-  )
-    .bind(
-      "discord",
-      discordUser.id,
-      player.uuid,
-      token.access_token,
-      token.refresh_token || null,
-      accessTokenExpiresAt,
-      now,
-      now
-    )
-    .run()
 
   return player
 }

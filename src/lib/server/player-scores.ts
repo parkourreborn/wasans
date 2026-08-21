@@ -50,23 +50,31 @@ export async function refreshPlayerScores(
   const now = Math.floor(Date.now() / 1000)
   const placeholders = uniquePlayerUuids.map(() => "?").join(",")
   const fallbackValidSql = validSubmissionSql("submissions", "t")
-  const [{ results: wrRows }, trialCount, { results: pbsRows }, { results: fallbackRows }, { results: currentScoresRows }] = await Promise.all([
-    db.prepare(`SELECT trial_name, time FROM wrs`).all<WorldRecordRow>(),
+  // The 4 raw reads below are independent of each other, so they go in one
+  // D1 batch round trip; trialCount goes through trial-repository's own
+  // query, so it's fired concurrently alongside the batch instead.
+  const [[wrResult, pbsResult, fallbackResult, currentScoresResult], trialCount] = await Promise.all([
+    db.batch([
+      db.prepare(`SELECT trial_name, time FROM wrs`),
+      db.prepare(`SELECT player_uuid, trial_name, time FROM pbs WHERE player_uuid IN (${placeholders})`).bind(...uniquePlayerUuids),
+      db.prepare(
+        `SELECT submissions.player_uuid AS player_uuid, submissions.trial_name AS trial_name, MIN(submissions.time) as time
+         FROM submissions
+         JOIN trials AS t ON t.name = submissions.trial_name
+         WHERE submissions.player_uuid IN (${placeholders})
+           AND submissions.state = 'approved'
+           AND ${fallbackValidSql}
+         GROUP BY submissions.player_uuid, submissions.trial_name`
+      ).bind(...uniquePlayerUuids, now, now, now),
+      db.prepare(`SELECT uuid, score FROM players WHERE uuid IN (${placeholders})`).bind(...uniquePlayerUuids),
+    ]),
     getCountedTrialCount(db, now),
-    db.prepare(`SELECT player_uuid, trial_name, time FROM pbs WHERE player_uuid IN (${placeholders})`).bind(...uniquePlayerUuids).all<BestSubmissionRowWithPlayer>(),
-    db.prepare(
-      `SELECT submissions.player_uuid AS player_uuid, submissions.trial_name AS trial_name, MIN(submissions.time) as time
-       FROM submissions
-       JOIN trials AS t ON t.name = submissions.trial_name
-       WHERE submissions.player_uuid IN (${placeholders})
-         AND submissions.state = 'approved'
-         AND ${fallbackValidSql}
-       GROUP BY submissions.player_uuid, submissions.trial_name`
-    )
-      .bind(...uniquePlayerUuids, now, now, now)
-      .all<BestSubmissionRowWithPlayer>(),
-    db.prepare(`SELECT uuid, score FROM players WHERE uuid IN (${placeholders})`).bind(...uniquePlayerUuids).all<PlayerScoreRow>(),
   ])
+
+  const wrRows = (wrResult.results || []) as WorldRecordRow[]
+  const pbsRows = (pbsResult.results || []) as BestSubmissionRowWithPlayer[]
+  const fallbackRows = (fallbackResult.results || []) as BestSubmissionRowWithPlayer[]
+  const currentScoresRows = (currentScoresResult.results || []) as PlayerScoreRow[]
 
   const wrs = new Map(wrRows.map((row) => [row.trial_name, Number(row.time)]))
   const pbsByPlayer = new Map<string, BestSubmissionRow[]>()

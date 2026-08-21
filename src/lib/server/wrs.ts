@@ -22,54 +22,55 @@ export async function refreshWorldRecords(db: D1Database, trialName?: string, ac
   const now = Math.floor(Date.now() / 1000)
 
   if (trialName) {
-    const previous = await db.prepare(
-      `SELECT submission_uuid, player_uuid, player_name, time, date
-       FROM wrs
-       WHERE trial_name = ?`
-    )
-      .bind(trialName)
-      .first<WrRow | null>()
-
-    await db.prepare(`DELETE FROM wrs WHERE trial_name = ?`).bind(trialName).run()
-    await db.prepare(
-      `INSERT INTO wrs (trial_name, submission_uuid, player_uuid, player_name, time, date)
-       SELECT candidate.trial_name, candidate.uuid, candidate.player_uuid, candidate.player_name, candidate.time, candidate.date
-       FROM submissions AS candidate
-       JOIN trials AS t ON t.name = candidate.trial_name
-       WHERE candidate.trial_name = ?
-         AND candidate.state = 'approved'
-         AND ${candidateValidSql}
-         AND NOT EXISTS (
-           SELECT 1
-           FROM submissions AS better
-           JOIN trials AS tb ON tb.name = better.trial_name
-           WHERE better.trial_name = candidate.trial_name
-             AND better.state = 'approved'
-             AND ${betterValidSql}
-             AND (
-               better.time < candidate.time
-               OR (
-                 better.time = candidate.time
-                 AND better.date < candidate.date
+    // previous/DELETE/INSERT/current don't need each other's *data* to build
+    // their SQL — only their execution order matters (read old state, wipe,
+    // rebuild, read new state) — and db.batch() preserves order within one
+    // round trip, so this is equivalent to the old 4 sequential awaits.
+    const [previousResult, , , currentResult] = await db.batch([
+      db.prepare(
+        `SELECT submission_uuid, player_uuid, player_name, time, date
+         FROM wrs
+         WHERE trial_name = ?`
+      ).bind(trialName),
+      db.prepare(`DELETE FROM wrs WHERE trial_name = ?`).bind(trialName),
+      db.prepare(
+        `INSERT INTO wrs (trial_name, submission_uuid, player_uuid, player_name, time, date)
+         SELECT candidate.trial_name, candidate.uuid, candidate.player_uuid, candidate.player_name, candidate.time, candidate.date
+         FROM submissions AS candidate
+         JOIN trials AS t ON t.name = candidate.trial_name
+         WHERE candidate.trial_name = ?
+           AND candidate.state = 'approved'
+           AND ${candidateValidSql}
+           AND NOT EXISTS (
+             SELECT 1
+             FROM submissions AS better
+             JOIN trials AS tb ON tb.name = better.trial_name
+             WHERE better.trial_name = candidate.trial_name
+               AND better.state = 'approved'
+               AND ${betterValidSql}
+               AND (
+                 better.time < candidate.time
+                 OR (
+                   better.time = candidate.time
+                   AND better.date < candidate.date
+                 )
+                 OR (
+                   better.time = candidate.time
+                   AND better.date = candidate.date
+                   AND better.uuid < candidate.uuid
+                 )
                )
-               OR (
-                 better.time = candidate.time
-                 AND better.date = candidate.date
-                 AND better.uuid < candidate.uuid
-               )
-             )
-         )`
-    )
-      .bind(trialName, now, now, now, now, now, now)
-      .run()
+           )`
+      ).bind(trialName, now, now, now, now, now, now),
+      db.prepare(
+        `SELECT submission_uuid, player_uuid, player_name, time, date
+         FROM wrs
+         WHERE trial_name = ?`
+      ).bind(trialName),
+    ])
 
-    const current = await db.prepare(
-      `SELECT submission_uuid, player_uuid, player_name, time, date
-       FROM wrs
-       WHERE trial_name = ?`
-    )
-      .bind(trialName)
-      .first<WrRow | null>()
+    const previous = (previousResult.results[0] as WrRow | undefined) ?? null
+    const current = (currentResult.results[0] as WrRow | undefined) ?? null
 
     if (actor) {
       if (!previous && current) {
@@ -113,35 +114,35 @@ export async function refreshWorldRecords(db: D1Database, trialName?: string, ac
     return
   }
 
-  await db.prepare(`DELETE FROM wrs`).run()
-  await db.prepare(
-    `INSERT INTO wrs (trial_name, submission_uuid, player_uuid, player_name, time, date)
-     SELECT candidate.trial_name, candidate.uuid, candidate.player_uuid, candidate.player_name, candidate.time, candidate.date
-     FROM submissions AS candidate
-     JOIN trials AS t ON t.name = candidate.trial_name
-     WHERE candidate.state = 'approved'
-       AND ${candidateValidSql}
-       AND NOT EXISTS (
-         SELECT 1
-         FROM submissions AS better
-         JOIN trials AS tb ON tb.name = better.trial_name
-         WHERE better.trial_name = candidate.trial_name
-           AND better.state = 'approved'
-           AND ${betterValidSql}
-           AND (
-             better.time < candidate.time
-             OR (
-               better.time = candidate.time
-               AND better.date < candidate.date
+  await db.batch([
+    db.prepare(`DELETE FROM wrs`),
+    db.prepare(
+      `INSERT INTO wrs (trial_name, submission_uuid, player_uuid, player_name, time, date)
+       SELECT candidate.trial_name, candidate.uuid, candidate.player_uuid, candidate.player_name, candidate.time, candidate.date
+       FROM submissions AS candidate
+       JOIN trials AS t ON t.name = candidate.trial_name
+       WHERE candidate.state = 'approved'
+         AND ${candidateValidSql}
+         AND NOT EXISTS (
+           SELECT 1
+           FROM submissions AS better
+           JOIN trials AS tb ON tb.name = better.trial_name
+           WHERE better.trial_name = candidate.trial_name
+             AND better.state = 'approved'
+             AND ${betterValidSql}
+             AND (
+               better.time < candidate.time
+               OR (
+                 better.time = candidate.time
+                 AND better.date < candidate.date
+               )
+               OR (
+                 better.time = candidate.time
+                 AND better.date = candidate.date
+                 AND better.uuid < candidate.uuid
+               )
              )
-             OR (
-               better.time = candidate.time
-               AND better.date = candidate.date
-               AND better.uuid < candidate.uuid
-             )
-           )
-       )`
-  )
-    .bind(now, now, now, now, now, now)
-    .run()
+         )`
+    ).bind(now, now, now, now, now, now),
+  ])
 }

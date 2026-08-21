@@ -190,16 +190,19 @@ export async function updateSubmissionByUuid(
     .run()
 }
 
-export async function getPlayerScoreContext(db: D1Database, playerUuid: string) {
-  return db.prepare(`SELECT score, player_id FROM players WHERE uuid = ?`)
-    .bind(playerUuid)
-    .first<{ score: number; player_id: string }>()
-}
+// Combines what used to be two sequential round trips (getPlayerScoreContext
+// + getPbContext) into one D1 batch — both are independent single-row reads
+// keyed off values already known to the caller.
+export async function getPlayerScoreAndPbContext(db: D1Database, playerUuid: string, trialName: string) {
+  const [playerResult, pbResult] = await db.batch([
+    db.prepare(`SELECT score, player_id FROM players WHERE uuid = ?`).bind(playerUuid),
+    db.prepare(`SELECT time FROM pbs WHERE player_uuid = ? AND trial_name = ?`).bind(playerUuid, trialName),
+  ])
 
-export async function getPbContext(db: D1Database, playerUuid: string, trialName: string) {
-  return db.prepare(`SELECT time FROM pbs WHERE player_uuid = ? AND trial_name = ?`)
-    .bind(playerUuid, trialName)
-    .first<{ time: number }>()
+  return {
+    player: (playerResult.results[0] as { score: number; player_id: string } | undefined) ?? null,
+    pb: (pbResult.results[0] as { time: number } | undefined) ?? null,
+  }
 }
 
 // wrs/pbs rows for this submission are removed automatically by

@@ -1,20 +1,22 @@
 import "server-only"
 
 export async function listOverallLeaderboard(db: D1Database, limit: number, offset: number) {
-  const count = await db.prepare(
-    `SELECT COUNT(*) AS count
-     FROM players
-     WHERE COALESCE(account_status, 'active') != 'deactivated'`
-  ).first<{ count: number }>()
-  const rows = await db.prepare(
-    `SELECT uuid AS player_uuid, player_id, discord_avatar, discord_discriminator, player_name, score AS overall_score, date_joined
-     FROM players
-     WHERE COALESCE(account_status, 'active') != 'deactivated'
-     ORDER BY score DESC, player_name ASC
-     LIMIT ? OFFSET ?`
-  )
-    .bind(limit, offset)
-    .all()
+  const [countResult, rows] = await db.batch([
+    db.prepare(
+      `SELECT COUNT(*) AS count
+       FROM players
+       WHERE COALESCE(account_status, 'active') != 'deactivated'`
+    ),
+    db.prepare(
+      `SELECT uuid AS player_uuid, player_id, discord_avatar, discord_discriminator, player_name, score AS overall_score, date_joined
+       FROM players
+       WHERE COALESCE(account_status, 'active') != 'deactivated'
+       ORDER BY score DESC, player_name ASC
+       LIMIT ? OFFSET ?`
+    ).bind(limit, offset),
+  ])
+
+  const count = (countResult.results[0] as { count: number } | undefined)
 
   return {
     results: rows.results || [],
@@ -23,42 +25,44 @@ export async function listOverallLeaderboard(db: D1Database, limit: number, offs
 }
 
 export async function listTrialLeaderboard(db: D1Database, trialName: string, limit: number, offset: number) {
-  const wr = await db.prepare(`SELECT submission_uuid, time FROM wrs WHERE trial_name = ?`)
-    .bind(trialName)
-    .first<{ submission_uuid: string; time: number }>()
+  type TrialLeaderboardRow = {
+    player_uuid: string
+    player_id: string
+    discord_avatar?: string | null
+    discord_discriminator?: string | null
+    player_name: string
+    time: number | null
+    submission_uuid: string | null
+  }
 
-  const count = await db.prepare(
-    `SELECT COUNT(*) AS count
-     FROM players
-     WHERE COALESCE(account_status, 'active') != 'deactivated'`
-  ).first<{ count: number }>()
+  const [wrResult, countResult, rows] = await db.batch([
+    db.prepare(`SELECT submission_uuid, time FROM wrs WHERE trial_name = ?`).bind(trialName),
+    db.prepare(
+      `SELECT COUNT(*) AS count
+       FROM players
+       WHERE COALESCE(account_status, 'active') != 'deactivated'`
+    ),
+    db.prepare(
+      `SELECT players.uuid AS player_uuid,
+              players.player_id,
+              players.discord_avatar,
+              players.discord_discriminator,
+              players.player_name,
+              pbs.time,
+              pbs.submission_uuid
+       FROM players
+       LEFT JOIN pbs ON pbs.player_uuid = players.uuid AND pbs.trial_name = ?
+       WHERE COALESCE(players.account_status, 'active') != 'deactivated'
+       ORDER BY CASE WHEN pbs.time IS NULL THEN 1 ELSE 0 END, pbs.time ASC, players.player_name ASC
+       LIMIT ? OFFSET ?`
+    ).bind(trialName, limit, offset),
+  ])
 
-  const rows = await db.prepare(
-    `SELECT players.uuid AS player_uuid,
-            players.player_id,
-            players.discord_avatar,
-            players.discord_discriminator,
-            players.player_name,
-            pbs.time,
-            pbs.submission_uuid
-     FROM players
-     LEFT JOIN pbs ON pbs.player_uuid = players.uuid AND pbs.trial_name = ?
-     WHERE COALESCE(players.account_status, 'active') != 'deactivated'
-     ORDER BY CASE WHEN pbs.time IS NULL THEN 1 ELSE 0 END, pbs.time ASC, players.player_name ASC
-     LIMIT ? OFFSET ?`
-  )
-    .bind(trialName, limit, offset)
-    .all<{
-      player_uuid: string
-      player_id: string
-      discord_avatar?: string | null
-      discord_discriminator?: string | null
-      player_name: string
-      time: number | null
-      submission_uuid: string | null
-    }>()
+  const wr = wrResult.results[0] as { submission_uuid: string; time: number } | undefined
+  const count = countResult.results[0] as { count: number } | undefined
+  const typedRows = rows.results as TrialLeaderboardRow[] | undefined
 
-  const results = (rows.results || []).map((row, index) => ({
+  const results = (typedRows || []).map((row, index) => ({
     ...row,
     rank: row.time ? offset + index + 1 : null,
     score: row.time && wr?.time ? Number(Math.pow(wr.time / row.time, 3).toFixed(3)) : 0,

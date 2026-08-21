@@ -54,8 +54,6 @@ export async function lookupIdempotentResponse(
 ) {
   const now = Math.floor(Date.now() / 1000)
 
-  await db.prepare(`DELETE FROM api_idempotency_keys WHERE expires_at <= ?`).bind(now).run()
-
   const existing = await db.prepare(
     `SELECT request_hash, response_json, status_code, expires_at
      FROM api_idempotency_keys
@@ -66,7 +64,10 @@ export async function lookupIdempotentResponse(
     .bind(input.scope, input.idempotencyKey, input.actorUuid)
     .first<IdempotencyRecord>()
 
-  if (!existing) {
+  // Expired rows aren't deleted inline anymore (see cleanupExpiredApiState,
+  // run by the daily maintenance sweep instead) — check the expiry here so
+  // a not-yet-swept row isn't mistaken for a live hit.
+  if (!existing || Number(existing.expires_at) <= now) {
     return { hit: false as const }
   }
 

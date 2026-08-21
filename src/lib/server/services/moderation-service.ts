@@ -19,8 +19,7 @@ import {
 } from "@/lib/server/notifications"
 import {
   deleteSubmissionCascade,
-  getPbContext,
-  getPlayerScoreContext,
+  getPlayerScoreAndPbContext,
   getSubmissionBase,
   getSubmissionDeleteContext,
   getSubmissionWithScore,
@@ -392,8 +391,7 @@ export async function patchSubmission(
     details: auditDetails,
   })
 
-  const oldPlayer = await getPlayerScoreContext(env.wasans, submission.player_uuid)
-  const oldPb = await getPbContext(env.wasans, submission.player_uuid, submission.trial_name)
+  const { player: oldPlayer, pb: oldPb } = await getPlayerScoreAndPbContext(env.wasans, submission.player_uuid, submission.trial_name)
 
   const newModeratorNote = moderatorNote !== null ? moderatorNote : submission.moderator_note
   const noteChanged = submission.moderator_note !== newModeratorNote
@@ -403,27 +401,24 @@ export async function patchSubmission(
   ctx.waitUntil((async () => {
     try {
       const db = env.wasans
-      const [previousWrResult, oldPbResult, trialCount] = await Promise.all([
+
+      // previousWr + oldPb (and, when relevant, previousPb) are independent
+      // reads keyed off values already known here, so they're sent as one D1
+      // batch round trip instead of separate awaits; trialCount goes through
+      // trial-repository's own query/constants, so it's fired concurrently
+      // alongside the batch rather than folded into it.
+      const wrAndPbStatements = [
         db.prepare(
           `SELECT w.trial_name, w.submission_uuid, w.player_uuid, w.player_name, w.time, w.date, s.thread_id AS previous_thread_id
           FROM wrs w
           LEFT JOIN submissions s ON s.uuid = w.submission_uuid`
-        )
-          .all<PreviousWrRow>(),
-        db.prepare(`SELECT trial_name, time FROM pbs WHERE player_uuid = ?`)
-          .bind(submission.player_uuid)
-          .all<ScorePbRow>(),
-        getCountedTrialCount(db, Math.floor(Date.now() / 1000)),
-      ])
+        ),
+        db.prepare(`SELECT trial_name, time FROM pbs WHERE player_uuid = ?`).bind(submission.player_uuid),
+      ]
 
-      const previousWrRows = previousWrResult.results || []
-      const oldPbRows = oldPbResult.results || []
-      const previousWrRow = previousWrRows.find((row) => row.trial_name === submission.trial_name) ?? null
-      const beforeWrTimes = new Map<TrialName, number>(previousWrRows.map((row) => [row.trial_name, Number(row.time)] as const))
-      const beforeScore = scoreFromPbs(oldPbRows, beforeWrTimes, trialCount)
-
-      const previousPbRow = previousState === "approved"
-        ? await db.prepare(
+      if (previousState === "approved") {
+        wrAndPbStatements.push(
+          db.prepare(
             `SELECT time FROM submissions
              WHERE player_uuid = ?
                AND trial_name = ?
@@ -431,10 +426,22 @@ export async function patchSubmission(
                AND uuid != ?
              ORDER BY time ASC, date ASC, uuid ASC
              LIMIT 1`
-          )
-            .bind(submission.player_uuid, submission.trial_name, submission.uuid)
-            .first<{ time: number }>()
-        : null
+          ).bind(submission.player_uuid, submission.trial_name, submission.uuid)
+        )
+      }
+
+      const [[previousWrResult, oldPbResult, previousPbResult], trialCount] = await Promise.all([
+        db.batch(wrAndPbStatements),
+        getCountedTrialCount(db, Math.floor(Date.now() / 1000)),
+      ])
+
+      const previousWrRows = (previousWrResult.results || []) as PreviousWrRow[]
+      const oldPbRows = (oldPbResult.results || []) as ScorePbRow[]
+      const previousWrRow = previousWrRows.find((row) => row.trial_name === submission.trial_name) ?? null
+      const beforeWrTimes = new Map<TrialName, number>(previousWrRows.map((row) => [row.trial_name, Number(row.time)] as const))
+      const beforeScore = scoreFromPbs(oldPbRows, beforeWrTimes, trialCount)
+
+      const previousPbRow = (previousPbResult?.results?.[0] as { time: number } | undefined) ?? null
 
       const newState = state ?? previousState
       const wasApproved = previousState === "approved"
