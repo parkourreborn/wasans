@@ -1,4 +1,4 @@
-import { insertAuditLog } from "@/lib/server/audit"
+import { buildAuditLogStatement } from "@/lib/server/audit"
 import { jsonOk, requireV2Owner, withV2Context } from "@/lib/server/v2/http"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 
@@ -24,16 +24,19 @@ export const POST = withV2Context(async (ctx) => {
   }
 
   // wrs/pbs rows for these submissions are removed automatically by
-  // ON DELETE CASCADE (see migrations/0004_schema_rebuild.sql).
+  // ON DELETE CASCADE (see migrations/0004_schema_rebuild.sql). The delete
+  // and every per-uuid audit-log insert are independent writes, so they all
+  // go in one D1 batch instead of one round trip per duplicate found.
   const placeholders = duplicateUuids.map(() => "?").join(",")
-  await ctx.db.prepare(`DELETE FROM submissions WHERE uuid IN (${placeholders})`).bind(...duplicateUuids).run()
-
-  for (const uuid of duplicateUuids) {
-    await insertAuditLog(ctx.db, "submission_deleted", "submission", uuid, {
-      actor,
-      details: { reason: "duplicate_removal" },
-    })
-  }
+  await ctx.db.batch([
+    ctx.db.prepare(`DELETE FROM submissions WHERE uuid IN (${placeholders})`).bind(...duplicateUuids),
+    ...duplicateUuids.map((uuid) =>
+      buildAuditLogStatement(ctx.db, "submission_deleted", "submission", uuid, {
+        actor,
+        details: { reason: "duplicate_removal" },
+      })
+    ),
+  ])
 
   await bumpCacheGeneration(ctx.cache)
 

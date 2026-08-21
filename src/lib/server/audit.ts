@@ -18,7 +18,10 @@ export type AuditAction =
   | "player_permission_changed"
   | "site_error"
 
-export async function insertAuditLog(
+// Split out from insertAuditLog so callers writing several audit rows at
+// once (e.g. the deduplicate sweep) can send them as one db.batch() instead
+// of one round trip per row.
+export function buildAuditLogStatement(
   db: D1Database,
   action: AuditAction,
   entityType: string,
@@ -35,7 +38,7 @@ export async function insertAuditLog(
   const details = options?.details == null ? null : JSON.stringify(options.details)
   const createdAt = Math.floor(Date.now() / 1000)
 
-  await db.prepare(
+  return db.prepare(
     `INSERT INTO audit_logs (
       created_at,
       actor_uuid,
@@ -49,7 +52,21 @@ export async function insertAuditLog(
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(createdAt, actorUuid, actorName, action, entityType, entityUuid, options?.targetType ?? null, options?.targetUuid ?? null, details)
-    .run()
+}
+
+export async function insertAuditLog(
+  db: D1Database,
+  action: AuditAction,
+  entityType: string,
+  entityUuid: string | null,
+  options?: {
+    actor?: AuditActor | null
+    targetType?: string | null
+    targetUuid?: string | null
+    details?: unknown
+  }
+) {
+  await buildAuditLogStatement(db, action, entityType, entityUuid, options).run()
 }
 
 type SiteErrorLogInput = {

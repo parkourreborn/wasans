@@ -32,7 +32,7 @@ import { Spinner } from "@/components/ui/spinner"
 import calculateScore from "@/lib/calc-score"
 import { createFile } from "mp4box"
 import { getSubmissionErrorMessage } from "@/lib/submission-errors"
-import { captureVideoFrame } from "@/lib/video-thumbnail"
+import { captureVideoFrame, captureVideoFrameFromUrl } from "@/lib/video-thumbnail"
 
 type SubmissionDraft = {
   id: string
@@ -56,6 +56,18 @@ type WorldRecordValue = {
 
 type ListResponse<T> = {
   data?: T[]
+  error?: string | { message?: string }
+}
+
+type CreatedSubmission = {
+  uuid: string
+  trial_name: TrialName
+  proof_url: string
+  object_key?: string
+}
+
+type CreateSubmissionsResponse = {
+  data?: { results?: CreatedSubmission[] }
   error?: string | { message?: string }
 }
 
@@ -265,7 +277,7 @@ async function uploadSubmissions(
     )
   )
 
-  return new Promise<ListResponse<unknown>>((resolve, reject) => {
+  return new Promise<CreateSubmissionsResponse>((resolve, reject) => {
     const payload = submissions.map((submission) => ({
       trial_name: submission.trial_name,
       time: submission.time,
@@ -306,10 +318,10 @@ async function uploadSubmissions(
     }
 
     request.onload = () => {
-      let json: ListResponse<unknown> | null = null
+      let json: CreateSubmissionsResponse | null = null
 
       try {
-        json = JSON.parse(request.responseText || "null") as ListResponse<unknown> | null
+        json = JSON.parse(request.responseText || "null") as CreateSubmissionsResponse | null
       } catch {
         json = null
       }
@@ -337,6 +349,36 @@ async function uploadSubmissions(
     request.open("POST", apiV2("/submissions"))
     request.setRequestHeader("Idempotency-Key", idempotencyKey)
     request.send(formData)
+  })
+}
+
+// Direct file uploads already get their preview captured client-side before
+// the submission is created (see uploadSubmissions above). Medal-link
+// submissions have their video fetched server-side instead, so there's
+// nothing to capture from until the video is actually hosted — this re-loads
+// it from its now-public URL, grabs a frame, and PUTs it to the new preview
+// endpoint. Best-effort and fire-and-forget: a failed capture just leaves
+// that submission without a thumbnail, same as before this existed.
+function capturePreviewsForMedalSubmissions(submissions: SubmissionDraft[], results: CreatedSubmission[]) {
+  results.forEach((result, index) => {
+    const submission = submissions[index]
+    if (!submission || submission.proof_file || !result.object_key) {
+      return
+    }
+
+    captureVideoFrameFromUrl(result.proof_url)
+      .then((blob) => {
+        if (!blob) {
+          return null
+        }
+
+        return fetch(apiV2(`/submissions/${result.uuid}/preview`), {
+          method: "PUT",
+          headers: { "content-type": "image/jpeg" },
+          body: blob,
+        })
+      })
+      .catch((err) => console.error("Failed to generate preview for", result.uuid, err))
   })
 }
 
@@ -535,7 +577,7 @@ export default function NewSubmissionPage() {
       )
       const idempotencyKey = crypto.randomUUID()
 
-      await uploadSubmissions(preparedSubmissions, (progress, status, message) => {
+      const response = await uploadSubmissions(preparedSubmissions, (progress, status, message) => {
         setUploadStates((current) =>
           Object.fromEntries(
             Object.entries(current).map(([id, state]) => [
@@ -556,6 +598,10 @@ export default function NewSubmissionPage() {
           )
         )
       }, hasMedalLink, idempotencyKey)
+
+      if (response.data?.results) {
+        capturePreviewsForMedalSubmissions(preparedSubmissions, response.data.results)
+      }
 
       setMessage("Submitted")
       router.push("/submissions")
