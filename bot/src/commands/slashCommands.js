@@ -12,7 +12,7 @@ import { botConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { resolveSubmissionUrl } from '../resolvers.js';
 
-const API_BASE_URL = 'https://wasans.tully.sh/v1/';
+const API_BASE_URL = 'https://wasans.tully.sh/v2/';
 const PAGE_SIZE = 10;
 const CUSTOM_ID_PREFIX = 'wasans-slash';
 const MAX_PLAYER_NAME_LENGTH = 12;
