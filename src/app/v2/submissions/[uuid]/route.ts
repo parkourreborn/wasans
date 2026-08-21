@@ -1,9 +1,9 @@
 import { jsonError, validationError } from "@/lib/server/http"
-import { canModerate, loadAuthUserByUuid } from "@/lib/server/auth"
+import { loadAuthUserByUuid } from "@/lib/server/auth"
 import { isOwner } from "@/lib/server/auth"
 import { getSubmissionWithScore } from "@/lib/server/repositories/submission-repository"
 import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-repository"
-import { deleteSubmission, patchSubmission } from "@/lib/server/services/moderation-service"
+import { deleteSubmission, patchSubmission, resolveModeratorUser } from "@/lib/server/services/moderation-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
 import { bumpCacheGeneration, cacheKey, readThroughCache } from "@/lib/server/v2/cache"
@@ -29,26 +29,34 @@ export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
     return validationError("Invalid submission uuid", ctx.requestId)
   }
 
-  if (!ctx.auth) {
-    return jsonError("Authentication required", 401, { code: "unauthorized", requestId: ctx.requestId })
-  }
-
-  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request)
-  if (!user || !canModerate(user)) {
-    return jsonError("Moderator permission is required", 403, { code: "forbidden", requestId: ctx.requestId })
-  }
-
-  if (!(await isFeatureEnabled(ctx.db, "moderation_enabled")) && !isOwner(user)) {
-    return jsonError("Moderation is currently disabled", 403, { code: "forbidden", requestId: ctx.requestId })
-  }
-
   const body = await ctx.request.json().catch(() => null) as {
+    discordId?: unknown
     state?: unknown
     moderator_note?: unknown
     time?: unknown
   } | null
   if (!body) {
     return validationError("Invalid JSON request body", ctx.requestId)
+  }
+
+  // Session moderators authenticate via the v2 JWT cookie; the Discord bot
+  // (no browser session) authenticates via its bot API key + a discordId in
+  // the body, resolved to a moderator account here.
+  const sessionUser = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request) : null
+  const moderatorLookup = await resolveModeratorUser(ctx.request, ctx.env, sessionUser, body?.discordId, ctx.requestId)
+
+  if (moderatorLookup.error || !moderatorLookup.user) {
+    return jsonError(moderatorLookup.error || "Moderator permission is required", 403, {
+      code: "forbidden",
+      requestId: ctx.requestId,
+      details: { debug: moderatorLookup.debugInfo },
+    })
+  }
+
+  const user = moderatorLookup.user
+
+  if (!(await isFeatureEnabled(ctx.db, "moderation_enabled")) && !isOwner(user)) {
+    return jsonError("Moderation is currently disabled", 403, { code: "forbidden", requestId: ctx.requestId })
   }
 
   const writeRate = await enforceRateLimit(ctx.db, getRateLimitKey(ctx.request, "v2:submissions:patch", user.uuid), {
