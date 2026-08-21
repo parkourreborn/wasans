@@ -1,9 +1,6 @@
 import "server-only"
-import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 export async function listWorldRecords(db: D1Database) {
-  await ensurePlayerAvatarColumns(db)
-
   const rows = await db.prepare(
     `SELECT
        wrs.*,
@@ -24,8 +21,6 @@ export async function listWorldRecords(db: D1Database) {
 }
 
 export async function getWorldRecordHistory(db: D1Database, trialName: string) {
-  await ensurePlayerAvatarColumns(db)
-
   const rows = await db.prepare(
     `SELECT
        s.*,
@@ -62,8 +57,6 @@ export async function getWorldRecordHistory(db: D1Database, trialName: string) {
 // and ordering by (trial_name, date, uuid) is enough to get everything at
 // once, still grouped and chronological per trial.
 export async function getWorldRecordHistoryAll(db: D1Database) {
-  await ensurePlayerAvatarColumns(db)
-
   const rows = await db.prepare(
     `SELECT
        s.*,
@@ -92,8 +85,6 @@ export async function getWorldRecordHistoryAll(db: D1Database) {
 }
 
 export async function getWorldRecordByTrial(db: D1Database, trialName: string) {
-  await ensurePlayerAvatarColumns(db)
-
   return db.prepare(
     `SELECT
        wrs.*,

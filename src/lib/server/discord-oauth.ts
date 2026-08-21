@@ -1,7 +1,5 @@
 import "server-only"
 
-export const discordRedirectUri = "https://wasans.tully.sh/v1/auth/discord/callback"
-
 type DiscordOAuthEnv = {
   discordClientId?: string
   discordClientSecret?: string
@@ -21,8 +19,4 @@ export function getDiscordClientSecret(env: DiscordOAuthEnv) {
   }
 
   return env.discordClientSecret
-}
-
-export function getDiscordRedirectUri() {
-  return discordRedirectUri
 }

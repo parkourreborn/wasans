@@ -1,9 +1,6 @@
 import "server-only"
-import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 export async function listOverallLeaderboard(db: D1Database, limit: number, offset: number) {
-  await ensurePlayerAvatarColumns(db)
-
   const count = await db.prepare(
     `SELECT COUNT(*) AS count
      FROM players
@@ -26,8 +23,6 @@ export async function listOverallLeaderboard(db: D1Database, limit: number, offs
 }
 
 export async function listTrialLeaderboard(db: D1Database, trialName: string, limit: number, offset: number) {
-  await ensurePlayerAvatarColumns(db)
-
   const wr = await db.prepare(`SELECT submission_uuid, time FROM wrs WHERE trial_name = ?`)
     .bind(trialName)
     .first<{ submission_uuid: string; time: number }>()

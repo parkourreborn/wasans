@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useEffect, useMemo, useState } from "react"
-import { apiV1 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
 import {
   AlertTriangleIcon,
   ChevronDownIcon,
@@ -35,7 +35,7 @@ type AuthUser = {
 
 type AuditLogRow = {
   id: number
-  created_at: string
+  created_at: number
   actor_uuid: string | null
   actor_name: string | null
   action: string
@@ -61,20 +61,22 @@ type LogDetails = {
 }
 
 type AuthResponse = {
-  user: AuthUser | null
-  error?: string
+  data?: { user: AuthUser | null }
+  error?: { message?: string }
 }
 
 type AuditLogResponse = {
-  results?: AuditLogRow[]
-  total?: number
-  summary?: {
-    total: number
-    errors: number
-    errors_24h: number
-    latest_error: { id: number; created_at: string } | null
+  data?: {
+    results?: AuditLogRow[]
+    total?: number
+    summary?: {
+      total: number
+      errors: number
+      errors_24h: number
+      latest_error: { id: number; created_at: number } | null
+    }
   }
-  error?: string
+  error?: { message?: string }
 }
 
 const lastSeenErrorStorageKey = "wasans:last-seen-error-at"
@@ -114,7 +116,7 @@ function isInTimeRange(log: AuditLogRow, range: string) {
     return true
   }
 
-  const createdAt = new Date(log.created_at).getTime()
+  const createdAt = log.created_at * 1000
   const hours = range === "24h" ? 24 : range === "7d" ? 168 : 720
   return createdAt >= Date.now() - hours * 60 * 60 * 1000
 }
@@ -122,7 +124,7 @@ function isInTimeRange(log: AuditLogRow, range: string) {
 export default function LogsPage() {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [logs, setLogs] = useState<AuditLogRow[]>([])
-  const [summary, setSummary] = useState<AuditLogResponse["summary"] | null>(null)
+  const [summary, setSummary] = useState<NonNullable<AuditLogResponse["data"]>["summary"] | null>(null)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -137,12 +139,12 @@ export default function LogsPage() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const response = await fetch(apiV1("/auth/me"), { cache: "no-store" })
+        const response = await fetch(apiV2("/auth/me"), { cache: "no-store" })
         const json = (await response.json()) as AuthResponse
         if (!response.ok) {
-          throw new Error(json?.error || "Unable to load user")
+          throw new Error(json?.error?.message || "Unable to load user")
         }
-        setUser(json.user)
+        setUser(json.data?.user ?? null)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load user")
       } finally {
@@ -173,18 +175,18 @@ export default function LogsPage() {
         params.set("q", query.trim())
       }
 
-      const response = await fetch(`${apiV1("/admin/audit-logs")}?${params.toString()}`, { cache: "no-store" })
+      const response = await fetch(`${apiV2("/admin/audit-logs")}?${params.toString()}`, { cache: "no-store" })
       const json = (await response.json()) as AuditLogResponse
       if (!response.ok) {
-        throw new Error(json.error || "Unable to load audit logs")
+        throw new Error(json.error?.message || "Unable to load audit logs")
       }
 
-      setLogs(json.results || [])
-      setSummary(json.summary || null)
-      setTotal(json.total || 0)
+      setLogs(json.data?.results || [])
+      setSummary(json.data?.summary || null)
+      setTotal(json.data?.total || 0)
 
-      if (json.summary?.latest_error?.created_at) {
-        window.localStorage.setItem(lastSeenErrorStorageKey, json.summary.latest_error.created_at)
+      if (json.data?.summary?.latest_error?.created_at != null) {
+        window.localStorage.setItem(lastSeenErrorStorageKey, String(json.data.summary.latest_error.created_at))
         window.dispatchEvent(new CustomEvent("wasans:last-seen-error-updated"))
       }
     } catch (err) {
@@ -215,7 +217,7 @@ export default function LogsPage() {
 
   const visibleErrorCount = filteredLogs.filter((log) => log.action === "site_error").length
   const latestError = summary?.latest_error?.created_at
-    ? new Date(summary.latest_error.created_at).toLocaleString()
+    ? new Date(summary.latest_error.created_at * 1000).toLocaleString()
     : "None"
 
   if (loading) {
@@ -389,7 +391,7 @@ export default function LogsPage() {
                         {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
                       </Button>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</TableCell>
+                    <TableCell className="whitespace-nowrap">{new Date(log.created_at * 1000).toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge variant={isError ? "destructive" : "secondary"} className="capitalize">
                         {isError ? "error" : formatAction(log.action)}

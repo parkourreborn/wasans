@@ -3,7 +3,7 @@ export type PreviousWrDisplayRow = {
   player_uuid: string
   player_name: string
   time: number
-  date: string
+  date: number
   previous_thread_id: string | null
 }
 

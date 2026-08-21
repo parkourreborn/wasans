@@ -41,7 +41,7 @@ type SubmissionValue = {
   player_name: string
   player_score: number
   time: number | string
-  date: string
+  date: number
   state: string
   moderator_note?: string | null
   moderator_username?: string | null
@@ -110,12 +110,7 @@ function formatTime(rawTime: string) {
   return `${String(Number(seconds))}.${formattedMs}`
 }
 
-function formatDate(timestamp: string) {
-  const unixTime = parseInt(timestamp, 10)
-  if (isNaN(unixTime)) {
-    return timestamp
-  }
-
+function formatDate(unixTime: number) {
   const date = new Date(unixTime * 1000)
   const month = String(date.getMonth() + 1).padStart(2, "0")
   const day = String(date.getDate()).padStart(2, "0")

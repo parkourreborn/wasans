@@ -1,5 +1,4 @@
 import "server-only"
-import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 export type SubmissionRow = {
   uuid: string
@@ -8,7 +7,7 @@ export type SubmissionRow = {
   player_name: string
   state: string
   time: number
-  date: string
+  date: number
   moderator_note: string | null
   moderator_username: string | null
   thread_id: string | null
@@ -38,8 +37,6 @@ export async function listSubmissions(
     search?: string
   }
 ) {
-  await ensurePlayerAvatarColumns(db)
-
   const whereConditions: string[] = ["COALESCE(players.account_status, 'active') != 'deactivated'"]
   const bindValues: (string | number)[] = []
 
@@ -74,7 +71,7 @@ export async function listSubmissions(
      FROM submissions
      LEFT JOIN players ON players.uuid = submissions.player_uuid
      ${whereClause}
-     ORDER BY CAST(submissions.date AS INTEGER) DESC
+     ORDER BY submissions.date DESC
      LIMIT ? OFFSET ?`
   )
     .bind(...bindValues, options.limit, options.offset)
@@ -87,8 +84,6 @@ export async function listSubmissions(
 }
 
 export async function findPlayerByUuid(db: D1Database, playerUuid: string) {
-  await ensurePlayerAvatarColumns(db)
-
   return db.prepare(
     `SELECT uuid, player_id, player_name, score
      FROM players
@@ -127,7 +122,7 @@ export async function createSubmission(
     trialName: string
     playerName: string
     time: number
-    now: string
+    now: number
     trialVersion: number
   }
 ) {
@@ -207,13 +202,11 @@ export async function getPbContext(db: D1Database, playerUuid: string, trialName
     .first<{ time: number }>()
 }
 
+// wrs/pbs rows for this submission are removed automatically by
+// ON DELETE CASCADE (see migrations/0004_schema_rebuild.sql) -- no need to
+// delete them by hand here.
 export async function deleteSubmissionCascade(db: D1Database, uuid: string) {
-  const session = db.withSession("first-primary")
-  await session.batch([
-    session.prepare(`DELETE FROM wrs WHERE submission_uuid = ?`).bind(uuid),
-    session.prepare(`DELETE FROM pbs WHERE submission_uuid = ?`).bind(uuid),
-    session.prepare(`DELETE FROM submissions WHERE uuid = ?`).bind(uuid),
-  ])
+  await db.prepare(`DELETE FROM submissions WHERE uuid = ?`).bind(uuid).run()
 }
 
 export async function getSubmissionDeleteContext(db: D1Database, uuid: string) {

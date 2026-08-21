@@ -74,6 +74,8 @@ export default function AdminPage() {
   const [loadingFlags, setLoadingFlags] = React.useState(true)
   const [flagSaving, setFlagSaving] = React.useState<string | null>(null)
 
+  const [maintenanceBusy, setMaintenanceBusy] = React.useState<"refresh" | "deduplicate" | null>(null)
+
   React.useEffect(() => {
     const loadAuth = async () => {
       try {
@@ -252,6 +254,38 @@ export default function AdminPage() {
       toast.error(err instanceof Error ? err.message : "Unable to update flag")
     } finally {
       setFlagSaving(null)
+    }
+  }
+
+  const refreshLeaderboards = async () => {
+    setMaintenanceBusy("refresh")
+    try {
+      const response = await fetch(apiV2("/admin/leaderboards/refresh"), { method: "POST" })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to refresh leaderboards"))
+      }
+      toast.success("Every player's score has been recalculated")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to refresh leaderboards")
+    } finally {
+      setMaintenanceBusy(null)
+    }
+  }
+
+  const deduplicateSubmissions = async () => {
+    setMaintenanceBusy("deduplicate")
+    try {
+      const response = await fetch(apiV2("/admin/maintenance/deduplicate"), { method: "POST" })
+      const json = (await response.json().catch(() => null)) as { data?: { deletedCount?: number } } | null
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to deduplicate submissions"))
+      }
+      toast.success(`Removed ${json?.data?.deletedCount ?? 0} duplicate submission(s)`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to deduplicate submissions")
+    } finally {
+      setMaintenanceBusy(null)
     }
   }
 
@@ -451,6 +485,29 @@ export default function AdminPage() {
             {flags.length === 0 ? <p className="text-sm text-muted-foreground">No feature flags registered yet.</p> : null}
           </div>
         )}
+      </SectionCard>
+
+      <SectionCard title="Maintenance" description="One-off tools for fixing data drift. Safe to run any time, but not something you'll need often.">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={maintenanceBusy !== null}
+            onClick={refreshLeaderboards}
+          >
+            {maintenanceBusy === "refresh" ? <Spinner className="size-4" /> : null}
+            Recalculate every score
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={maintenanceBusy !== null}
+            onClick={deduplicateSubmissions}
+          >
+            {maintenanceBusy === "deduplicate" ? <Spinner className="size-4" /> : null}
+            Remove duplicate submissions
+          </Button>
+        </div>
       </SectionCard>
     </PageShell>
   )

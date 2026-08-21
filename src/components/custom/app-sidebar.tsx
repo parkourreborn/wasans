@@ -23,7 +23,7 @@ import {
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { FloatingSettingsModal } from "@/components/custom/settings-provider"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
-import { apiV1, apiV2 } from "@/lib/api"
+import { apiV2 } from "@/lib/api"
 import {
   ArrowRightLeftIcon,
   BookIcon,
@@ -56,11 +56,13 @@ type AuthResponse = {
 }
 
 type AuditSummaryResponse = {
-  summary?: {
-    latest_error?: {
-      id: number
-      created_at: string
-    } | null
+  data?: {
+    summary?: {
+      latest_error?: {
+        id: number
+        created_at: number
+      } | null
+    }
   }
 }
 
@@ -207,11 +209,12 @@ export function AppSidebar() {
 
     const loadAuditSummary = async () => {
       try {
-        const response = await fetch(`${apiV1("/admin/audit-logs")}?limit=1&kind=errors`, { cache: "no-store" })
+        const response = await fetch(`${apiV2("/admin/audit-logs")}?limit=1&kind=errors`, { cache: "no-store" })
         const json = (await response.json()) as AuditSummaryResponse
 
         if (response.ok) {
-          setLatestErrorAt(json.summary?.latest_error?.created_at || null)
+          const latestErrorCreatedAt = json.data?.summary?.latest_error?.created_at
+          setLatestErrorAt(latestErrorCreatedAt != null ? String(latestErrorCreatedAt) : null)
         }
       } catch (err) {
         console.error(err)

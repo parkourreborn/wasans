@@ -5,7 +5,6 @@ import type { AuthUser } from "@/lib/server/auth"
 import { canModerate } from "@/lib/server/auth"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
-import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
@@ -48,7 +47,7 @@ type PreviousWrRow = {
   player_uuid: string
   player_name: string
   time: number
-  date: string
+  date: number
   previous_thread_id: string | null
 }
 
@@ -185,8 +184,6 @@ export async function resolveModeratorUser(
   }
 
   console.log(`[${requestId}] Resolving Discord ID: ${resolvedDiscordId}`)
-
-  await ensurePlayerAvatarColumns(env.wasans)
 
   // Look up the Discord account
   const account = await env.wasans.prepare(
@@ -432,7 +429,7 @@ export async function patchSubmission(
                AND trial_name = ?
                AND state = 'approved'
                AND uuid != ?
-             ORDER BY time ASC, CAST(date AS INTEGER) ASC, uuid ASC
+             ORDER BY time ASC, date ASC, uuid ASC
              LIMIT 1`
           )
             .bind(submission.player_uuid, submission.trial_name, submission.uuid)

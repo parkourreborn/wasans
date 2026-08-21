@@ -1,13 +1,9 @@
 import "server-only"
-import { canModerate, getAuthUser } from "@/lib/server/auth"
 import { parsePagination } from "@/lib/server/http"
 
+// Auth/permission gating is the caller's responsibility (v2's
+// requireV2Moderator) — this only runs the query.
 export async function getAuditLogs(request: Request, db: D1Database) {
-  const user = await getAuthUser(request, db)
-  if (!canModerate(user)) {
-    return { error: "Moderator permission is required", status: 403 as const }
-  }
-
   const url = new URL(request.url)
   const { page, limit, offset } = parsePagination(url, { page: 1, limit: 100, maxLimit: 200 })
   const kind = url.searchParams.get("kind") || "all"
@@ -39,7 +35,7 @@ export async function getAuditLogs(request: Request, db: D1Database) {
 
   if (since) {
     where.push("created_at > ?")
-    bindings.push(since)
+    bindings.push(Number(since))
   }
 
   if (query) {
@@ -58,6 +54,7 @@ export async function getAuditLogs(request: Request, db: D1Database) {
   }
 
   const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
+  const dayAgo = Math.floor(Date.now() / 1000) - 86400
 
   const [rows, count, summary, latestError] = await Promise.all([
     db.prepare(
@@ -76,16 +73,16 @@ export async function getAuditLogs(request: Request, db: D1Database) {
       `SELECT
         COUNT(*) as total,
         SUM(CASE WHEN action = 'site_error' THEN 1 ELSE 0 END) as errors,
-        SUM(CASE WHEN action = 'site_error' AND created_at >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) as errors_24h
+        SUM(CASE WHEN action = 'site_error' AND created_at >= ? THEN 1 ELSE 0 END) as errors_24h
        FROM audit_logs`
-    ).first<{ total: number; errors: number | null; errors_24h: number | null }>(),
+    ).bind(dayAgo).first<{ total: number; errors: number | null; errors_24h: number | null }>(),
     db.prepare(
       `SELECT id, created_at
        FROM audit_logs
        WHERE action = 'site_error'
        ORDER BY created_at DESC
        LIMIT 1`
-    ).first<{ id: number; created_at: string }>(),
+    ).first<{ id: number; created_at: number }>(),
   ])
 
   return {

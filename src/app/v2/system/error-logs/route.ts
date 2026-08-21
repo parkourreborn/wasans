@@ -1,7 +1,6 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare"
-import { getAuthUser } from "@/lib/server/auth"
 import { insertSiteErrorLog } from "@/lib/server/audit"
-import { getRequestId, jsonError, jsonResponse } from "@/lib/server/http"
+import { loadAuthUserByUuid } from "@/lib/server/auth"
+import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 
 function textValue(value: unknown, maxLength: number) {
   if (typeof value !== "string") {
@@ -17,34 +16,27 @@ function objectValue(value: unknown) {
     : {}
 }
 
-export async function POST(request: Request) {
-  const requestId = getRequestId(request)
-  const { env } = await getCloudflareContext({ async: true })
-
-  if (!env?.wasans) {
-    return jsonError("DB binding not available", 500, { code: "internal_error", requestId })
-  }
-
+export const POST = withV2Context(async (ctx) => {
   let body: Record<string, unknown>
 
   try {
-    body = objectValue(await request.json())
+    body = objectValue(await ctx.request.json())
   } catch {
     body = {}
   }
 
   try {
-    const user = await getAuthUser(request, env.wasans).catch(() => null)
+    const user = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request).catch(() => null) : null
     const source = body.source === "client_console" ? "client_console" : "client"
 
-    await insertSiteErrorLog(env.wasans, {
+    await insertSiteErrorLog(ctx.db, {
       source,
       message: textValue(body.message, 1000) || "Unknown client error",
       name: textValue(body.name, 200),
       stack: textValue(body.stack, 8000),
-      path: textValue(body.path, 1000) || new URL(request.url).pathname,
+      path: textValue(body.path, 1000) || new URL(ctx.request.url).pathname,
       method: "CLIENT",
-      userAgent: request.headers.get("user-agent"),
+      userAgent: ctx.request.headers.get("user-agent"),
       actor: user,
       details: {
         href: textValue(body.href, 1000),
@@ -59,5 +51,5 @@ export async function POST(request: Request) {
     console.error("Failed to store client error log:", error)
   }
 
-  return jsonResponse({ ok: true }, 200, { requestId })
-}
+  return jsonOk({ ok: true }, { requestId: ctx.requestId })
+})
