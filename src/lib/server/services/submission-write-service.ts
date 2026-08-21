@@ -121,7 +121,7 @@ async function uploadVideo(
 }
 
 export async function createSubmissionsFromRequest(db: D1Database, env: CloudflareEnv, user: { uuid: string }) {
-  const now = String(Math.floor(Date.now() / 1000))
+  const now = Math.floor(Date.now() / 1000)
 
   return async (formData: FormData) => {
     const rawSubmissions = String(formData.get("submissions") || "")

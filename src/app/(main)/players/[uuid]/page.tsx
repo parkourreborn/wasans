@@ -25,12 +25,7 @@ function formatTime(rawTime: number | string) {
   return value.toFixed(3)
 }
 
-function formatDate(timestamp: string) {
-  const unixTime = Number(timestamp)
-  if (!Number.isFinite(unixTime)) {
-    return timestamp
-  }
-
+function formatDate(unixTime: number) {
   const date = new Date(unixTime * 1000)
   return `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}-${date.getFullYear()}`
 }
@@ -39,7 +34,7 @@ type PlayerPb = {
   trial_name: string
   time: number
   submission_uuid: string
-  date: string
+  date: number
 }
 
 type PlayerInfo = {
@@ -49,7 +44,7 @@ type PlayerInfo = {
   discord_discriminator?: string | null
   player_name: string
   score: number
-  date_joined: string
+  date_joined: number
   rank: number
   pbs?: PlayerPb[]
 }
@@ -68,7 +63,7 @@ type SubmissionValue = {
   trial_name: string
   time: number | string
   state: "approved" | "pending" | "denied"
-  date: string
+  date: number
   moderator_note?: string | null
   moderator_username?: string | null
 }

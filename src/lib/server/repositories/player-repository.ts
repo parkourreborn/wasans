@@ -1,5 +1,4 @@
 import "server-only"
-import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 
 type PlayerListOptions = {
   limit: number
@@ -15,13 +14,11 @@ export type PlayerWithRankRow = {
   player_name: string
   score: number
   permission: number
-  date_joined: string
+  date_joined: number
   rank: number
 }
 
 export async function listPlayers(db: D1Database, options: PlayerListOptions) {
-  await ensurePlayerAvatarColumns(db)
-
   const filters: string[] = ["COALESCE(account_status, 'active') != 'deactivated'"]
   const bindings: Array<string | number> = []
 
@@ -53,8 +50,6 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
 }
 
 export async function getPlayerByUuid(db: D1Database, uuid: string) {
-  await ensurePlayerAvatarColumns(db)
-
   return db.prepare(
     `SELECT uuid, player_id, discord_avatar, discord_discriminator, player_name, score, permission, date_joined
      FROM players
@@ -70,7 +65,7 @@ export async function getPlayerByUuid(db: D1Database, uuid: string) {
       player_name: string
       score: number
       permission: number
-      date_joined: string
+      date_joined: number
     }>()
 }
 
@@ -90,8 +85,6 @@ export async function setPlayerPermission(db: D1Database, uuid: string, permissi
 }
 
 export async function getPlayerRank(db: D1Database, score: number) {
-  await ensurePlayerAvatarColumns(db)
-
   const rank = await db.prepare(
     `SELECT COUNT(*) + 1 AS rank
      FROM players
@@ -130,7 +123,7 @@ export async function getPlayerSubmissions(
      LEFT JOIN players ON players.uuid = submissions.player_uuid
      WHERE submissions.player_uuid = ?
      ${stateSql}
-     ORDER BY CAST(submissions.date AS INTEGER) DESC
+     ORDER BY submissions.date DESC
      LIMIT ? OFFSET ?`
   )
     .bind(playerUuid, options.limit, options.offset)

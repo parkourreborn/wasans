@@ -17,7 +17,7 @@ export async function refreshPlayerPb(db: D1Database, playerUuid: string, trialN
        AND submissions.trial_name = ?
        AND submissions.state = 'approved'
        AND ${validSql}
-     ORDER BY submissions.time ASC, CAST(submissions.date AS INTEGER) ASC, submissions.uuid ASC
+     ORDER BY submissions.time ASC, submissions.date ASC, submissions.uuid ASC
      LIMIT 1`
   )
     .bind(playerUuid, trialName, now, now, now)
@@ -37,7 +37,7 @@ export async function refreshPlayerPbs(db: D1Database, playerUuid: string) {
               submissions.time, submissions.date,
               ROW_NUMBER() OVER (
                 PARTITION BY submissions.trial_name
-                ORDER BY submissions.time ASC, CAST(submissions.date AS INTEGER) ASC, submissions.uuid ASC
+                ORDER BY submissions.time ASC, submissions.date ASC, submissions.uuid ASC
               ) AS rn
        FROM submissions
        JOIN trials AS t ON t.name = submissions.trial_name
@@ -69,7 +69,7 @@ export async function refreshPbsForTrial(db: D1Database, trialName: string) {
               submissions.time, submissions.date,
               ROW_NUMBER() OVER (
                 PARTITION BY submissions.player_uuid
-                ORDER BY submissions.time ASC, CAST(submissions.date AS INTEGER) ASC, submissions.uuid ASC
+                ORDER BY submissions.time ASC, submissions.date ASC, submissions.uuid ASC
               ) AS rn
        FROM submissions
        JOIN trials AS t ON t.name = submissions.trial_name

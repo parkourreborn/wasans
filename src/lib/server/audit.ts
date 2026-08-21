@@ -33,9 +33,11 @@ export async function insertAuditLog(
   const actorUuid = options?.actor?.uuid ?? null
   const actorName = options?.actor?.player_name ?? null
   const details = options?.details == null ? null : JSON.stringify(options.details)
+  const createdAt = Math.floor(Date.now() / 1000)
 
   await db.prepare(
     `INSERT INTO audit_logs (
+      created_at,
       actor_uuid,
       actor_name,
       action,
@@ -44,9 +46,9 @@ export async function insertAuditLog(
       target_type,
       target_uuid,
       details
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(actorUuid, actorName, action, entityType, entityUuid, options?.targetType ?? null, options?.targetUuid ?? null, details)
+    .bind(createdAt, actorUuid, actorName, action, entityType, entityUuid, options?.targetType ?? null, options?.targetUuid ?? null, details)
     .run()
 }
 

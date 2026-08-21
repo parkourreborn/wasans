@@ -1,6 +1,5 @@
 import "server-only"
-import { getCloudflareContext } from "@opennextjs/cloudflare" 
-import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
+import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 export type ApprovedHighScoreRun = {
   submission_uuid: string
@@ -32,7 +31,7 @@ export type WorldRecordRun = {
   player_name: string
   trial_name: string
   time: number
-  date: string
+  date: number
 }
 
 const roleRanks = {
@@ -435,7 +434,6 @@ export async function syncDiscordMembersOnScoreChange(players: Array<{ playerUui
 
   try {
     const { env } = await getCloudflareContext({ async: true })
-    await ensurePlayerAvatarColumns(env.wasans)
 
     const placeholders = uniquePlayers.map(() => "?").join(",")
     const { results } = await env.wasans.prepare(

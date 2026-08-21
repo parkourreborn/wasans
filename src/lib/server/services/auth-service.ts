@@ -1,15 +1,8 @@
 import "server-only"
-import {
-  getDiscordClientId,
-  getDiscordClientSecret,
-  getDiscordRedirectUri,
-} from "@/lib/server/discord-oauth"
-import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 import { getAvailablePlayerName } from "@/lib/server/player-name-service"
 import { legalVersion } from "@/lib/legal"
 import { normalizeLoginPlayerName } from "@/lib/player-name"
 import { generateUUID } from "@/lib/utils"
-import { trackPlayerIp } from "@/lib/server/player-ip-schema"
 
 type DiscordTokenResponse = {
   access_token: string
@@ -36,24 +29,8 @@ type PlayerAuthRow = {
   permission: number
 }
 
-const discordAuthorizeUrl = "https://discord.com/oauth2/authorize"
 const discordTokenUrl = "https://discord.com/api/oauth2/token"
 const discordMeUrl = "https://discord.com/api/users/@me"
-const sessionMaxAge = 60 * 60 * 24 * 30
-
-function getCookie(request: Request, name: string) {
-  const cookie = request.headers.get("cookie")
-  if (!cookie) {
-    return null
-  }
-
-  const match = cookie
-    .split(";")
-    .map((value) => value.trim())
-    .find((value) => value.startsWith(`${name}=`))
-
-  return match ? decodeURIComponent(match.slice(name.length + 1)) : null
-}
 
 export function getSafeNextUrl(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
@@ -110,8 +87,6 @@ export async function getDiscordUser(accessToken: string, tokenType: string) {
 }
 
 export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUserResponse, token: DiscordTokenResponse) {
-  await ensurePlayerAvatarColumns(db)
-
   const linkedPlayer = await db.prepare(
     `SELECT players.uuid, players.player_id, players.discord_avatar, players.discord_discriminator, players.player_name, players.score, players.permission
      FROM oauth_accounts
@@ -133,8 +108,7 @@ export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUse
     .first<PlayerAuthRow>()
 
   const now = Math.floor(Date.now() / 1000)
-  const acceptedAt = String(now)
-  const accessTokenExpiresAt = String(now + token.expires_in)
+  const accessTokenExpiresAt = now + token.expires_in
 
   if (!player) {
     const basePlayerName = normalizeLoginPlayerName(discordUser.global_name || discordUser.username)
@@ -151,7 +125,7 @@ export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUse
       )
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(playerUuid, discordUser.id, discordUser.avatar || null, discordUser.discriminator || null, playerName, String(now), 0, "active", acceptedAt, acceptedAt, legalVersion)
+      .bind(playerUuid, discordUser.id, discordUser.avatar || null, discordUser.discriminator || null, playerName, now, 0, "active", now, now, legalVersion)
       .run()
 
     player = {
@@ -176,7 +150,7 @@ export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUse
            legal_version = ?
        WHERE uuid = ?`
     )
-      .bind(discordUser.avatar || null, discordUser.discriminator || null, acceptedAt, acceptedAt, legalVersion, player.uuid)
+      .bind(discordUser.avatar || null, discordUser.discriminator || null, now, now, legalVersion, player.uuid)
       .run()
 
     player.discord_avatar = discordUser.avatar || null
@@ -201,97 +175,10 @@ export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUse
       token.access_token,
       token.refresh_token || null,
       accessTokenExpiresAt,
-      String(now),
-      String(now)
+      now,
+      now
     )
     .run()
 
   return player
-}
-
-async function createSession(db: D1Database, playerUuid: string) {
-  const sessionToken = crypto.randomUUID()
-  const now = Math.floor(Date.now() / 1000)
-  const expiresAt = now + sessionMaxAge
-
-  await db.prepare(
-    `INSERT INTO auth_sessions (token, player_uuid, expires_at, created_at)
-     VALUES (?, ?, ?, ?)`
-  )
-    .bind(sessionToken, playerUuid, String(expiresAt), String(now))
-    .run()
-
-  return sessionToken
-}
-
-export function startDiscordOAuth(request: Request, env: CloudflareEnv) {
-  const requestUrl = new URL(request.url)
-  const state = crypto.randomUUID()
-  const nextUrl = getSafeNextUrl(requestUrl.searchParams.get("next"))
-  const authorizeUrl = new URL(discordAuthorizeUrl)
-
-  authorizeUrl.searchParams.set("client_id", getDiscordClientId(env))
-  authorizeUrl.searchParams.set("redirect_uri", getDiscordRedirectUri())
-  authorizeUrl.searchParams.set("response_type", "code")
-  authorizeUrl.searchParams.set("scope", "identify")
-  authorizeUrl.searchParams.set("state", state)
-  authorizeUrl.searchParams.set("prompt", "none")
-
-  const isSecure = requestUrl.protocol === "https:"
-  const headers = new Headers({ location: authorizeUrl.toString() })
-  headers.append(
-    "set-cookie",
-    `wasans_discord_oauth_state=${encodeURIComponent(state)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${isSecure ? "; Secure" : ""}`
-  )
-  headers.append(
-    "set-cookie",
-    `wasans_discord_oauth_next=${encodeURIComponent(nextUrl)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${isSecure ? "; Secure" : ""}`
-  )
-
-  return new Response(null, { status: 302, headers })
-}
-
-export async function completeDiscordOAuth(request: Request, env: CloudflareEnv) {
-  const requestUrl = new URL(request.url)
-  const code = requestUrl.searchParams.get("code")
-  const state = requestUrl.searchParams.get("state")
-  const storedState = getCookie(request, "wasans_discord_oauth_state")
-  const nextUrl = getSafeNextUrl(getCookie(request, "wasans_discord_oauth_next"))
-  const isSecure = requestUrl.protocol === "https:"
-
-  if (!code || !state || !storedState || state !== storedState) {
-    return redirectWithAuthError(requestUrl, "Discord login state is invalid")
-  }
-
-  try {
-    await ensurePlayerAvatarColumns(env.wasans)
-
-    const token = await exchangeCodeForToken(code, getDiscordRedirectUri(), getDiscordClientId(env), getDiscordClientSecret(env))
-    const discordUser = await getDiscordUser(token.access_token, token.token_type)
-    const player = await findOrCreatePlayer(env.wasans, discordUser, token)
-    const sessionToken = await createSession(env.wasans, player.uuid)
-
-    await trackPlayerIp(env.wasans, player.uuid, request)
-
-    const destinationUrl = new URL(nextUrl, requestUrl.origin)
-    const headers = new Headers({ location: destinationUrl.toString() })
-
-    headers.append(
-      "set-cookie",
-      `wasans_session=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${sessionMaxAge}${isSecure ? "; Secure" : ""}`
-    )
-    headers.append(
-      "set-cookie",
-      `wasans_discord_oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isSecure ? "; Secure" : ""}`
-    )
-    headers.append(
-      "set-cookie",
-      `wasans_discord_oauth_next=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isSecure ? "; Secure" : ""}`
-    )
-
-    return new Response(null, { status: 302, headers })
-  } catch (error) {
-    console.error(error)
-    return redirectWithAuthError(requestUrl, "Discord login failed")
-  }
 }

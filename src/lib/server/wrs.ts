@@ -7,7 +7,7 @@ type WrRow = {
   player_uuid: string
   player_name: string
   time: number
-  date: string
+  date: number
 }
 
 type AuditActor = {
@@ -50,7 +50,7 @@ export async function refreshWorldRecords(db: D1Database, trialName?: string, ac
                better.time < candidate.time
                OR (
                  better.time = candidate.time
-                 AND CAST(better.date AS INTEGER) < CAST(candidate.date AS INTEGER)
+                 AND better.date < candidate.date
                )
                OR (
                  better.time = candidate.time
@@ -132,7 +132,7 @@ export async function refreshWorldRecords(db: D1Database, trialName?: string, ac
              better.time < candidate.time
              OR (
                better.time = candidate.time
-               AND CAST(better.date AS INTEGER) < CAST(candidate.date AS INTEGER)
+               AND better.date < candidate.date
              )
              OR (
                better.time = candidate.time

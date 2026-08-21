@@ -7,7 +7,6 @@ import {
   getSafeNextUrl,
   redirectWithAuthError,
 } from "@/lib/server/services/auth-service"
-import { ensurePlayerAvatarColumns } from "@/lib/server/player-avatar-schema"
 import { trackPlayerIp } from "@/lib/server/player-ip-schema"
 import { buildAccessCookie, buildRefreshCookie, getJwtSecret, issueAccessToken } from "./http"
 import { issueRefreshTokenFamily } from "./tokens"
@@ -78,8 +77,6 @@ export async function completeDiscordOAuthV2(request: Request, env: CloudflareEn
   }
 
   try {
-    await ensurePlayerAvatarColumns(env.wasans)
-
     const token = await exchangeCodeForToken(code, discordRedirectUriV2, getDiscordClientId(env), getDiscordClientSecret(env))
     const discordUser = await getDiscordUser(token.access_token, token.token_type)
     const player = await findOrCreatePlayer(env.wasans, discordUser, token)
