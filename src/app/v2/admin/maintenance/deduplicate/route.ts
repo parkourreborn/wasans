@@ -23,16 +23,10 @@ export const POST = withV2Context(async (ctx) => {
     return jsonOk({ deletedCount: 0, deletedSubmissions: [] }, { requestId: ctx.requestId })
   }
 
-  const session = ctx.db.withSession("first-primary")
-  const statements: ReturnType<typeof session.prepare>[] = []
-
-  for (const uuid of duplicateUuids) {
-    statements.push(session.prepare(`DELETE FROM wrs WHERE submission_uuid = ?`).bind(uuid))
-    statements.push(session.prepare(`DELETE FROM pbs WHERE submission_uuid = ?`).bind(uuid))
-    statements.push(session.prepare(`DELETE FROM submissions WHERE uuid = ?`).bind(uuid))
-  }
-
-  await session.batch(statements)
+  // wrs/pbs rows for these submissions are removed automatically by
+  // ON DELETE CASCADE (see migrations/0004_schema_rebuild.sql).
+  const placeholders = duplicateUuids.map(() => "?").join(",")
+  await ctx.db.prepare(`DELETE FROM submissions WHERE uuid IN (${placeholders})`).bind(...duplicateUuids).run()
 
   for (const uuid of duplicateUuids) {
     await insertAuditLog(ctx.db, "submission_deleted", "submission", uuid, {

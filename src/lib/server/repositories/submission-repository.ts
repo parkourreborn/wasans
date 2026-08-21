@@ -202,13 +202,11 @@ export async function getPbContext(db: D1Database, playerUuid: string, trialName
     .first<{ time: number }>()
 }
 
+// wrs/pbs rows for this submission are removed automatically by
+// ON DELETE CASCADE (see migrations/0004_schema_rebuild.sql) -- no need to
+// delete them by hand here.
 export async function deleteSubmissionCascade(db: D1Database, uuid: string) {
-  const session = db.withSession("first-primary")
-  await session.batch([
-    session.prepare(`DELETE FROM wrs WHERE submission_uuid = ?`).bind(uuid),
-    session.prepare(`DELETE FROM pbs WHERE submission_uuid = ?`).bind(uuid),
-    session.prepare(`DELETE FROM submissions WHERE uuid = ?`).bind(uuid),
-  ])
+  await db.prepare(`DELETE FROM submissions WHERE uuid = ?`).bind(uuid).run()
 }
 
 export async function getSubmissionDeleteContext(db: D1Database, uuid: string) {

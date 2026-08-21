@@ -21,6 +21,7 @@
 # production
 /build
 prod-backup.sql
+backup.sql
 
 # misc
 .DS_Store

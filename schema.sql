@@ -48,7 +48,7 @@ CREATE TABLE oauth_accounts (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (provider, provider_account_id),
-  FOREIGN KEY (player_uuid) REFERENCES players(uuid)
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_oauth_accounts_player_uuid ON oauth_accounts(player_uuid, updated_at DESC);
@@ -61,7 +61,7 @@ CREATE TABLE player_ips (
   first_seen INTEGER NOT NULL,
   last_seen INTEGER NOT NULL,
   PRIMARY KEY (player_uuid, ip_address),
-  FOREIGN KEY (player_uuid) REFERENCES players(uuid)
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_player_ips_ip_address ON player_ips(ip_address);
@@ -123,8 +123,8 @@ CREATE TABLE submissions (
   state TEXT NOT NULL DEFAULT 'pending'
     CHECK (state IN ('approved', 'denied', 'pending')),
 
-  FOREIGN KEY (player_uuid) REFERENCES players(uuid),
-  FOREIGN KEY (trial_name) REFERENCES trials(name)
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (trial_name) REFERENCES trials(name) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_submissions_player_state_trial_date ON submissions(player_uuid, state, trial_name, date);
@@ -143,9 +143,9 @@ CREATE TABLE wrs (
   time REAL NOT NULL,
   date INTEGER NOT NULL,
 
-  FOREIGN KEY (submission_uuid) REFERENCES submissions(uuid),
-  FOREIGN KEY (player_uuid) REFERENCES players(uuid),
-  FOREIGN KEY (trial_name) REFERENCES trials(name)
+  FOREIGN KEY (submission_uuid) REFERENCES submissions(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (trial_name) REFERENCES trials(name) ON DELETE CASCADE
 );
 
 -- Personal bests
@@ -157,9 +157,9 @@ CREATE TABLE pbs (
   time REAL NOT NULL,
   date INTEGER NOT NULL,
   PRIMARY KEY (player_uuid, trial_name),
-  FOREIGN KEY (player_uuid) REFERENCES players(uuid),
-  FOREIGN KEY (submission_uuid) REFERENCES submissions(uuid),
-  FOREIGN KEY (trial_name) REFERENCES trials(name)
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (submission_uuid) REFERENCES submissions(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (trial_name) REFERENCES trials(name) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_pbs_trial_name ON pbs(trial_name, time ASC);
@@ -176,7 +176,7 @@ CREATE TABLE audit_logs (
   target_type TEXT,
   target_uuid TEXT,
   details TEXT,
-  FOREIGN KEY (actor_uuid) REFERENCES players(uuid)
+  FOREIGN KEY (actor_uuid) REFERENCES players(uuid) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_audit_logs_action_created_at ON audit_logs(action, created_at DESC);
@@ -204,7 +204,7 @@ CREATE TABLE refresh_tokens (
   expires_at INTEGER NOT NULL,
   revoked_at INTEGER,
   replaced_by TEXT,
-  FOREIGN KEY (player_uuid) REFERENCES players(uuid)
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
