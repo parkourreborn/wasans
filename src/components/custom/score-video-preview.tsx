@@ -7,9 +7,17 @@ type ScoreVideoPreviewProps = {
   submissionUuid: string
 }
 
+// Medal-link submissions generate their preview asynchronously right after
+// creation (see submissions/new page) — a few seconds where the -preview.jpg
+// object legitimately doesn't exist yet. A single 404 used to fall back to
+// the video permanently for the lifetime of this component; retrying a
+// couple times with a short delay covers that window without polling forever.
+const previewRetryDelaysMs = [2000, 5000]
+
 export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const [previewFailed, setPreviewFailed] = useState(false)
   const settings = useSettings()
   const disableSubmissionThumbnails = settings?.disableSubmissionThumbnails ?? false
@@ -29,6 +37,16 @@ export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
     return () => observer.disconnect()
   }, [])
 
+  const handlePreviewError = () => {
+    if (retryCount >= previewRetryDelaysMs.length) {
+      setPreviewFailed(true)
+      return
+    }
+
+    const delay = previewRetryDelaysMs[retryCount]
+    window.setTimeout(() => setRetryCount((count) => count + 1), delay)
+  }
+
   const shouldLoad = isVisible && !disableSubmissionThumbnails
 
   return (
@@ -41,11 +59,12 @@ export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
       {shouldLoad && !previewFailed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={`https://assets.wasans.tully.sh/scores/${submissionUuid}-preview.jpg`}
+          key={retryCount}
+          src={`https://assets.wasans.tully.sh/scores/${submissionUuid}-preview.jpg?retry=${retryCount}`}
           alt=""
           className="h-full w-full object-cover"
           loading="lazy"
-          onError={() => setPreviewFailed(true)}
+          onError={handlePreviewError}
         />
       ) : null}
       {shouldLoad && previewFailed ? (

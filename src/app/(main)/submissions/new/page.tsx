@@ -357,29 +357,31 @@ async function uploadSubmissions(
 // submissions have their video fetched server-side instead, so there's
 // nothing to capture from until the video is actually hosted — this re-loads
 // it from its now-public URL, grabs a frame, and PUTs it to the new preview
-// endpoint. Best-effort and fire-and-forget: a failed capture just leaves
-// that submission without a thumbnail, same as before this existed.
-function capturePreviewsForMedalSubmissions(submissions: SubmissionDraft[], results: CreatedSubmission[]) {
-  results.forEach((result, index) => {
-    const submission = submissions[index]
-    if (!submission || submission.proof_file || !result.object_key) {
-      return
-    }
+// endpoint. Awaited (with each capture internally bounded to ~8s, see
+// captureFrameFromVideoElement) before navigating away, so the thumbnail
+// exists by the time the submissions list renders it instead of racing that
+// list's first image load — a failed/slow capture just leaves that one
+// submission without a thumbnail rather than blocking the others.
+async function capturePreviewsForMedalSubmissions(submissions: SubmissionDraft[], results: CreatedSubmission[]) {
+  await Promise.allSettled(
+    results.map(async (result, index) => {
+      const submission = submissions[index]
+      if (!submission || submission.proof_file || !result.object_key) {
+        return
+      }
 
-    captureVideoFrameFromUrl(result.proof_url)
-      .then((blob) => {
-        if (!blob) {
-          return null
-        }
+      const blob = await captureVideoFrameFromUrl(result.proof_url)
+      if (!blob) {
+        return
+      }
 
-        return fetch(apiV2(`/submissions/${result.uuid}/preview`), {
-          method: "PUT",
-          headers: { "content-type": "image/jpeg" },
-          body: blob,
-        })
+      await fetch(apiV2(`/submissions/${result.uuid}/preview`), {
+        method: "PUT",
+        headers: { "content-type": "image/jpeg" },
+        body: blob,
       })
-      .catch((err) => console.error("Failed to generate preview for", result.uuid, err))
-  })
+    })
+  )
 }
 
 export default function NewSubmissionPage() {
@@ -599,8 +601,16 @@ export default function NewSubmissionPage() {
         )
       }, hasMedalLink, idempotencyKey)
 
-      if (response.data?.results) {
-        capturePreviewsForMedalSubmissions(preparedSubmissions, response.data.results)
+      if (response.data?.results?.some((result, index) => !preparedSubmissions[index]?.proof_file && result.object_key)) {
+        setUploadStates((current) =>
+          Object.fromEntries(
+            Object.entries(current).map(([id, state]) => [
+              id,
+              { ...state, progress: 95, status: "processing" as const, message: "Generating thumbnail" },
+            ])
+          )
+        )
+        await capturePreviewsForMedalSubmissions(preparedSubmissions, response.data.results)
       }
 
       setMessage("Submitted")
