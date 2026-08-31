@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { RefreshCcw } from "lucide-react"
+import { Copy, RefreshCcw } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -277,10 +277,27 @@ export default function CalculatorPage() {
     [times, worldRecords]
   )
 
-  const averageScore = React.useMemo(() => {
+  const rawAverageScore = React.useMemo(() => {
     if (!rows.length) return 0
-    return Number((rows.reduce((sum, row) => sum + row.score, 0) / rows.length).toFixed(3))
+    return rows.reduce((sum, row) => sum + row.score, 0) / rows.length
   }, [rows])
+
+  const averageScore = Number(rawAverageScore.toFixed(3))
+
+  const [scoreCopied, setScoreCopied] = React.useState(false)
+
+  const handleCopyExactScore = async () => {
+    // Cap at 15 decimals and drop trailing zeros so e.g. 0.5 doesn't copy as 0.500000000000000.
+    const exact = rawAverageScore.toFixed(15).replace(/\.?0+$/, "")
+
+    try {
+      await navigator.clipboard.writeText(exact)
+      setScoreCopied(true)
+      setTimeout(() => setScoreCopied(false), 1500)
+    } catch (err) {
+      console.error("Failed to copy exact score", err)
+    }
+  }
 
   const resetTimes = (trial: string) => {
     setTimes((current) => ({ ...current, [trial]: pbs[trial] }))
@@ -341,7 +358,19 @@ export default function CalculatorPage() {
 
           <div className="rounded-lg border border-border px-3 py-2.5">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Final score</p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{averageScore.toFixed(3)}</p>
+            <div className="mt-1 flex items-baseline gap-2">
+              <p className="text-2xl font-semibold tracking-tight text-foreground">{averageScore.toFixed(3)}</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleCopyExactScore}
+                className="h-6 gap-1 px-2 text-2xs"
+              >
+                <Copy className="h-2.5 w-2.5" />
+                {scoreCopied ? "Copied!" : "Copy exact score"}
+              </Button>
+            </div>
           </div>
         </div>
 
