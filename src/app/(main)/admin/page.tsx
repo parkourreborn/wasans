@@ -2,9 +2,19 @@
 
 import * as React from "react"
 import { apiV2 } from "@/lib/api"
+import { SUBMISSION_BAN_REASON_MAX_LENGTH } from "@/lib/submission-bans"
 import { ErrorState, PageHeader, PageShell, SectionCard } from "@/components/custom/page-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
@@ -36,6 +46,15 @@ type TrialsResponse = { data?: TrialRow[] }
 
 type FlagRow = { key: string; enabled: number; updated_at: number; updated_by: string | null }
 type FlagsResponse = { data?: FlagRow[] }
+
+type SubmissionBanRow = {
+  player_uuid: string
+  player_name: string
+  reason: string | null
+  banned_at: number
+  banned_by_name: string | null
+}
+type SubmissionBansResponse = { data?: SubmissionBanRow[] }
 
 const permissionLabels: Record<number, string> = { 0: "Member", 1: "Moderator", 2: "Owner" }
 
@@ -69,6 +88,12 @@ export default function AdminPage() {
   const [loadingTrials, setLoadingTrials] = React.useState(true)
   const [newTrialName, setNewTrialName] = React.useState("")
   const [trialActionBusy, setTrialActionBusy] = React.useState<string | null>(null)
+
+  const [submissionBans, setSubmissionBans] = React.useState<SubmissionBanRow[]>([])
+  const [loadingBans, setLoadingBans] = React.useState(true)
+  const [banBusy, setBanBusy] = React.useState<string | null>(null)
+  const [banTarget, setBanTarget] = React.useState<{ uuid: string; player_name: string } | null>(null)
+  const [banReason, setBanReason] = React.useState("")
 
   const [flags, setFlags] = React.useState<FlagRow[]>([])
   const [loadingFlags, setLoadingFlags] = React.useState(true)
@@ -123,13 +148,35 @@ export default function AdminPage() {
     }
   }, [])
 
+  const loadSubmissionBans = React.useCallback(async () => {
+    setLoadingBans(true)
+    try {
+      const response = await fetch(apiV2("/admin/submission-bans"), { cache: "no-store" })
+      const json = (await response.json().catch(() => null)) as SubmissionBansResponse | null
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to load submission bans"))
+      }
+      setSubmissionBans(json?.data || [])
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to load submission bans")
+    } finally {
+      setLoadingBans(false)
+    }
+  }, [])
+
   React.useEffect(() => {
     if (!isOwner) {
       return
     }
     loadTrials()
     loadFlags()
-  }, [isOwner, loadTrials, loadFlags])
+    loadSubmissionBans()
+  }, [isOwner, loadTrials, loadFlags, loadSubmissionBans])
+
+  const bannedUuids = React.useMemo(
+    () => new Set(submissionBans.map((ban) => ban.player_uuid)),
+    [submissionBans]
+  )
 
   const searchPlayers = React.useCallback(async (query: string) => {
     setSearchingPlayers(true)
@@ -174,6 +221,53 @@ export default function AdminPage() {
       toast.error(err instanceof Error ? err.message : "Unable to update permission")
     } finally {
       setPermissionSaving(null)
+    }
+  }
+
+  const banFromSubmitting = async () => {
+    if (!banTarget) {
+      return
+    }
+
+    const { uuid, player_name } = banTarget
+    setBanBusy(uuid)
+    try {
+      const response = await fetch(apiV2(`/admin/players/${encodeURIComponent(uuid)}/submission-ban`), {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: banReason }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to ban that player from submitting"))
+      }
+      setBanTarget(null)
+      setBanReason("")
+      toast.success(`${player_name} can no longer submit runs`)
+      await loadSubmissionBans()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to ban that player from submitting")
+    } finally {
+      setBanBusy(null)
+    }
+  }
+
+  const unbanFromSubmitting = async (uuid: string, playerName: string) => {
+    setBanBusy(uuid)
+    try {
+      const response = await fetch(apiV2(`/admin/players/${encodeURIComponent(uuid)}/submission-ban`), {
+        method: "DELETE",
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to unban that player"))
+      }
+      toast.success(`${playerName} can submit runs again`)
+      await loadSubmissionBans()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to unban that player")
+    } finally {
+      setBanBusy(null)
     }
   }
 
@@ -334,41 +428,161 @@ export default function AdminPage() {
                     <TableHead>Player</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Current</TableHead>
+                    <TableHead>Submitting</TableHead>
                     <TableHead className="text-right">Set to</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {playerResults.map((row) => (
-                    <TableRow key={row.uuid}>
-                      <TableCell className="font-medium">{row.player_name}</TableCell>
-                      <TableCell>{Number(row.score).toFixed(3)}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{permissionLabels[row.permission] ?? row.permission}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="inline-flex gap-1.5">
-                          {[0, 1, 2].map((level) => (
+                  {playerResults.map((row) => {
+                    const isBanned = bannedUuids.has(row.uuid)
+
+                    return (
+                      <TableRow key={row.uuid}>
+                        <TableCell className="font-medium">{row.player_name}</TableCell>
+                        <TableCell>{Number(row.score).toFixed(3)}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{permissionLabels[row.permission] ?? row.permission}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={isBanned ? "destructive" : "secondary"}>
+                              {isBanned ? "Banned" : "Allowed"}
+                            </Badge>
                             <Button
-                              key={level}
                               type="button"
                               size="sm"
-                              variant={row.permission === level ? "default" : "outline"}
-                              disabled={permissionSaving === row.uuid}
-                              onClick={() => setPermission(row.uuid, level)}
+                              variant={isBanned ? "outline" : "destructive"}
+                              disabled={banBusy === row.uuid || loadingBans}
+                              onClick={() => {
+                                if (isBanned) {
+                                  unbanFromSubmitting(row.uuid, row.player_name)
+                                  return
+                                }
+                                setBanReason("")
+                                setBanTarget({ uuid: row.uuid, player_name: row.player_name })
+                              }}
                             >
-                              {permissionLabels[level]}
+                              {isBanned ? "Unban" : "Ban"}
                             </Button>
-                          ))}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="inline-flex gap-1.5">
+                            {[0, 1, 2].map((level) => (
+                              <Button
+                                key={level}
+                                type="button"
+                                size="sm"
+                                variant={row.permission === level ? "default" : "outline"}
+                                disabled={permissionSaving === row.uuid}
+                                onClick={() => setPermission(row.uuid, level)}
+                              >
+                                {permissionLabels[level]}
+                              </Button>
+                            ))}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>
           ) : null}
         </div>
       </SectionCard>
+
+      <SectionCard
+        title="Submission bans"
+        description="Banned players keep their account, approved runs, and score — they just cannot create new submissions until the ban is lifted."
+      >
+        {loadingBans ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner className="size-4" /> Loading submission bans...
+          </div>
+        ) : submissionBans.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nobody is banned from submitting. Search a player above to ban them.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Player</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Banned by</TableHead>
+                  <TableHead>Banned at</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {submissionBans.map((ban) => (
+                  <TableRow key={ban.player_uuid}>
+                    <TableCell className="font-medium">{ban.player_name}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{ban.reason || "No reason given"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{ban.banned_by_name || "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatTimestamp(ban.banned_at)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={banBusy === ban.player_uuid}
+                        onClick={() => unbanFromSubmitting(ban.player_uuid, ban.player_name)}
+                      >
+                        Unban
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </SectionCard>
+
+      <Dialog
+        open={banTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBanTarget(null)
+            setBanReason("")
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ban {banTarget?.player_name} from submitting</DialogTitle>
+            <DialogDescription>
+              They keep their account and their approved runs, but any new submission is rejected until you unban them.
+              The reason is shown to them on the New Submission page.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={banReason}
+            maxLength={SUBMISSION_BAN_REASON_MAX_LENGTH}
+            onChange={(event) => setBanReason(event.target.value)}
+            placeholder="Reason (optional)"
+          />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={banBusy !== null}
+              onClick={banFromSubmitting}
+            >
+              {banBusy ? <Spinner className="size-4" /> : null}
+              Ban from submitting
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <SectionCard
         title="Trials"

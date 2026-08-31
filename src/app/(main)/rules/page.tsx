@@ -7,6 +7,7 @@ const runRules = [
   "Using autoparkour and autotransition is prohibited and automatically invalidates the run.",
   "The clip must include the entire run, along with the actual time after exiting the trial.",
   "The clip must clearly show: the timer, player's username, and the game build number at the bottom of the screen.",
+  "No overlays of any kind may cover the video. Images, PNGs, videos, webcams, stream layouts, and any other element drawn over the footage are not allowed.",
   "If you are permanently banned from the game, you are ineligible to submit runs. This is done to comply with the main game rule.",
   "Alternative accounts are allowed ONLY if you are not ban evading.",
   "World-record runs must be submitted within an acceptable time after being recorded. Normal life delays (vacation, sleep) are acceptable. Gatekeeping or intentionally delaying submission is not acceptable.",
@@ -18,7 +19,9 @@ const submissionRules = [
   "Cut clips tightly enough that the start, run, and finish are convincing, while still including all required verification details.",
   "You may submit multiple runs at once from the New Submission page.",
   "The site rejects times slower than your current personal best so your score record stays clean.",
+  "Times under gold will not be accepted. A run has to at least reach the trial's gold medal time to be eligible.",
   "A submission starts as pending. Moderators can move it between pending, approved, and denied at any time.",
+  "Staff can ban an individual player from submitting. A banned player keeps their account, approved runs, and score, but cannot create new submissions until the ban is lifted.",
 ]
 
 const applicationRules = [

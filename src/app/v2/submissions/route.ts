@@ -1,6 +1,7 @@
 import { jsonError, parsePagination } from "@/lib/server/http"
 import { listSubmissions } from "@/lib/server/repositories/submission-repository"
 import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-repository"
+import { getSubmissionBan } from "@/lib/server/repositories/submission-ban-repository"
 import { createSubmissionsFromRequest } from "@/lib/server/services/submission-write-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import {
@@ -11,6 +12,7 @@ import {
   storeIdempotentResponse,
 } from "@/lib/server/services/idempotency-service"
 import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
+import { formatSubmissionBanMessage } from "@/lib/submission-bans"
 import { bumpCacheGeneration, cacheKey, readThroughCache } from "@/lib/server/v2/cache"
 import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 
@@ -36,6 +38,17 @@ export const POST = withV2Context(async (ctx) => {
 
   if (!(await isFeatureEnabled(ctx.db, "submissions_enabled"))) {
     return jsonError("Submissions are currently disabled", 403, { code: "forbidden", requestId: ctx.requestId })
+  }
+
+  // Checked before the body is read so a banned player never uploads a video
+  // we would only throw away.
+  const submissionBan = await getSubmissionBan(ctx.db, ctx.auth.uuid)
+  if (submissionBan) {
+    return jsonError(formatSubmissionBanMessage(submissionBan.reason), 403, {
+      code: "forbidden",
+      requestId: ctx.requestId,
+      details: { banned_at: submissionBan.banned_at },
+    })
   }
 
   const writeRate = await enforceRateLimit(ctx.db, getRateLimitKey(ctx.request, "v2:submissions:create", ctx.auth.uuid), {
