@@ -50,7 +50,7 @@ type SectionCardProps = {
 
 export function SectionCard({ title, description, action, children, className, contentClassName }: SectionCardProps) {
   return (
-    <Card className={cn("overflow-hidden", className)}>
+    <Card className={cn("overflow-clip", className)}>
       {title || description || action ? (
         <CardHeader className="flex flex-col gap-4 border-b border-border/60 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">

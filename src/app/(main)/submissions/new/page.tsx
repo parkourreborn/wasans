@@ -35,6 +35,7 @@ import { getSubmissionErrorMessage } from "@/lib/submission-errors"
 import { formatSubmissionBanMessage, type SubmissionBanSummary } from "@/lib/submission-bans"
 import { captureVideoFrame, captureVideoFrameFromUrl } from "@/lib/video-thumbnail"
 import { refreshV2AccessToken } from "@/components/custom/v2-auth-refresh"
+import { HudzellCalculator } from "@/components/custom/hudzell-calculator"
 
 type SubmissionDraft = {
   id: string
@@ -664,7 +665,7 @@ export default function NewSubmissionPage() {
       onSubmit={handleSubmit}
       className="mx-auto flex w-full max-w-4xl flex-col gap-4 pb-8"
     >
-      <div className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm py-4">
+      <div className="sticky top-14 z-40 flex flex-col gap-3 border-b border-border bg-background/95 backdrop-blur-sm py-4 md:top-0">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">New submission</h1>
@@ -679,6 +680,11 @@ export default function NewSubmissionPage() {
             Submit
           </Button>
         </div>
+
+        {/* Sits inside the sticky header rather than below it, so it stays
+            pinned with the title without a second sticky element having to
+            guess this one's height. mr-auto keeps it hugging the left edge. */}
+        <HudzellCalculator className="mr-auto" />
       </div>
 
       {loadingContext && (

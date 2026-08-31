@@ -408,11 +408,15 @@ export default function AdminPage() {
 
       <SectionCard title="Player permissions" description="Search a player by name and change their access tier.">
         <div className="space-y-3">
-          <Input
-            value={playerQuery}
-            onChange={(event) => setPlayerQuery(event.target.value)}
-            placeholder="Search players by name"
-          />
+          {/* Pins while this card is on screen, so the search stays reachable
+              as you scroll a long result list, then releases with the card. */}
+          <div className="sticky top-14 z-20 -mt-4 bg-card pt-4 pb-3 md:top-0 md:-mt-5 md:pt-5">
+            <Input
+              value={playerQuery}
+              onChange={(event) => setPlayerQuery(event.target.value)}
+              placeholder="Search players by name"
+            />
+          </div>
 
           {searchingPlayers ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
