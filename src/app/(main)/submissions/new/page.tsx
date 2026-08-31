@@ -32,6 +32,7 @@ import { Spinner } from "@/components/ui/spinner"
 import calculateScore from "@/lib/calc-score"
 import { createFile } from "mp4box"
 import { getSubmissionErrorMessage } from "@/lib/submission-errors"
+import { formatSubmissionBanMessage, type SubmissionBanSummary } from "@/lib/submission-bans"
 import { captureVideoFrame, captureVideoFrameFromUrl } from "@/lib/video-thumbnail"
 
 type SubmissionDraft = {
@@ -76,6 +77,7 @@ type AuthResponse = {
     user?: {
       uuid: string
     } | null
+    submission_ban?: SubmissionBanSummary | null
   }
 }
 
@@ -388,6 +390,7 @@ export default function NewSubmissionPage() {
 
   const router = useRouter()
   const [authUser, setAuthUser] = useState<{ uuid: string } | null>(null)
+  const [submissionBan, setSubmissionBan] = useState<SubmissionBanSummary | null>(null)
   const [personalBests, setPersonalBests] = useState<Record<string, number>>({})
   const [worldRecords, setWorldRecords] = useState<Record<string, number>>({})
   const [loadingContext, setLoadingContext] = useState(true)
@@ -411,6 +414,7 @@ export default function NewSubmissionPage() {
         }
 
         setAuthUser(authJson?.data?.user || null)
+        setSubmissionBan(authJson?.data?.submission_ban || null)
 
         const [pbResponse, wrValues] = await Promise.all([
           fetch(`${apiV2("/submissions")}?player_uuid=${encodeURIComponent(activePlayerUuid)}&state=approved&page=1&limit=100`),
@@ -461,6 +465,7 @@ export default function NewSubmissionPage() {
   const canSubmit = useMemo(() => {
     return (
       !loadingContext &&
+      !submissionBan &&
       !invalidPersonalBest &&
       submissions.every((submission) => {
         const hasTime = Number(submission.time) > 0 && /^\d+(\.\d{1,3})?$/.test(submission.time)
@@ -469,7 +474,7 @@ export default function NewSubmissionPage() {
         return submission.trial_name && hasTime && hasProof && hasValidFile
       })
     )
-  }, [invalidPersonalBest, loadingContext, submissions])
+  }, [invalidPersonalBest, loadingContext, submissionBan, submissions])
 
   const updateSubmission = (
     id: string,
@@ -554,6 +559,11 @@ export default function NewSubmissionPage() {
 
     if (!authUser) {
       setSignInDialogOpen(true)
+      return
+    }
+
+    if (submissionBan) {
+      setError(formatSubmissionBanMessage(submissionBan.reason))
       return
     }
 
@@ -666,6 +676,14 @@ export default function NewSubmissionPage() {
           <Spinner className="size-4" />
           Loading current scores
         </div>
+      )}
+
+      {submissionBan && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {formatSubmissionBanMessage(submissionBan.reason)}
+          </AlertDescription>
+        </Alert>
       )}
 
       {error && (

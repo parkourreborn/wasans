@@ -3,6 +3,7 @@
 
 DROP TABLE IF EXISTS wrs;
 DROP TABLE IF EXISTS pbs;
+DROP TABLE IF EXISTS submission_bans;
 DROP TABLE IF EXISTS submissions;
 DROP TABLE IF EXISTS oauth_accounts;
 DROP TABLE IF EXISTS auth_sessions;
@@ -163,6 +164,18 @@ CREATE TABLE pbs (
 );
 
 CREATE INDEX idx_pbs_trial_name ON pbs(trial_name, time ASC);
+
+-- Submission bans (owner-controlled block on creating new submissions)
+CREATE TABLE submission_bans (
+  player_uuid TEXT PRIMARY KEY,
+  reason TEXT,
+  banned_at INTEGER NOT NULL,
+  banned_by_uuid TEXT,
+  banned_by_name TEXT,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_submission_bans_banned_at ON submission_bans(banned_at DESC);
 
 -- Audit logs for submissions, WRs, moderation actions, and client/server errors
 CREATE TABLE audit_logs (

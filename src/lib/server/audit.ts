@@ -16,6 +16,8 @@ export type AuditAction =
   | "trial_version_bumped"
   | "feature_flag_changed"
   | "player_permission_changed"
+  | "player_submission_banned"
+  | "player_submission_unbanned"
   | "site_error"
 
 // Split out from insertAuditLog so callers writing several audit rows at
