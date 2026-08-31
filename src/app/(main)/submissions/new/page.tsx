@@ -34,6 +34,7 @@ import { createFile } from "mp4box"
 import { getSubmissionErrorMessage } from "@/lib/submission-errors"
 import { formatSubmissionBanMessage, type SubmissionBanSummary } from "@/lib/submission-bans"
 import { captureVideoFrame, captureVideoFrameFromUrl } from "@/lib/video-thumbnail"
+import { refreshV2AccessToken } from "@/components/custom/v2-auth-refresh"
 
 type SubmissionDraft = {
   id: string
@@ -583,6 +584,15 @@ export default function NewSubmissionPage() {
     )
 
     try {
+      // The upload below goes out over XMLHttpRequest for progress events, so
+      // it never passes through the fetch interceptor that refreshes an
+      // expired access token and retries. Refreshing first gives the upload a
+      // full access-token lifetime to finish in, instead of failing at the end
+      // of a long video with "Authentication required". A failed refresh is
+      // not fatal here — the current access token may still be good, and the
+      // upload reports its own 401 if it is not.
+      await refreshV2AccessToken()
+
       const preparedSubmissions = submissions
       const hasMedalLink = submissions.some(
         (submission) => !submission.proof_file && isMedalLink(submission.proof_url.trim())
