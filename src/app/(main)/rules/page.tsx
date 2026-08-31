@@ -7,10 +7,12 @@ const runRules = [
   "Using autoparkour and autotransition is prohibited and automatically invalidates the run.",
   "The clip must include the entire run, along with the actual time after exiting the trial.",
   "The clip must clearly show: the timer, player's username, and the game build number at the bottom of the screen.",
-  "No overlays of any kind may cover the video. Images, PNGs, videos, webcams, stream layouts, and any other element drawn over the footage are not allowed.",
+  "No overlays of any kind may cover the video. Images, PNGs, videos, stream layouts, text, and any other element drawn over the footage are not allowed (Exlcuding handcams).",
   "If you are permanently banned from the game, you are ineligible to submit runs. This is done to comply with the main game rule.",
   "Alternative accounts are allowed ONLY if you are not ban evading.",
   "World-record runs must be submitted within an acceptable time after being recorded. Normal life delays (vacation, sleep) are acceptable. Gatekeeping or intentionally delaying submission is not acceptable.",
+  "If a run is technically within the rules, but its trying to exploit a loophole, it may still be rejected.",
+
 ]
 
 const submissionRules = [
