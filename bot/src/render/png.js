@@ -22,6 +22,10 @@ export function renderPng(svg, width) {
     return resvg.render().asPng();
 }
 
+export function pngAttachment(png, name) {
+    return new AttachmentBuilder(png, { name: `${name}.png` });
+}
+
 export function renderAttachment(svg, width, name) {
-    return new AttachmentBuilder(renderPng(svg, width), { name: `${name}.png` });
+    return pngAttachment(renderPng(svg, width), name);
 }

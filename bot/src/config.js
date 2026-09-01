@@ -14,6 +14,18 @@ function csvToIds(value) {
         .filter(Boolean);
 }
 
+function positiveNumber(value, fallback) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+// Every slash command reply and every page turn rasterises a card, which is
+// CPU-bound and uploads a few hundred KB, so both draw on one per-user budget.
+export const cardRateLimit = {
+    limit: positiveNumber(process.env.CARD_RATE_LIMIT_USER, 5),
+    windowMs: positiveNumber(process.env.CARD_RATE_LIMIT_USER_WINDOW_MS, 60_000),
+};
+
 export const botConfig = {
     guild_id: DEFAULT_GUILD_ID,
     submissions_forum_channel_id: process.env.SUBMISSIONS_FORUM_CHANNEL_ID || '1351374148881874944',

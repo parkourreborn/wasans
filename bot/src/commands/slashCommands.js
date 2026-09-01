@@ -7,15 +7,17 @@ import {
     StringSelectMenuBuilder,
 } from 'discord.js';
 import { randomUUID } from 'node:crypto';
-import { botConfig } from '../config.js';
+import { botConfig, cardRateLimit } from '../config.js';
 import { logger } from '../logger.js';
 import { fetchAvatarDataUri } from '../render/avatar.js';
-import { renderAttachment } from '../render/png.js';
+import { cachedRender } from '../render/cache.js';
+import { pngAttachment, renderAttachment, renderPng } from '../render/png.js';
 import { renderLeaderboardCard } from '../render/templates/leaderboard.js';
 import { renderPbsCard } from '../render/templates/pbs.js';
 import { renderStatsCard } from '../render/templates/stats.js';
 import { renderSubmissionsCard } from '../render/templates/submissions.js';
 import { renderWrsCard } from '../render/templates/wrs.js';
+import { createRateLimiter } from '../rateLimit.js';
 import { resolveSubmissionUrl } from '../resolvers.js';
 
 const API_BASE_URL = 'https://wasans.tully.sh/v2/';
@@ -31,6 +33,26 @@ export const trials = [
 const trialChoices = trials.map((trialName) => ({ name: trialName, value: trialName }));
 const trialSet = new Set(trials);
 const paginationContexts = new Map();
+
+const cardLimiter = createRateLimiter(cardRateLimit);
+
+function formatRetry(retryAfterMs) {
+    const seconds = Math.max(Math.ceil(retryAfterMs / 1000), 1);
+    return seconds === 1 ? '1 second' : `${seconds} seconds`;
+}
+
+// Claims budget for one card. Page turns count too: a cached page still uploads
+// an image, and charging every interaction uniformly keeps the limit
+// predictable for whoever hits it.
+function reserveCardRender(userId) {
+    const { allowed, retryAfterMs } = cardLimiter.tryConsume(userId);
+    if (allowed) return { allowed: true };
+
+    return {
+        allowed: false,
+        message: `You're requesting cards too quickly. Try again in ${formatRetry(retryAfterMs)}.`,
+    };
+}
 
 function truncate(value, maxLength) {
     const text = String(value ?? '');
@@ -323,9 +345,12 @@ function buildPageView(contextId, context, requestedPageIndex) {
     const pageIndex = Math.min(Math.max(Number(requestedPageIndex) || 0, 0), totalPages - 1);
     const start = pageIndex * PAGE_SIZE;
 
-    const rows = context.rows.slice(start, start + PAGE_SIZE);
-    const { svg, width } = renderCard(context, rows, pageIndex + 1, totalPages);
-    const file = renderAttachment(svg, width, `${context.kind}-${pageIndex + 1}`);
+    const png = cachedRender(`${contextId}:${pageIndex}`, () => {
+        const rows = context.rows.slice(start, start + PAGE_SIZE);
+        const { svg, width } = renderCard(context, rows, pageIndex + 1, totalPages);
+        return renderPng(svg, width);
+    });
+    const file = pngAttachment(png, `${context.kind}-${pageIndex + 1}`);
 
     const components = [];
 
@@ -701,6 +726,12 @@ async function handleComponentInteraction(interaction) {
             return true;
         }
 
+        const budget = reserveCardRender(interaction.user.id);
+        if (!budget.allowed) {
+            await interaction.reply({ content: budget.message, flags: MessageFlags.Ephemeral });
+            return true;
+        }
+
         // Rendering the next page takes long enough that acknowledging first is
         // safer than racing Discord's 3 second window.
         await interaction.deferUpdate();
@@ -724,6 +755,14 @@ async function handleChatInputCommand(interaction) {
 
     const handler = handlers[interaction.commandName];
     if (!handler) return false;
+
+    // Checked before deferring so the refusal can stay ephemeral instead of
+    // turning into a public "thinking..." that resolves to an error.
+    const budget = reserveCardRender(interaction.user.id);
+    if (!budget.allowed) {
+        await interaction.reply({ content: budget.message, flags: MessageFlags.Ephemeral }).catch(() => {});
+        return true;
+    }
 
     try {
         // Every command answers publicly, so the rendered card is visible to the
