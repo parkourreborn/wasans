@@ -2,7 +2,6 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    EmbedBuilder,
     MessageFlags,
     SlashCommandBuilder,
     StringSelectMenuBuilder,
@@ -10,12 +9,18 @@ import {
 import { randomUUID } from 'node:crypto';
 import { botConfig } from '../config.js';
 import { logger } from '../logger.js';
+import { fetchAvatarDataUri } from '../render/avatar.js';
+import { renderAttachment } from '../render/png.js';
+import { renderLeaderboardCard } from '../render/templates/leaderboard.js';
+import { renderPbsCard } from '../render/templates/pbs.js';
+import { renderStatsCard } from '../render/templates/stats.js';
+import { renderSubmissionsCard } from '../render/templates/submissions.js';
+import { renderWrsCard } from '../render/templates/wrs.js';
 import { resolveSubmissionUrl } from '../resolvers.js';
 
 const API_BASE_URL = 'https://wasans.tully.sh/v2/';
 const PAGE_SIZE = 10;
 const CUSTOM_ID_PREFIX = 'wasans-slash';
-const MAX_PLAYER_NAME_LENGTH = 12;
 
 export const trials = [
     'Crystal', 'Genesis', 'Glass', 'Riser', 'Solar', 'Vestibule', 'Celsius', 'Circulation',
@@ -37,6 +42,8 @@ function asArray(payload) {
 
     const listCandidates = [
         payload?.data,
+        // Trial leaderboards nest the rows one level deeper, alongside the WR.
+        payload?.data?.results,
         payload?.items,
         payload?.results,
         payload?.leaderboard,
@@ -48,12 +55,14 @@ function asArray(payload) {
     return listCandidates.find(Array.isArray) || [];
 }
 
-function getPlayerName(item) {
-    return item?.player_name || item?.name || item?.username || item?.display_name || item?.discord_name || 'Unknown player';
+function getTotal(payload) {
+    const meta = payload?.meta;
+    const total = meta?.total ?? meta?.count;
+    return Number.isFinite(Number(total)) ? Number(total) : null;
 }
 
-function getDisplayPlayerName(item) {
-    return truncate(getPlayerName(item), MAX_PLAYER_NAME_LENGTH);
+function getPlayerName(item) {
+    return item?.player_name || item?.name || item?.username || item?.display_name || item?.discord_name || 'Unknown player';
 }
 
 function getPlayerUuid(item) {
@@ -97,6 +106,17 @@ function formatTime(value) {
     if (num !== null) return `${num.toFixed(3)}s`;
     if (typeof value === 'string' && value.trim()) return `${value.trim()}s`;
     return 'N/A';
+}
+
+function formatJoinDate(value) {
+    const seconds = toNumber(value);
+    if (seconds === null || seconds <= 0) return null;
+
+    // The API stores join dates as unix seconds.
+    const date = new Date(seconds * 1000);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return `Joined ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`;
 }
 
 function cleanNickname(value) {
@@ -240,57 +260,8 @@ function buildCommandDefinitions() {
     ];
 }
 
-function rankLabel(globalIndex) {
-    if (globalIndex === 0) return '🥇';
-    if (globalIndex === 1) return '🥈';
-    if (globalIndex === 2) return '🥉';
-    return `#${globalIndex + 1}`;
-}
-
-function buildPages(items, mapper) {
-    if (items.length === 0) return [];
-
-    const pages = [];
-    for (let offset = 0; offset < items.length; offset += PAGE_SIZE) {
-        const pageItems = items.slice(offset, offset + PAGE_SIZE);
-        const lines = [];
-        const submissionOptions = [];
-
-        for (let index = 0; index < pageItems.length; index += 1) {
-            const item = pageItems[index];
-            const globalIndex = offset + index;
-            const mapped = mapper(item, globalIndex);
-            if (!mapped) continue;
-
-            if (mapped.leaderboardEntry) {
-                const { name, stat } = mapped.leaderboardEntry;
-                lines.push(`${rankLabel(globalIndex)} ${name}`);
-                lines.push(`\`${stat}\``);
-                lines.push('');
-            }
-
-            if (mapped.submissionUuid) {
-                submissionOptions.push({
-                    label: truncate(mapped.submissionLabel || `Entry ${globalIndex + 1}`, 100),
-                    value: mapped.submissionUuid,
-                    description: mapped.submissionDescription ? truncate(mapped.submissionDescription, 100) : undefined,
-                });
-            }
-        }
-
-        if (lines.length > 0 && lines[lines.length - 1] === '') {
-            lines.pop();
-        }
-
-        pages.push({
-            description: lines.join('\n'),
-            submissionOptions,
-        });
-    }
-
-    return pages;
-}
-
+// Every list command stores its already-normalised rows here; a page change
+// just re-slices them and re-renders the card, so paging never re-hits the API.
 function createPaginationContext(context) {
     const id = randomUUID();
     paginationContexts.set(id, context);
@@ -318,177 +289,144 @@ function parseComponentId(customId) {
     };
 }
 
+function totalPagesOf(context) {
+    return Math.max(Math.ceil(context.rows.length / PAGE_SIZE), 1);
+}
+
+function renderCard(context, rows, page, totalPages) {
+    const { meta } = context;
+
+    if (context.kind === 'leaderboard') {
+        return renderLeaderboardCard({ trial: meta.trial, entries: rows, page, totalPages, total: meta.total });
+    }
+
+    if (context.kind === 'submissions') {
+        return renderSubmissionsCard({ player: meta.player, submissions: rows, page, totalPages, total: meta.total });
+    }
+
+    if (context.kind === 'pbs') {
+        return renderPbsCard({
+            player: meta.player,
+            entries: rows,
+            page,
+            totalPages,
+            completed: meta.completed,
+            totalTrials: meta.totalTrials,
+        });
+    }
+
+    return renderWrsCard({ records: rows, page, totalPages, total: meta.total });
+}
+
 function buildPageView(contextId, context, requestedPageIndex) {
-    const totalPages = Math.max(context.pages.length, 1);
-    const currentPageIndex = Math.min(Math.max(Number(requestedPageIndex) || 0, 0), totalPages - 1);
+    const totalPages = totalPagesOf(context);
+    const pageIndex = Math.min(Math.max(Number(requestedPageIndex) || 0, 0), totalPages - 1);
+    const start = pageIndex * PAGE_SIZE;
 
-    const embed = new EmbedBuilder()
-        .setColor(context.color || 0x4bb503)
-        .setTitle(context.title)
-        .setFooter({ text: `${currentPageIndex + 1}/${totalPages}` });
+    const rows = context.rows.slice(start, start + PAGE_SIZE);
+    const { svg, width } = renderCard(context, rows, pageIndex + 1, totalPages);
+    const file = renderAttachment(svg, width, `${context.kind}-${pageIndex + 1}`);
 
-    if (context.botName) {
-        const authorData = { name: context.botName };
-        if (context.botAvatarUrl) authorData.iconURL = context.botAvatarUrl;
-        embed.setAuthor(authorData);
-    }
+    const components = [];
 
-    if (context.pages.length === 0) {
-        const emptyDesc = context.description
-            ? `${context.description}\n\n${context.emptyMessage || 'No results found.'}`
-            : context.emptyMessage || 'No results found.';
-        embed.setDescription(emptyDesc);
-        return { embeds: [embed], components: [] };
-    }
-
-    const page = context.pages[currentPageIndex];
-
-    const descParts = [];
-    if (context.description) {
-        descParts.push(context.description);
-        descParts.push('');
-    }
-    descParts.push(page.description || context.emptyMessage || 'No results found.');
-    embed.setDescription(descParts.join('\n'));
-
-    const pageLabel = `${currentPageIndex + 1}/${totalPages}`;
-    const prevPageIndex = Math.max(0, currentPageIndex - 1);
-    const nextPageIndex = Math.min(totalPages - 1, currentPageIndex + 1);
-    const components = [
-        new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`${CUSTOM_ID_PREFIX}:page:${contextId}:${prevPageIndex}`)
-                .setLabel('◀')
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(currentPageIndex <= 0),
-            new ButtonBuilder()
-                .setCustomId(`${CUSTOM_ID_PREFIX}:noop:${contextId}:refresh`)
-                .setLabel('🔄')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(true),
-            new ButtonBuilder()
-                .setCustomId(`${CUSTOM_ID_PREFIX}:noop:${contextId}:indicator`)
-                .setLabel(pageLabel)
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(true),
-            new ButtonBuilder()
-                .setCustomId(`${CUSTOM_ID_PREFIX}:page:${contextId}:${nextPageIndex}`)
-                .setLabel('▶')
-                .setStyle(ButtonStyle.Success)
-                .setDisabled(currentPageIndex >= totalPages - 1),
-        ),
-    ];
-
-    if (page.submissionOptions.length > 0) {
+    if (totalPages > 1) {
         components.push(
             new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId(`${CUSTOM_ID_PREFIX}:select:${contextId}:${currentPageIndex}`)
-                    .setPlaceholder('Get a submission URL')
-                    .addOptions(page.submissionOptions),
+                new ButtonBuilder()
+                    .setCustomId(`${CUSTOM_ID_PREFIX}:page:${contextId}:${Math.max(0, pageIndex - 1)}`)
+                    .setLabel('◀')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(pageIndex <= 0),
+                new ButtonBuilder()
+                    .setCustomId(`${CUSTOM_ID_PREFIX}:page:${contextId}:${Math.min(totalPages - 1, pageIndex + 1)}`)
+                    .setLabel('▶')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(pageIndex >= totalPages - 1),
             ),
         );
     }
 
-    return { embeds: [embed], components };
-}
+    const options = context.options
+        .slice(start, start + PAGE_SIZE)
+        .filter((option) => option && option.value);
 
-async function replyFromContext(interaction, contextId, context, pageIndex) {
-    const payload = buildPageView(contextId, context, pageIndex);
-
-    if (interaction.deferred || interaction.replied) {
-        await interaction.editReply(payload);
-        return;
+    if (options.length > 0) {
+        components.push(
+            new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId(`${CUSTOM_ID_PREFIX}:select:${contextId}:${pageIndex}`)
+                    .setPlaceholder('Get a submission URL')
+                    .addOptions(options),
+            ),
+        );
     }
 
-    if (context.ephemeral) {
-        await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
-        return;
-    }
-
-    await interaction.reply(payload);
+    // `attachments: []` drops the previous page's image; without it Discord keeps
+    // both the old and the new render on the message.
+    return { content: '', embeds: [], files: [file], attachments: [], components };
 }
 
 async function sendPaginatedReply(interaction, context) {
-    const botUser = interaction.client.user;
-    const enrichedContext = {
-        ...context,
-        botName: botUser?.displayName || botUser?.username || 'WASANS Bot',
-        botAvatarUrl: botUser?.displayAvatarURL() || null,
-    };
-    const contextId = createPaginationContext(enrichedContext);
-    await replyFromContext(interaction, contextId, enrichedContext, 0);
-}
-
-function compareNewestFirst(left, right) {
-    const leftDate = new Date(left?.created_at || left?.createdAt || left?.submitted_at || left?.submittedAt || left?.timestamp || 0).getTime() || 0;
-    const rightDate = new Date(right?.created_at || right?.createdAt || right?.submitted_at || right?.submittedAt || right?.timestamp || 0).getTime() || 0;
-    return rightDate - leftDate;
+    const contextId = createPaginationContext(context);
+    await interaction.editReply(buildPageView(contextId, context, 0));
 }
 
 async function handleLeaderboardCommand(interaction) {
     const trial = interaction.options.getString('trial');
 
     if (trial && !trialSet.has(trial)) {
-        await interaction.reply({
-            content: 'Invalid trial. Please choose one of the available trial options.',
-            flags: MessageFlags.Ephemeral,
-        });
+        await interaction.editReply('Invalid trial. Please choose one of the available trial options.');
         return;
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
     if (!trial) {
-        const payload = await apiGet('leaderboards/overall');
+        const payload = await apiGet('leaderboards/overall', { limit: 100 });
         const entries = asArray(payload);
 
         await sendPaginatedReply(interaction, {
             ownerId: interaction.user.id,
-            title: 'Overall Leaderboard',
-            description: 'View the overall WASANS leaderboard.',
-            pages: buildPages(entries, (item) => ({
-                leaderboardEntry: {
-                    name: getPlayerName(item),
-                    stat: `Score ${formatScore(item?.score ?? item?.overall_score)}`,
-                },
+            kind: 'leaderboard',
+            meta: { trial: null, total: getTotal(payload) },
+            rows: entries.map((item, index) => ({
+                rank: index + 1,
+                name: getPlayerName(item),
+                stat: formatScore(item?.score ?? item?.overall_score),
             })),
-            emptyMessage: 'No overall leaderboard entries found.',
-            ephemeral: true,
+            options: entries.map(() => null),
         });
 
         return;
     }
 
-    const payload = await apiGet(`leaderboards/trials/${encodeURIComponent(trial)}`);
-    const entries = asArray(payload);
+    const payload = await apiGet(`leaderboards/trials/${encodeURIComponent(trial)}`, { limit: 100 });
+    // Players with no time on the trial come back ranked null; they would only
+    // pad the card with empty rows.
+    const entries = asArray(payload).filter((item) => toNumber(item?.time ?? item?.time_new) !== null);
 
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
-        title: `${trial} Leaderboard`,
-        description: `View the ${trial} leaderboard.`,
-        pages: buildPages(entries, (item, index) => {
-            const rank = item?.rank || index + 1;
-            const playerName = getPlayerName(item);
+        kind: 'leaderboard',
+        meta: { trial, total: entries.length },
+        rows: entries.map((item, index) => ({
+            rank: item?.rank || index + 1,
+            name: getPlayerName(item),
+            stat: formatTime(item?.time ?? item?.time_new),
+            isWorldRecord: Boolean(item?.is_world_record),
+        })),
+        options: entries.map((item, index) => {
             const submissionUuid = getSubmissionUuid(item);
+            if (!submissionUuid) return null;
+
             return {
-                leaderboardEntry: {
-                    name: playerName,
-                    stat: formatTime(item?.time ?? item?.time_new),
-                },
-                submissionUuid,
-                submissionLabel: truncate(`#${rank} ${playerName}`, 100),
-                submissionDescription: `${trial} PB`,
+                label: truncate(`#${item?.rank || index + 1} ${getPlayerName(item)}`, 100),
+                value: submissionUuid,
+                description: truncate(`${trial} PB`, 100),
             };
         }),
-        emptyMessage: `No leaderboard entries found for ${trial}.`,
-        ephemeral: true,
     });
 }
 
 async function handleSubmissionsCommand(interaction) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
     const playerInput = interaction.options.getString('player');
     let player = null;
 
@@ -505,63 +443,54 @@ async function handleSubmissionsCommand(interaction) {
         }
     }
 
-    const query = player ? { player_uuid: getPlayerUuid(player) } : undefined;
-    const payload = await apiGet('submissions', query);
-    const submissions = asArray(payload).slice().sort(compareNewestFirst);
+    const payload = await apiGet('submissions', {
+        player_uuid: player ? getPlayerUuid(player) : undefined,
+        limit: 100,
+    });
+    const submissions = asArray(payload);
 
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
-        title: 'Recent Submissions',
-        description: player ? `View ${getPlayerName(player)}'s recent submissions.` : 'View recent submissions.',
-        pages: buildPages(submissions, (submission) => {
-            const trialName = getTrialName(submission);
-            const playerName = getPlayerName(submission);
-            const status = getSubmissionStatus(submission);
+        kind: 'submissions',
+        meta: { player: player ? getPlayerName(player) : null, total: getTotal(payload) },
+        rows: submissions.map((submission) => ({
+            trial: getTrialName(submission),
+            player: getPlayerName(submission),
+            state: getSubmissionStatus(submission),
+            time: formatTime(submission?.time ?? submission?.time_new),
+        })),
+        options: submissions.map((submission) => {
             const submissionUuid = getSubmissionUuid(submission);
+            if (!submissionUuid) return null;
 
             return {
-                leaderboardEntry: {
-                    name: playerName,
-                    stat: `${trialName} • ${status}`,
-                },
-                submissionUuid,
-                submissionLabel: truncate(`${trialName} • ${playerName}`, 100),
-                submissionDescription: truncate(formatTime(submission?.time ?? submission?.time_new), 100),
+                label: truncate(`${getTrialName(submission)} • ${getPlayerName(submission)}`, 100),
+                value: submissionUuid,
+                description: truncate(formatTime(submission?.time ?? submission?.time_new), 100),
             };
         }),
-        emptyMessage: player ? 'No submissions found for this player.' : 'No submissions found.',
-        ephemeral: true,
     });
 }
 
-function buildPbs(submissions) {
-    const approved = submissions.filter((submission) => String(submission?.state || '').toLowerCase() === 'approved');
+// The API's `pbs` table is the source of truth for personal bests, so the card
+// lists every trial and fills in the ones the player has a time on.
+function buildPbRows(pbs, worldRecordUuids) {
+    const byTrial = new Map(pbs.map((pb) => [getTrialName(pb), pb]));
 
-    const bestByTrial = new Map();
-    for (const submission of approved) {
-        const trialName = getTrialName(submission);
-        if (!trialSet.has(trialName)) continue;
+    return trials.map((trialName) => {
+        const pb = byTrial.get(trialName) || null;
+        const submissionUuid = pb ? getSubmissionUuid(pb) : null;
 
-        const candidateTime = toNumber(submission?.time ?? submission?.time_new);
-        if (candidateTime === null) continue;
-
-        const current = bestByTrial.get(trialName);
-        const currentTime = current ? toNumber(current?.time ?? current?.time_new) : null;
-
-        if (!current || currentTime === null || candidateTime < currentTime) {
-            bestByTrial.set(trialName, submission);
-        }
-    }
-
-    return trials.map((trialName) => ({
-        trialName,
-        submission: bestByTrial.get(trialName) || null,
-    }));
+        return {
+            trial: trialName,
+            time: pb ? formatTime(pb?.time ?? pb?.time_new) : null,
+            isWorldRecord: Boolean(submissionUuid && worldRecordUuids.has(submissionUuid)),
+            submissionUuid,
+        };
+    });
 }
 
 async function handlePbsCommand(interaction) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
     const playerInput = interaction.options.getString('player', true);
     const player = await resolvePlayerFromInput(interaction, playerInput);
     if (!player) {
@@ -575,68 +504,66 @@ async function handlePbsCommand(interaction) {
         return;
     }
 
-    const payload = await apiGet('submissions', { player_uuid: playerUuid });
-    const submissions = asArray(payload);
-    const pbs = buildPbs(submissions);
+    const [detailPayload, recordsPayload] = await Promise.all([
+        apiGet(`players/${encodeURIComponent(playerUuid)}`, { include: 'pbs' }),
+        apiGet('records/world').catch(() => null),
+    ]);
+
+    const detail = detailPayload?.data?.player || detailPayload?.data || null;
+    const pbs = Array.isArray(detail?.pbs) ? detail.pbs : [];
+    const worldRecordUuids = new Set(
+        asArray(recordsPayload)
+            .map((record) => getSubmissionUuid(record))
+            .filter(Boolean),
+    );
+
+    const rows = buildPbRows(pbs, worldRecordUuids);
+    const completed = rows.filter((row) => row.time).length;
 
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
-        title: 'Personal Bests',
-        description: `View ${getPlayerName(player)}'s personal bests.`,
-        pages: buildPages(pbs, (entry) => {
-            if (!entry.submission) {
-                return {
-                    leaderboardEntry: { name: entry.trialName, stat: 'No PB' },
-                };
-            }
+        kind: 'pbs',
+        meta: { player: getPlayerName(detail || player), completed, totalTrials: rows.length },
+        rows,
+        options: rows.map((row) => {
+            if (!row.submissionUuid) return null;
 
-            const submissionUuid = getSubmissionUuid(entry.submission);
-            const time = formatTime(entry.submission?.time ?? entry.submission?.time_new);
             return {
-                leaderboardEntry: { name: entry.trialName, stat: time },
-                submissionUuid,
-                submissionLabel: truncate(entry.trialName, 100),
-                submissionDescription: truncate(`PB • ${time}`, 100),
+                label: truncate(row.trial, 100),
+                value: row.submissionUuid,
+                description: truncate(`PB • ${row.time}`, 100),
             };
         }),
-        emptyMessage: 'No PB data found for this player.',
-        ephemeral: true,
     });
 }
 
 async function handleWrsCommand(interaction) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
     const payload = await apiGet('records/world');
     const records = asArray(payload);
 
     await sendPaginatedReply(interaction, {
         ownerId: interaction.user.id,
-        title: 'World Records',
-        description: 'View the WASANS world records.',
-        pages: buildPages(records, (record) => {
-            const trialName = getTrialName(record);
-            const playerName = getPlayerName(record);
+        kind: 'wrs',
+        meta: { total: records.length },
+        rows: records.map((record) => ({
+            trial: getTrialName(record),
+            holder: getPlayerName(record),
+            time: formatTime(record?.time ?? record?.time_new),
+        })),
+        options: records.map((record) => {
             const submissionUuid = getSubmissionUuid(record);
-            const time = formatTime(record?.time ?? record?.time_new);
+            if (!submissionUuid) return null;
+
             return {
-                leaderboardEntry: {
-                    name: playerName,
-                    stat: `${trialName} • ${time}`,
-                },
-                submissionUuid,
-                submissionLabel: truncate(trialName, 100),
-                submissionDescription: truncate(playerName, 100),
+                label: truncate(getTrialName(record), 100),
+                value: submissionUuid,
+                description: truncate(getPlayerName(record), 100),
             };
         }),
-        emptyMessage: 'No world records found.',
-        ephemeral: true,
     });
 }
 
 async function handleStatsCommand(interaction) {
-    await interaction.deferReply();
-
     const playerInput = interaction.options.getString('player', true);
     const player = await resolvePlayerFromInput(interaction, playerInput);
     if (!player) {
@@ -650,30 +577,48 @@ async function handleStatsCommand(interaction) {
         return;
     }
 
-    const payload = await apiGet('submissions', { player_uuid: playerUuid });
-    const submissions = asArray(payload).slice().sort(compareNewestFirst);
-    const mostRecent = submissions[0] || null;
+    const [detailPayload, countPayload, approvedPayload, recordsPayload] = await Promise.all([
+        apiGet(`players/${encodeURIComponent(playerUuid)}`, {
+            include: 'pbs,recent_submissions',
+            submissions_limit: 1,
+        }),
+        // Only the envelope's total is needed for the counts, so ask for the
+        // smallest page the API will hand back.
+        apiGet('submissions', { player_uuid: playerUuid, limit: 1 }).catch(() => null),
+        apiGet('submissions', { player_uuid: playerUuid, state: 'approved', limit: 1 }).catch(() => null),
+        apiGet('records/world').catch(() => null),
+    ]);
 
-    const embed = new EmbedBuilder()
-        .setColor(0x4bb503)
-        .setTitle(`Stats for ${getDisplayPlayerName(player)}`)
-        .addFields(
-            {
-                name: 'Current Score',
-                value: formatScore(player?.score ?? player?.overall_score),
-                inline: true,
-            },
-            {
-                name: 'Total Submissions',
-                value: String(submissions.length),
-                inline: true,
-            },
-            {
-                name: 'Most Recent Submission',
-                value: mostRecent ? `${getTrialName(mostRecent)} | ${formatTime(mostRecent?.time ?? mostRecent?.time_new)}` : 'No submissions',
-                inline: true,
-            },
-        );
+    const detail = detailPayload?.data?.player || detailPayload?.data || player;
+    const pbs = Array.isArray(detail?.pbs) ? detail.pbs : [];
+    const recentSubmissions = Array.isArray(detail?.recent_submissions) ? detail.recent_submissions : [];
+    const mostRecent = recentSubmissions[0] || null;
+
+    const worldRecords = asArray(recordsPayload).filter((record) => record?.player_uuid === playerUuid);
+    const submissionCount = getTotal(countPayload);
+    const approvedCount = getTotal(approvedPayload);
+
+    const avatarDataUri = await fetchAvatarDataUri(detail?.player_id, detail?.discord_avatar);
+
+    const { svg, width } = renderStatsCard({
+        name: getPlayerName(detail),
+        handle: formatJoinDate(detail?.date_joined),
+        avatarDataUri,
+        score: formatScore(detail?.score ?? detail?.overall_score),
+        rank: detail?.rank ? `Rank #${detail.rank}` : null,
+        tiles: [
+            { label: 'Submissions', value: submissionCount === null ? '—' : String(submissionCount) },
+            { label: 'Approved', value: approvedCount === null ? '—' : String(approvedCount) },
+            { label: 'Personal Bests', value: `${pbs.length} / ${trials.length}` },
+            { label: 'World Records', value: String(worldRecords.length), accent: worldRecords.length > 0 },
+        ],
+        latest: mostRecent
+            ? {
+                  label: `${getTrialName(mostRecent)} · ${getSubmissionStatus(mostRecent)}`,
+                  time: formatTime(mostRecent?.time ?? mostRecent?.time_new),
+              }
+            : null,
+    });
 
     const components = [];
     const mostRecentSubmissionUuid = mostRecent ? getSubmissionUuid(mostRecent) : null;
@@ -688,7 +633,13 @@ async function handleStatsCommand(interaction) {
         );
     }
 
-    await interaction.editReply({ embeds: [embed], components });
+    await interaction.editReply({
+        content: '',
+        embeds: [],
+        files: [renderAttachment(svg, width, 'stats')],
+        attachments: [],
+        components,
+    });
 }
 
 async function handleAutocomplete(interaction) {
@@ -714,62 +665,46 @@ async function handleComponentInteraction(interaction) {
     if (parsed.action === 'url') {
         const submissionUuid = parsed.value;
         if (!submissionUuid) {
-            await interaction.reply({
-                content: 'Submission link is unavailable.',
-                flags: MessageFlags.Ephemeral,
-            });
+            await interaction.reply({ content: 'Submission link is unavailable.', flags: MessageFlags.Ephemeral });
             return true;
         }
 
-        await interaction.reply({
-            content: resolveSubmissionUrl(submissionUuid),
-            flags: MessageFlags.Ephemeral,
-        });
+        await interaction.reply({ content: resolveSubmissionUrl(submissionUuid) });
         return true;
     }
 
     const context = parsed.contextId ? paginationContexts.get(parsed.contextId) : null;
     if (!context) {
-        await interaction.reply({
-            content: 'This interaction is no longer available.',
-            flags: MessageFlags.Ephemeral,
-        });
-        return true;
-    }
-
-    if (context.ownerId && interaction.user.id !== context.ownerId) {
-        await interaction.reply({
-            content: 'Only the original command user can control this pagination.',
-            flags: MessageFlags.Ephemeral,
-        });
-        return true;
-    }
-
-    if (parsed.action === 'page' && interaction.isButton()) {
-        const page = Number(parsed.value || 0);
-        await interaction.update(buildPageView(parsed.contextId, context, page));
-        return true;
-    }
-
-    if (parsed.action === 'noop' && interaction.isButton()) {
-        await interaction.deferUpdate();
+        // Kept ephemeral: these are pagination guard rails aimed at one clicker,
+        // not command output, and posting them publicly would just be noise.
+        await interaction.reply({ content: 'This interaction is no longer available.', flags: MessageFlags.Ephemeral });
         return true;
     }
 
     if (parsed.action === 'select' && interaction.isStringSelectMenu()) {
         const submissionUuid = interaction.values[0];
         if (!submissionUuid) {
+            await interaction.reply({ content: 'Submission link is unavailable.', flags: MessageFlags.Ephemeral });
+            return true;
+        }
+
+        await interaction.reply({ content: resolveSubmissionUrl(submissionUuid) });
+        return true;
+    }
+
+    if (parsed.action === 'page' && interaction.isButton()) {
+        if (context.ownerId && interaction.user.id !== context.ownerId) {
             await interaction.reply({
-                content: 'Submission link is unavailable.',
+                content: 'Only the original command user can control this pagination.',
                 flags: MessageFlags.Ephemeral,
             });
             return true;
         }
 
-        await interaction.reply({
-            content: resolveSubmissionUrl(submissionUuid),
-            flags: MessageFlags.Ephemeral,
-        });
+        // Rendering the next page takes long enough that acknowledging first is
+        // safer than racing Discord's 3 second window.
+        await interaction.deferUpdate();
+        await interaction.editReply(buildPageView(parsed.contextId, context, Number(parsed.value || 0)));
         return true;
     }
 
@@ -779,49 +714,35 @@ async function handleComponentInteraction(interaction) {
 async function handleChatInputCommand(interaction) {
     if (!interaction.isChatInputCommand()) return false;
 
+    const handlers = {
+        leaderboard: handleLeaderboardCommand,
+        submissions: handleSubmissionsCommand,
+        pbs: handlePbsCommand,
+        wrs: handleWrsCommand,
+        stats: handleStatsCommand,
+    };
+
+    const handler = handlers[interaction.commandName];
+    if (!handler) return false;
+
     try {
-        if (interaction.commandName === 'leaderboard') {
-            await handleLeaderboardCommand(interaction);
-            return true;
-        }
-
-        if (interaction.commandName === 'submissions') {
-            await handleSubmissionsCommand(interaction);
-            return true;
-        }
-
-        if (interaction.commandName === 'pbs') {
-            await handlePbsCommand(interaction);
-            return true;
-        }
-
-        if (interaction.commandName === 'wrs') {
-            await handleWrsCommand(interaction);
-            return true;
-        }
-
-        if (interaction.commandName === 'stats') {
-            await handleStatsCommand(interaction);
-            return true;
-        }
+        // Every command answers publicly, so the rendered card is visible to the
+        // whole channel rather than just the person who ran it.
+        await interaction.deferReply();
+        await handler(interaction);
     } catch (error) {
         const message = error?.message || 'Command failed.';
 
         if (interaction.deferred || interaction.replied) {
-            await interaction.editReply({ content: message, embeds: [], components: [] }).catch(() => {});
+            await interaction.editReply({ content: message, embeds: [], files: [], attachments: [], components: [] }).catch(() => {});
         } else {
-            const payload =
-                interaction.commandName === 'stats'
-                    ? { content: message }
-                    : { content: message, flags: MessageFlags.Ephemeral };
-            await interaction.reply(payload).catch(() => {});
+            await interaction.reply({ content: message }).catch(() => {});
         }
 
         await logger.error('Slash command failed', message, { command_name: interaction.commandName }).catch(() => {});
-        return true;
     }
 
-    return false;
+    return true;
 }
 
 export async function registerSlashCommands(client) {
