@@ -669,14 +669,14 @@ async function handleComponentInteraction(interaction) {
             return true;
         }
 
-        await interaction.reply({ content: resolveSubmissionUrl(submissionUuid) });
+        await interaction.reply({ content: resolveSubmissionUrl(submissionUuid), flags: MessageFlags.Ephemeral });
         return true;
     }
 
     const context = parsed.contextId ? paginationContexts.get(parsed.contextId) : null;
     if (!context) {
-        // Kept ephemeral: these are pagination guard rails aimed at one clicker,
-        // not command output, and posting them publicly would just be noise.
+        // Component replies stay ephemeral: submission links and pagination guard
+        // rails are answers to one clicker, not command output for the channel.
         await interaction.reply({ content: 'This interaction is no longer available.', flags: MessageFlags.Ephemeral });
         return true;
     }
@@ -688,7 +688,7 @@ async function handleComponentInteraction(interaction) {
             return true;
         }
 
-        await interaction.reply({ content: resolveSubmissionUrl(submissionUuid) });
+        await interaction.reply({ content: resolveSubmissionUrl(submissionUuid), flags: MessageFlags.Ephemeral });
         return true;
     }
 
