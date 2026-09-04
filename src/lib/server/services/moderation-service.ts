@@ -270,9 +270,9 @@ export async function resolveModeratorUser(
 }
 
 // Pulls the numbers the average-score-change line needs out of D1 and hands
-// them to averageScoreChangeForWrChange. Both the PB list and the player
-// count are restricted to ranked players (score above the platinum cut-off)
-// so that the pile of 0-score accounts can't water the figure down.
+// them to averageScoreChangeForWrChange. Only ranked players — those above
+// the platinum cut-off — make it into the PB list; the helper then narrows
+// that down again to the ones whose score the new WR actually moved.
 async function calculateAverageScoreChangeForWrChange(
   db: D1Database,
   trialName: string,
@@ -282,10 +282,7 @@ async function calculateAverageScoreChangeForWrChange(
   const trial = trialName as TrialName
   const now = Math.floor(Date.now() / 1000)
 
-  const [rankedPlayerCountRow, trialCount, pbResult] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) AS count FROM players WHERE score > ?`)
-      .bind(RANKED_PLAYER_MIN_SCORE)
-      .first<{ count: number }>(),
+  const [trialCount, pbResult] = await Promise.all([
     getCountedTrialCount(db, now),
     db.prepare(
       `SELECT pbs.time AS time
@@ -303,7 +300,6 @@ async function calculateAverageScoreChangeForWrChange(
     oldWr,
     newWr,
     trialCount,
-    rankedPlayerCount: Number(rankedPlayerCountRow?.count ?? 0),
     rankedPbTimes: (pbResult.results || []).map((row) => Number(row.time)),
   })
 }
