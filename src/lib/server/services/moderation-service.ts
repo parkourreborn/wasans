@@ -9,6 +9,7 @@ import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-s
 import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
+import { averageScoreChangeForWrChange, RANKED_PLAYER_MIN_SCORE } from "@/lib/server/average-score-change"
 import {
   deleteBotThread,
   getRankLabel,
@@ -268,12 +269,10 @@ export async function resolveModeratorUser(
   }
 }
 
-// Computes each player's score delta caused by a WR change on one trial —
-// calculateScore(newWr, theirPbTime) - calculateScore(oldWr, theirPbTime),
-// divided by the trial count since that's how it rolls into their overall
-// average — then averages that across every player (players with no PB on
-// this trial have a delta of 0, and are still counted in the average, since
-// "average across all users" includes everyone, not just participants).
+// Pulls the numbers the average-score-change line needs out of D1 and hands
+// them to averageScoreChangeForWrChange. Both the PB list and the player
+// count are restricted to ranked players (score above the platinum cut-off)
+// so that the pile of 0-score accounts can't water the figure down.
 async function calculateAverageScoreChangeForWrChange(
   db: D1Database,
   trialName: string,
@@ -283,32 +282,30 @@ async function calculateAverageScoreChangeForWrChange(
   const trial = trialName as TrialName
   const now = Math.floor(Date.now() / 1000)
 
-  const [playerCountRow, trialCount, pbResult] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) AS count FROM players`).first<{ count: number }>(),
+  const [rankedPlayerCountRow, trialCount, pbResult] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) AS count FROM players WHERE score > ?`)
+      .bind(RANKED_PLAYER_MIN_SCORE)
+      .first<{ count: number }>(),
     getCountedTrialCount(db, now),
-    db.prepare(`SELECT time FROM pbs WHERE trial_name = ?`).bind(trialName).all<{ time: number }>(),
+    db.prepare(
+      `SELECT pbs.time AS time
+       FROM pbs
+       JOIN players ON players.uuid = pbs.player_uuid
+       WHERE pbs.trial_name = ?
+         AND players.score > ?`
+    )
+      .bind(trialName, RANKED_PLAYER_MIN_SCORE)
+      .all<{ time: number }>(),
   ])
 
-  const playerCount = Number(playerCountRow?.count ?? 0)
-
-  if (!playerCount || trialCount <= 0) {
-    return 0
-  }
-
-  let totalDelta = 0
-
-  for (const row of pbResult.results || []) {
-    const time = Number(row.time)
-    if (!Number.isFinite(time) || time <= 0) {
-      continue
-    }
-
-    const newScore = calculateScore(newWr, time, trial)
-    const oldScore = oldWr && oldWr > 0 ? calculateScore(oldWr, time, trial) : 0
-    totalDelta += (newScore - oldScore) / trialCount
-  }
-
-  return Number((totalDelta / playerCount).toFixed(4))
+  return averageScoreChangeForWrChange({
+    trial,
+    oldWr,
+    newWr,
+    trialCount,
+    rankedPlayerCount: Number(rankedPlayerCountRow?.count ?? 0),
+    rankedPbTimes: (pbResult.results || []).map((row) => Number(row.time)),
+  })
 }
 
 export async function patchSubmission(
