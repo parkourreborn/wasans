@@ -1,8 +1,10 @@
 import "server-only"
+import {
+  MAX_REPLACEMENT_CHAIN_HOPS,
+  REFRESH_TOKEN_TTL_SECONDS,
+  isBenignReuse,
+} from "@/lib/refresh-rotation"
 import { generateOpaqueToken, hashToken } from "./jwt"
-
-// 30 days, matching v1's auth_sessions session length.
-const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
 
 type RefreshTokenRow = {
   id: string
@@ -10,6 +12,21 @@ type RefreshTokenRow = {
   player_uuid: string
   expires_at: number
   revoked_at: number | null
+  replaced_by: string | null
+}
+
+const TOKEN_COLUMNS = `id, family_id, player_uuid, expires_at, revoked_at, replaced_by`
+
+// Every read in the rotation path must see the writes of the rotation that
+// came just before it. D1 can serve plain reads from a replica that hasn't
+// caught up yet, which would make a freshly issued token look like it does
+// not exist — reported to the browser as "refresh token invalid", i.e. a
+// spurious sign-out. Pinning the whole exchange to the primary removes that
+// class of logout entirely.
+type TokenSession = Pick<D1DatabaseSession, "prepare" | "batch">
+
+function primarySession(db: D1Database): TokenSession {
+  return db.withSession("first-primary")
 }
 
 export type IssuedRefreshToken = {
@@ -48,17 +65,11 @@ export type RotateResult =
   | { status: "reused"; playerUuid: string }
   | { status: "invalid" }
 
-// A refresh token is meant to be presented exactly once. But the access +
-// refresh cookies are shared by every tab of the same browser — if two tabs'
-// access tokens expire around the same moment, both can fire a refresh
-// before either tab observes the other's Set-Cookie, so the second request
-// presents a token the first one just rotated away, through no fault of its
-// own. Within this window after rotation, that's treated as the same benign
-// race rather than theft/replay.
-const REUSE_GRACE_PERIOD_SECONDS = 20
-
-async function rotateActiveToken(db: D1Database, row: RefreshTokenRow, now: number): Promise<RotateResult> {
-  const session = db.withSession("first-primary")
+async function rotateActiveToken(
+  session: TokenSession,
+  row: RefreshTokenRow,
+  now: number
+): Promise<RotateResult> {
   const newId = crypto.randomUUID()
   const token = generateOpaqueToken()
   const tokenHash = await hashToken(token)
@@ -80,16 +91,51 @@ async function rotateActiveToken(db: D1Database, row: RefreshTokenRow, now: numb
   }
 }
 
+// Follows the replaced_by links forward from an already-rotated token to see
+// whether the session it belongs to is still alive. A browser whose refresh
+// response never arrived keeps presenting a token one (or, if it keeps
+// happening, a few) links behind the live one; that is a dropped connection,
+// not an attacker, and the player should stay signed in.
+async function findActiveDescendant(
+  session: TokenSession,
+  row: RefreshTokenRow,
+  now: number
+): Promise<RefreshTokenRow | null> {
+  let current = row
+
+  for (let hop = 0; hop < MAX_REPLACEMENT_CHAIN_HOPS; hop++) {
+    if (!current.replaced_by) {
+      return null
+    }
+
+    const next = await session.prepare(`SELECT ${TOKEN_COLUMNS} FROM refresh_tokens WHERE id = ?`)
+      .bind(current.replaced_by)
+      .first<RefreshTokenRow>()
+
+    if (!next) {
+      return null
+    }
+
+    if (!next.revoked_at) {
+      return Number(next.expires_at) > now ? next : null
+    }
+
+    current = next
+  }
+
+  return null
+}
+
 // Rotates a presented refresh token: revokes it and issues a replacement in
-// the same family. If the presented token was already revoked outside the
-// grace period above, that's a real signal of token theft/replay — the
+// the same family. Re-presenting a token that was already rotated away is
+// only treated as theft/replay when it cannot be explained as a lost
+// response or a race between two tabs (see isBenignReuse) — in that case the
 // entire family is revoked so both the attacker and the legitimate holder
 // are logged out and must re-authenticate.
 export async function rotateRefreshToken(db: D1Database, presentedToken: string): Promise<RotateResult> {
+  const session = primarySession(db)
   const tokenHash = await hashToken(presentedToken)
-  const row = await db.prepare(
-    `SELECT id, family_id, player_uuid, expires_at, revoked_at FROM refresh_tokens WHERE token_hash = ?`
-  )
+  const row = await session.prepare(`SELECT ${TOKEN_COLUMNS} FROM refresh_tokens WHERE token_hash = ?`)
     .bind(tokenHash)
     .first<RefreshTokenRow>()
 
@@ -100,19 +146,23 @@ export async function rotateRefreshToken(db: D1Database, presentedToken: string)
   const now = Math.floor(Date.now() / 1000)
 
   if (row.revoked_at) {
-    if (now - row.revoked_at <= REUSE_GRACE_PERIOD_SECONDS) {
-      const activeRow = await db.prepare(
-        `SELECT id, family_id, player_uuid, expires_at, revoked_at FROM refresh_tokens WHERE family_id = ? AND revoked_at IS NULL`
-      )
-        .bind(row.family_id)
-        .first<RefreshTokenRow>()
+    const descendant = await findActiveDescendant(session, row, now)
 
-      if (activeRow) {
-        return rotateActiveToken(db, activeRow, now)
+    if (isBenignReuse({ revokedAt: Number(row.revoked_at), now, hasActiveDescendant: Boolean(descendant) })) {
+      const active =
+        descendant ||
+        (await session.prepare(
+          `SELECT ${TOKEN_COLUMNS} FROM refresh_tokens WHERE family_id = ? AND revoked_at IS NULL`
+        )
+          .bind(row.family_id)
+          .first<RefreshTokenRow>())
+
+      if (active && Number(active.expires_at) > now) {
+        return rotateActiveToken(session, active, now)
       }
     }
 
-    await db.prepare(
+    await session.prepare(
       `UPDATE refresh_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL`
     )
       .bind(now, row.family_id)
@@ -125,7 +175,7 @@ export async function rotateRefreshToken(db: D1Database, presentedToken: string)
     return { status: "invalid" }
   }
 
-  return rotateActiveToken(db, row, now)
+  return rotateActiveToken(session, row, now)
 }
 
 export async function revokeRefreshToken(db: D1Database, presentedToken: string) {
