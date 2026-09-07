@@ -13,8 +13,20 @@ export type AuthUser = {
 
 // Loads the display/permission row for a player uuid (sourced from the v2
 // JWT's `sub` claim) and records the request IP.
-export async function loadAuthUserByUuid(db: D1Database, playerUuid: string, request: Request) {
-  const user = await db.prepare(
+//
+// `readFromPrimary` forces the lookup past D1's read replicas. Callers that
+// only render a page can tolerate a replica that is a moment behind; the
+// token-refresh path cannot, because there a missing row is read as "this
+// account is gone" and signs the player out.
+export async function loadAuthUserByUuid(
+  db: D1Database,
+  playerUuid: string,
+  request: Request,
+  options?: { readFromPrimary?: boolean }
+) {
+  const reader = options?.readFromPrimary ? db.withSession("first-primary") : db
+
+  const user = await reader.prepare(
     `SELECT players.uuid,
             COALESCE(oauth_accounts.provider_account_id, players.player_id) AS player_id,
             players.discord_avatar,
