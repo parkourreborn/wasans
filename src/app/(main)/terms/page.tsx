@@ -109,18 +109,10 @@ export default function TermsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Ads">
-        <p className="text-sm leading-6 text-muted-foreground">
-          The site shows ads through Google AdSense to cover what it costs to run. Google decides what you see and sets its own cookies to do it — see the{" "}
-          <Link href="/privacy" className="text-primary underline underline-offset-4">Privacy Policy</Link>{" "}
-          for what that means. Blocking them is fine and nothing on the site depends on them.
-        </p>
-      </SectionCard>
-
       <SectionCard title="Other people's services">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            The site leans on Discord for login and community features, Cloudflare for hosting, the database, and video storage, Google for ads, and proof providers like Medal when you submit a link.
+            The site leans on Discord for login and community features, Cloudflare for hosting, the database, and video storage, and proof providers like Medal when you submit a link. There are no ads and no analytics.
           </p>
           <p>
             They all have their own terms, and they can go down, change, or handle your data however their own policies allow. That part is not something we can answer for.

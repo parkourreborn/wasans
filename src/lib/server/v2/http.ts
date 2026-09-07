@@ -1,6 +1,6 @@
 import "server-only"
 import { getCloudflareContext } from "@opennextjs/cloudflare"
-import { getRequestId, jsonError, type ApiErrorCode } from "@/lib/server/http"
+import { getRequestId, jsonError, mergeResponseHeaders, type ApiErrorCode } from "@/lib/server/http"
 import { canModerate, isOwner, loadAuthUserByUuid, type AuthUser } from "@/lib/server/auth"
 import { signJwt, verifyJwt } from "./jwt"
 
@@ -153,7 +153,9 @@ export function jsonOk(
 
   const headers = new Headers({ "content-type": "application/json" })
   if (options?.headers) {
-    new Headers(options.headers).forEach((value, key) => headers.set(key, value))
+    // Must not be forEach + set: that drops every Set-Cookie but the last.
+    // See mergeResponseHeaders.
+    mergeResponseHeaders(headers, options.headers)
   }
   if (options?.requestId) {
     headers.set("x-request-id", options.requestId)
