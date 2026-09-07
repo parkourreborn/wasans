@@ -61,7 +61,6 @@ const localStorageItems = [
   "Two cookies that keep you logged in, plus a couple of short-lived ones during the Discord login handshake",
   "Your sidebar and interface preferences",
   "Calculator inputs, cached leaderboard data, and the submission IDs you looked at recently, so the next/previous arrows work",
-  "Whatever Google's advertising script sets — see the section below",
 ]
 
 export default function PrivacyPage() {
@@ -185,21 +184,6 @@ export default function PrivacyPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Advertising">
-        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
-          <p>
-            The site loads <span className="font-medium text-foreground">Google AdSense</span> on every page. Google&apos;s script runs in your browser and can set its own cookies and storage to measure and personalise the ads it shows you. That data goes to Google, under Google&apos;s policies, and we do not see it or control it.
-          </p>
-          <p>
-            We should be straight with you: <span className="font-medium text-foreground">we do not currently ask for your consent before that script loads</span>, and if you are in the EU or UK we probably ought to. We are aware of it and it is on the list to fix, either with a consent prompt or by switching the ads to a non-personalised mode that does not need one.
-          </p>
-          <p>
-            In the meantime, you can manage what Google does with ad data through{" "}
-            <a href="https://myadcenter.google.com" className="text-primary underline underline-offset-4" target="_blank" rel="noopener noreferrer">Google My Ad Center</a>, and a content blocker will stop the script loading at all. Nothing else on the site depends on it.
-          </p>
-        </div>
-      </SectionCard>
-
       <SectionCard title="Cookies and browser storage">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>Here is everything we put in your browser:</p>
@@ -209,7 +193,7 @@ export default function PrivacyPage() {
             ))}
           </ul>
           <p>
-            Everything in that list except the advertising script is needed for the site to work or to remember how you like it set up. None of it is used to track you across other websites.
+            That is the whole list. All of it is either needed for the site to work or there to remember how you like it set up, it all stays in your browser, and none of it is used to track you across other websites. There are no advertising or analytics scripts on this site.
           </p>
         </div>
       </SectionCard>
@@ -225,7 +209,9 @@ export default function PrivacyPage() {
       <SectionCard title="Who else is involved">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">Discord</span> handles login and our community features. <span className="font-medium text-foreground">Cloudflare</span> hosts the site, the database, and the video storage. <span className="font-medium text-foreground">Google</span> serves the ads. <span className="font-medium text-foreground">Medal</span> and similar proof providers are involved when you submit a link and we fetch the video from them.
+            <span className="font-medium text-foreground">Discord</span> handles login and our community features. <span className="font-medium text-foreground">Cloudflare</span> hosts the site, the database, and the video storage. <span className="font-medium text-foreground">Medal</span> and similar proof providers are involved when you submit a link and we fetch the video from them.</p>
+          <p>
+            That is the complete list. We do not run ads, we do not use an analytics service, and we do not sell or share your data with anyone else.
           </p>
           <p>
             Each of them handles data under their own policies, which we do not control.
@@ -235,7 +221,7 @@ export default function PrivacyPage() {
 
       <SectionCard title="Where your data goes">
         <p className="text-sm leading-6 text-muted-foreground">
-          Discord, Cloudflare, Google, and the proof providers all operate outside the EU and EEA, so your data leaves it. We rely on the transfer terms those companies publish for their own services; we are not in a position to negotiate our own with them.
+          Discord, Cloudflare, and the proof providers all operate outside the EU and EEA, so your data leaves it. We rely on the transfer terms those companies publish for their own services; we are not in a position to negotiate our own with them.
         </p>
       </SectionCard>
 
