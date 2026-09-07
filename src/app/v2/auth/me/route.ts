@@ -15,7 +15,7 @@ export const GET = withV2Context(async (ctx) => {
     // to — reads as "signed out" to every page that calls it, and because it
     // is not a 401 nothing ever triggered a refresh: that is why sessions
     // appeared to end 15 minutes after login while the refresh token behind
-    // them was still good for 30 days.
+    // them was still good.
     if (getRefreshCookieValue(ctx.request)) {
       // Worded for a human: the client normally turns this into a silent
       // refresh, so a player only ever reads it if the refresh itself failed.
