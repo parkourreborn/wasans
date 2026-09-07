@@ -3,6 +3,7 @@ import calculateScore from "@/lib/calc-score"
 import type { TrialName } from "@/lib/trials"
 import type { AuthUser } from "@/lib/server/auth"
 import { canModerate } from "@/lib/server/auth"
+import { secretsMatch } from "@/lib/constant-time"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
 import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
@@ -129,7 +130,7 @@ function isBotApiRequest(request: Request, env: CloudflareEnv) {
     || ""
   ).trim()
 
-  return Boolean(providedKey && expectedKey && providedKey === expectedKey)
+  return secretsMatch(providedKey || "", expectedKey)
 }
 
 function normalizeDiscordId(value: unknown) {
@@ -162,10 +163,14 @@ export async function resolveModeratorUser(
 
   // Check if this is a valid bot API request
   if (!isBotApiRequest(request, env)) {
-    console.log(`[${requestId}] Not a bot API request, returning session user (no permissions)`)
+    console.log(`[${requestId}] Not a bot API request and session user cannot moderate`)
+    // Must be a denial, not `{ user: sessionUser, error: null }`. Callers
+    // gate on `error || !user`, so handing back a signed-in member with no
+    // error read as "authorized" and let any logged-in player run moderator
+    // actions.
     return {
-      user: sessionUser,
-      error: null,
+      user: null,
+      error: "Moderator permission is required",
       debugInfo: "Not a bot API request"
     }
   }
@@ -314,6 +319,14 @@ export async function patchSubmission(
   } | null
 ) {
   const { env, ctx, uuid, user } = context
+
+  // Never rely on the route having gated this: approving a run, rewriting a
+  // time, or editing a moderator note are moderator-only actions, and this
+  // is the single function all of them funnel through.
+  if (!canModerate(user)) {
+    throw new Error("Moderator permission is required")
+  }
+
   const state = normalizeState(payload?.state)
   const moderatorNote = normalizeModeratorNote(payload?.moderator_note)
   const rawTime = payload?.time

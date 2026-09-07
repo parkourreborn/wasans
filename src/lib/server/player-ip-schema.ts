@@ -1,18 +1,5 @@
 import "server-only"
-
-function getClientIp(request: Request) {
-  const cfIp = request.headers.get("cf-connecting-ip")?.trim()
-  if (cfIp) {
-    return cfIp
-  }
-
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-  if (forwarded) {
-    return forwarded
-  }
-
-  return "unknown"
-}
+import { getClientIp } from "@/lib/server/client-ip"
 
 export async function trackPlayerIp(db: D1Database, playerUuid: string, request: Request) {
   const ipAddress = getClientIp(request)

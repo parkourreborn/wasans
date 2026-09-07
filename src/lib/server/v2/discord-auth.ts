@@ -79,7 +79,7 @@ export async function completeDiscordOAuthV2(request: Request, env: CloudflareEn
   try {
     const token = await exchangeCodeForToken(code, discordRedirectUriV2, getDiscordClientId(env), getDiscordClientSecret(env))
     const discordUser = await getDiscordUser(token.access_token, token.token_type)
-    const player = await findOrCreatePlayer(env.wasans, discordUser, token)
+    const player = await findOrCreatePlayer(env.wasans, discordUser)
 
     await trackPlayerIp(env.wasans, player.uuid, request)
 
