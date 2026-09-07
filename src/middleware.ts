@@ -34,17 +34,18 @@ function applyCorsHeaders(response: NextResponse, origin: string) {
 // accident nobody notices.
 const cspDirectives = [
   "default-src 'self'",
-  // Next's hydration payload and the ad script need inline/eval today; this
-  // is the directive to tighten first (via nonces) once the report-only
-  // policy below is running clean.
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com",
+  // No third-party scripts at all now that the ad script is gone. The
+  // inline/eval allowances are Next's hydration payload only, and are the
+  // thing to tighten next by moving them onto nonces.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://cdn.discordapp.com https://assets.wasans.tully.sh https://*.googlesyndication.com https://*.doubleclick.net",
+  "img-src 'self' data: blob: https://cdn.discordapp.com https://assets.wasans.tully.sh",
   "media-src 'self' blob: https://assets.wasans.tully.sh",
   "font-src 'self' data:",
-  "connect-src 'self' https://assets.wasans.tully.sh https://*.googlesyndication.com https://*.doubleclick.net",
-  "frame-src https://*.googlesyndication.com https://*.doubleclick.net",
-  // Nothing here is meant to be framed, and nothing may post a form off-site.
+  "connect-src 'self' https://assets.wasans.tully.sh",
+  // Nothing here is meant to be framed, nothing needs to frame anything
+  // else, and nothing may post a form off-site.
+  "frame-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self' https://discord.com",
   "base-uri 'self'",

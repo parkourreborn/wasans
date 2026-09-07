@@ -18,6 +18,54 @@ export function getRequestId(request: Request) {
   return incoming && incoming.length <= 128 ? incoming : crypto.randomUUID()
 }
 
+// Copies caller-supplied headers onto a response's headers WITHOUT losing
+// repeated values.
+//
+// This exists because `extra.forEach((value, key) => target.set(key, value))`
+// silently destroys Set-Cookie. Set-Cookie is the one header that
+// legitimately appears more than once, and the Fetch spec deliberately does
+// NOT combine its values when iterating — so forEach yields it once per
+// cookie, and `set` overwrites the previous one each time. Two cookies go in
+// and the last one comes out.
+//
+// That is what signed everyone out. A successful token refresh appends both
+// the access cookie and the refresh cookie; the refresh cookie was appended
+// second, so it won, and the new access cookie was thrown away before the
+// response left the worker. Login was unaffected (it builds its own Response
+// rather than going through these helpers), which is why sessions worked for
+// exactly as long as the 15-minute access token and then died — the browser
+// expired the access cookie and nothing ever replaced it.
+export function mergeResponseHeaders(target: Headers, extra: HeadersInit) {
+  const source = new Headers(extra)
+
+  // getSetCookie is the only way to read repeated Set-Cookie values back out
+  // intact. Where it exists, take the cookies from it and append each.
+  const readSetCookie = (source as Headers & { getSetCookie?: () => string[] }).getSetCookie
+  const cookies = typeof readSetCookie === "function" ? readSetCookie.call(source) : null
+
+  if (cookies) {
+    for (const cookie of cookies) {
+      target.append("set-cookie", cookie)
+    }
+  }
+
+  source.forEach((value, key) => {
+    if (key.toLowerCase() === "set-cookie") {
+      // Already handled above. Without getSetCookie, append here instead —
+      // appending is right for Set-Cookie either way, and never dropping a
+      // cookie matters more than the tidiness of setting other headers.
+      if (!cookies) {
+        target.append("set-cookie", value)
+      }
+      return
+    }
+
+    target.set(key, value)
+  })
+
+  return target
+}
+
 export function jsonResponse(data: unknown, status = 200, options?: HeadersInit | JsonResponseOptions) {
   const headersInput = options && "headers" in (options as JsonResponseOptions)
     ? (options as JsonResponseOptions).headers
@@ -31,8 +79,7 @@ export function jsonResponse(data: unknown, status = 200, options?: HeadersInit 
   })
 
   if (headersInput) {
-    const extraHeaders = new Headers(headersInput)
-    extraHeaders.forEach((value, key) => headers.set(key, value))
+    mergeResponseHeaders(headers, headersInput)
   }
 
   if (requestId) {
