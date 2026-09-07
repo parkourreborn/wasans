@@ -24,6 +24,8 @@ import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { FloatingSettingsModal } from "@/components/custom/settings-provider"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import { apiV2 } from "@/lib/api"
+import { setAuthSessionUser } from "@/lib/auth-session"
+import { useAuthSession } from "@/components/custom/use-auth-session"
 import {
   ArrowRightLeftIcon,
   BookIcon,
@@ -41,19 +43,7 @@ import {
   TrophyIcon,
 } from "lucide-react"
 
-type AuthUser = {
-  uuid: string
-  player_id: string
-  discord_avatar?: string | null
-  discord_discriminator?: string | null
-  player_name: string
-  score: number
-  permission: number
-}
 
-type AuthResponse = {
-  data?: { user: AuthUser | null }
-}
 
 type AuditSummaryResponse = {
   data?: {
@@ -162,31 +152,25 @@ function SidebarNavSubItem({ item, pathname }: { item: SidebarLinkItem; pathname
   )
 }
 
+// Login is a full-page navigation in the SAME tab. It used to be
+// target="_blank", which left the original tab sitting on its pre-login
+// render: the sidebar had already decided nobody was signed in and never
+// re-checked, so the tab you came from kept offering a login button — and
+// clicking it opened yet another tab. `next` brings the player back to the
+// page they were reading rather than the home page.
+function loginHref(pathname: string | null) {
+  const next = pathname && pathname.startsWith("/") ? pathname : "/"
+  return `${apiV2("/auth/discord/start")}?next=${encodeURIComponent(next)}`
+}
+
 export function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<AuthUser | null>(null)
+  const { status: authStatus, user } = useAuthSession()
   const [latestErrorAt, setLatestErrorAt] = useState<string | null>(null)
   const [lastSeenErrorAt, setLastSeenErrorAt] = useState<string | null>(() =>
     typeof window === "undefined" ? null : window.localStorage.getItem(lastSeenErrorStorageKey)
   )
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const response = await fetch(apiV2("/auth/me"))
-        const json = (await response.json()) as AuthResponse
-
-        if (response.ok) {
-          setUser(json.data?.user ?? null)
-        }
-      } catch (err) {
-        console.error(err)
-      }
-    }
-
-    loadUser()
-  }, [])
 
   useEffect(() => {
     const updateLastSeen = () => {
@@ -317,11 +301,15 @@ export function AppSidebar() {
       <SidebarFooter className="gap-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <FloatingSettingsModal user={user} onLogout={() => setUser(null)} onUserUpdate={setUser} />
+            <FloatingSettingsModal
+              user={user}
+              onLogout={() => setAuthSessionUser(null)}
+              onUserUpdate={(next) => setAuthSessionUser(next)}
+            />
           </SidebarMenuItem>
         </SidebarMenu>
 
-        {user ? (
+        {authStatus === "loading" ? null : user ? (
           <div className="flex min-w-0 items-center gap-3 rounded-lg border border-sidebar-border/70 p-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1.5">
             <Link href={`/players/${encodeURIComponent(user.uuid)}`} aria-label={`Open ${user.player_name} profile`}>
               <PlayerAvatar
@@ -346,8 +334,7 @@ export function AppSidebar() {
         ) : (
           <div className="group-data-[collapsible=icon]:hidden">
             <a
-              href={apiV2("/auth/discord/start")}
-              target="_blank"
+              href={loginHref(pathname)}
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
               <LogInIcon className="size-4" />

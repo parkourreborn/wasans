@@ -1,4 +1,5 @@
 import { jsonError } from "@/lib/server/http"
+import { insertAuditLog } from "@/lib/server/audit"
 import { loadAuthUserByUuid } from "@/lib/server/auth"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import {
@@ -12,6 +13,44 @@ import {
   withV2Context,
 } from "@/lib/server/v2/http"
 import { rotateRefreshToken } from "@/lib/server/v2/tokens"
+
+// Every way a live session can end here, recorded so a player reporting
+// "it logged me out again" can be answered from the log instead of guessed
+// at. Deliberately NOT logged: a request with no refresh cookie at all
+// (that is just a signed-out visitor, and logging it would flood the audit
+// table the way the open error-log endpoint used to) and a rate-limited one
+// (the client retries those).
+type RefreshFailureReason =
+  // A refresh token was presented that we have no record of, or that had
+  // passed its expiry. The ordinary end of a long-idle session.
+  | "token_unknown_or_expired"
+  // A token was presented that had already been rotated away, and could not
+  // be explained as a lost response or a race between tabs. Treated as
+  // replay, so the whole family was revoked. If this shows up for real
+  // players, the reuse heuristics are still too strict.
+  | "replay_detected"
+  // The token was fine but the player row came back empty or not active.
+  | "account_unavailable"
+
+async function recordRefreshFailure(
+  ctx: { db: D1Database; request: Request; requestId: string },
+  reason: RefreshFailureReason,
+  playerUuid: string | null
+) {
+  try {
+    await insertAuditLog(ctx.db, "auth_refresh_failed", "session", playerUuid, {
+      details: {
+        source: "auth_refresh",
+        reason,
+        request_id: ctx.requestId,
+        user_agent: ctx.request.headers.get("user-agent")?.slice(0, 300) || null,
+      },
+    })
+  } catch (error) {
+    // Never let bookkeeping turn a handled 401 into a 500.
+    console.error("Failed to record refresh failure:", error)
+  }
+}
 
 export const POST = withV2Context(async (ctx) => {
   // Keyed per-IP, and every client behind carrier NAT or a school/office
@@ -41,6 +80,12 @@ export const POST = withV2Context(async (ctx) => {
   const result = await rotateRefreshToken(ctx.db, presented)
 
   if (result.status !== "ok") {
+    await recordRefreshFailure(
+      ctx,
+      result.status === "reused" ? "replay_detected" : "token_unknown_or_expired",
+      result.status === "reused" ? result.playerUuid : null
+    )
+
     const headers = new Headers()
     for (const cookie of expiredV2AuthCookies(ctx.request)) {
       headers.append("set-cookie", cookie)
@@ -52,6 +97,8 @@ export const POST = withV2Context(async (ctx) => {
   // never be turned away because a replica hasn't caught up with their row.
   const user = await loadAuthUserByUuid(ctx.db, result.playerUuid, ctx.request, { readFromPrimary: true })
   if (!user) {
+    await recordRefreshFailure(ctx, "account_unavailable", result.playerUuid)
+
     // Deny this refresh, but don't revoke the whole family: both paths that
     // deactivate or delete an account already revoke its tokens at the
     // source, so anything reaching here is an unexplained empty read, and

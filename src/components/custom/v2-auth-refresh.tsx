@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import { apiV2 } from "@/lib/api"
+import { getAuthSession } from "@/lib/auth-session"
 import {
   PROACTIVE_REFRESH_INTERVAL_MS,
   isTransientRefreshFailure,
@@ -15,7 +16,14 @@ const REFRESH_PATH = apiV2("/auth/refresh")
 let refreshPromise: Promise<boolean> | null = null
 let installed = false
 let nativeFetch: typeof window.fetch | null = null
-let lastSuccessfulRefreshAt = 0
+// Seeded to load time, not 0. `pageshow` fires on every normal page load,
+// so starting at 0 made the first visibility check treat a session that had
+// just been issued as overdue and rotate it immediately — a needless
+// rotation per page load per tab, each one a chance for the response to be
+// lost. The interceptor already covers a page that loads with an access
+// token that has actually expired: the first /v2/auth/me comes back 401 and
+// is refreshed and retried.
+let lastSuccessfulRefreshAt = typeof window === "undefined" ? 0 : Date.now()
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -117,6 +125,13 @@ installFetchInterceptor()
 // rotate tokens nobody is waiting on.
 function refreshIfStale() {
   if (document.visibilityState !== "visible") {
+    return
+  }
+
+  // Nothing to keep alive for a visitor the server has already told us is
+  // signed out — and firing anyway spent their rate-limit bucket and wrote
+  // a 401 into the logs on every tab focus.
+  if (getAuthSession().status === "anonymous") {
     return
   }
 
