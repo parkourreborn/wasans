@@ -23,7 +23,15 @@ WHERE player_uuid IN (
   SELECT uuid FROM players WHERE COALESCE(account_status, 'active') = 'deleted'
 );
 
--- VACUUM reclaims the pages the above freed, so the removed values are not
--- recoverable from the database file. D1 runs this as a maintenance no-op if
--- it is unsupported on your version; it is safe either way.
-VACUUM;
+-- Note on reclaiming the freed pages: D1 does not accept VACUUM, so the old
+-- bytes may linger in pages SQLite has marked free until they are reused.
+-- That is why the UPDATE above overwrites the values before the columns are
+-- dropped — a DROP COLUMN on its own would leave the secrets readable in the
+-- file. If you want the pages actually reclaimed, export and re-import the
+-- database; it is not required for the tokens to be unusable, since dropping
+-- them here does not revoke them at Discord either way (see the note below).
+--
+-- Anything already exfiltrated stays valid until it expires or the player
+-- re-authorises. If you have reason to think the database was ever exposed,
+-- rotate the Discord application's client secret in the developer portal,
+-- which invalidates the refresh tokens issued under it.
