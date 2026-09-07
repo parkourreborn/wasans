@@ -18,6 +18,7 @@ export type AuditAction =
   | "player_permission_changed"
   | "player_submission_banned"
   | "player_submission_unbanned"
+  | "auth_refresh_failed"
   | "site_error"
 
 // Split out from insertAuditLog so callers writing several audit rows at
