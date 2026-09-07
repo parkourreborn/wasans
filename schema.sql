@@ -39,13 +39,13 @@ CREATE INDEX idx_players_account_status ON players(account_status);
 CREATE INDEX idx_players_score ON players(score DESC, player_name ASC);
 
 -- OAuth-linked accounts (Discord)
+-- Deliberately stores only the Discord account id <-> player link. Discord's
+-- access/refresh tokens are used once during login and never persisted, so a
+-- disclosure of this table cannot be replayed against Discord.
 CREATE TABLE oauth_accounts (
   provider TEXT NOT NULL,
   provider_account_id TEXT NOT NULL,
   player_uuid TEXT NOT NULL,
-  access_token TEXT,
-  refresh_token TEXT,
-  expires_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (provider, provider_account_id),
