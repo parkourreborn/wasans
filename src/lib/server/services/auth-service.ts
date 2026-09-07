@@ -1,4 +1,5 @@
 import "server-only"
+import { getSafeNextUrl } from "@/lib/safe-redirect"
 import { getAvailablePlayerName } from "@/lib/server/player-name-service"
 import { legalVersion } from "@/lib/legal"
 import { normalizeLoginPlayerName } from "@/lib/player-name"
@@ -32,13 +33,7 @@ type PlayerAuthRow = {
 const discordTokenUrl = "https://discord.com/api/oauth2/token"
 const discordMeUrl = "https://discord.com/api/users/@me"
 
-export function getSafeNextUrl(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/"
-  }
-
-  return value
-}
+export { getSafeNextUrl }
 
 export function redirectWithAuthError(requestUrl: URL, message: string) {
   const nextUrl = new URL("/", requestUrl.origin)
@@ -86,7 +81,7 @@ export async function getDiscordUser(accessToken: string, tokenType: string) {
   return response.json() as Promise<DiscordUserResponse>
 }
 
-export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUserResponse, token: DiscordTokenResponse) {
+export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUserResponse) {
   const linkedPlayer = await db.prepare(
     `SELECT players.uuid, players.player_id, players.discord_avatar, players.discord_discriminator, players.player_name, players.score, players.permission
      FROM oauth_accounts
@@ -108,30 +103,24 @@ export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUse
     .first<PlayerAuthRow>()
 
   const now = Math.floor(Date.now() / 1000)
-  const accessTokenExpiresAt = now + token.expires_in
 
+  // Discord's access and refresh tokens are deliberately NOT persisted. The
+  // only thing this app ever needed them for was the one /users/@me call
+  // during login, which has already happened by the time we get here — so
+  // keeping them bought nothing and turned any future database disclosure
+  // into a handout of live Discord credentials for every player. The
+  // oauth_accounts row keeps only the link between the Discord account id
+  // and the player.
   const buildOauthAccountStatement = (playerUuid: string) =>
     db.prepare(
       `INSERT INTO oauth_accounts (
-        provider, provider_account_id, player_uuid, access_token, refresh_token, expires_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        provider, provider_account_id, player_uuid, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(provider, provider_account_id) DO UPDATE SET
         player_uuid = excluded.player_uuid,
-        access_token = excluded.access_token,
-        refresh_token = excluded.refresh_token,
-        expires_at = excluded.expires_at,
         updated_at = excluded.updated_at`
     )
-      .bind(
-        "discord",
-        discordUser.id,
-        playerUuid,
-        token.access_token,
-        token.refresh_token || null,
-        accessTokenExpiresAt,
-        now,
-        now
-      )
+      .bind("discord", discordUser.id, playerUuid, now, now)
 
   if (!player) {
     const basePlayerName = normalizeLoginPlayerName(discordUser.global_name || discordUser.username)

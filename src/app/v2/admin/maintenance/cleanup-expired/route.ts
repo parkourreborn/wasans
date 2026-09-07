@@ -1,4 +1,5 @@
 import { jsonError } from "@/lib/server/http"
+import { secretsMatch } from "@/lib/constant-time"
 import { cleanupExpiredApiState } from "@/lib/server/services/api-state-cleanup-service"
 import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 
@@ -9,7 +10,7 @@ import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 function isAuthorizedCleanupRequest(request: Request, env: CloudflareEnv) {
   const authorization = request.headers.get("authorization")
   const provided = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : ""
-  return Boolean(provided && env.CRON_SECRET && provided === env.CRON_SECRET)
+  return secretsMatch(provided, String(env.CRON_SECRET || ""))
 }
 
 export const POST = withV2Context(async (ctx) => {

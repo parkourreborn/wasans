@@ -1,4 +1,5 @@
 import { jsonError } from "@/lib/server/http"
+import { secretsMatch } from "@/lib/constant-time"
 import { listTrialLifecycles } from "@/lib/server/repositories/trial-repository"
 import { refreshPbsForTrial } from "@/lib/server/pbs"
 import { refreshScoresForTrial } from "@/lib/server/player-scores"
@@ -15,7 +16,7 @@ import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 function isAuthorizedSweepRequest(request: Request, env: CloudflareEnv) {
   const authorization = request.headers.get("authorization")
   const provided = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : ""
-  return Boolean(provided && env.CRON_SECRET && provided === env.CRON_SECRET)
+  return secretsMatch(provided, String(env.CRON_SECRET || ""))
 }
 
 export const POST = withV2Context(async (ctx) => {
