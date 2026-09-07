@@ -37,6 +37,11 @@ export async function deleteAccount(db: D1Database, user: AuthUser) {
 
   await session.batch([
     session.prepare(`DELETE FROM oauth_accounts WHERE player_uuid = ?`).bind(user.uuid),
+    // Login IP history is the most sensitive thing kept about a player and
+    // there is no reason to hold it once they are gone. Without this it
+    // outlived the account it belonged to.
+    session.prepare(`DELETE FROM player_ips WHERE player_uuid = ?`).bind(user.uuid),
+    session.prepare(`DELETE FROM refresh_tokens WHERE player_uuid = ?`).bind(user.uuid),
     session.prepare(
       `UPDATE players
        SET player_id = ?,
