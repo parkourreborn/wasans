@@ -1,24 +1,11 @@
 import "server-only"
+import { getClientIp } from "@/lib/server/client-ip"
 
 type RateLimitDecision = {
   allowed: boolean
   remaining: number
   retryAfter: number
   limit: number
-}
-
-function getClientIp(request: Request) {
-  const cfIp = request.headers.get("cf-connecting-ip")?.trim()
-  if (cfIp) {
-    return cfIp
-  }
-
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-  if (forwarded) {
-    return forwarded
-  }
-
-  return "unknown"
 }
 
 export function getRateLimitKey(request: Request, scope: string, actorUuid?: string | null) {

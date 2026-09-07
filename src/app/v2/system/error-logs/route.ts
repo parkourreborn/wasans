@@ -1,6 +1,15 @@
 import { insertSiteErrorLog } from "@/lib/server/audit"
 import { loadAuthUserByUuid } from "@/lib/server/auth"
+import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import { jsonOk, withV2Context } from "@/lib/server/v2/http"
+
+// This endpoint is deliberately open — a client-side crash often happens
+// when nobody is signed in, and that is exactly the report worth having. But
+// open plus unlimited meant anyone could write ~18KB rows into audit_logs as
+// fast as they liked: unbounded database growth, and enough noise to bury a
+// real attack in the moderator log view. Reports are dropped past this rate,
+// which is far more than a genuinely broken page produces.
+const REPORTS_PER_MINUTE = 20
 
 function textValue(value: unknown, maxLength: number) {
   if (typeof value !== "string") {
@@ -17,6 +26,18 @@ function objectValue(value: unknown) {
 }
 
 export const POST = withV2Context(async (ctx) => {
+  const rate = await enforceRateLimit(
+    ctx.db,
+    getRateLimitKey(ctx.request, "v2:system:error-logs", ctx.auth?.uuid),
+    { limit: REPORTS_PER_MINUTE, windowSeconds: 60 }
+  )
+
+  // Answered as success on purpose: a dropped crash report is not something
+  // the page should retry or surface to the player.
+  if (!rate.allowed) {
+    return jsonOk({ ok: true, recorded: false }, { requestId: ctx.requestId })
+  }
+
   let body: Record<string, unknown>
 
   try {
@@ -51,5 +72,5 @@ export const POST = withV2Context(async (ctx) => {
     console.error("Failed to store client error log:", error)
   }
 
-  return jsonOk({ ok: true }, { requestId: ctx.requestId })
+  return jsonOk({ ok: true, recorded: true }, { requestId: ctx.requestId })
 })
