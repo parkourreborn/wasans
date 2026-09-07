@@ -11,11 +11,16 @@ import {
   jsonOk,
   withV2Context,
 } from "@/lib/server/v2/http"
-import { revokeAllRefreshTokensForPlayer, rotateRefreshToken } from "@/lib/server/v2/tokens"
+import { rotateRefreshToken } from "@/lib/server/v2/tokens"
 
 export const POST = withV2Context(async (ctx) => {
+  // Keyed per-IP, and every client behind carrier NAT or a school/office
+  // network shares one bucket — with tabs also refreshing proactively every
+  // 10 minutes, a limit sized for a single browser turns into other people's
+  // sessions being refused. Kept high enough that only a genuine flood trips
+  // it; the client treats a 429 here as retryable rather than as a sign-out.
   const rate = await enforceRateLimit(ctx.db, getRateLimitKey(ctx.request, "v2:auth:refresh"), {
-    limit: 30,
+    limit: 300,
     windowSeconds: 60,
   })
 
@@ -43,9 +48,15 @@ export const POST = withV2Context(async (ctx) => {
     return jsonError("Refresh token invalid", 401, { code: "unauthorized", requestId: ctx.requestId, headers })
   }
 
-  const user = await loadAuthUserByUuid(ctx.db, result.playerUuid, ctx.request)
+  // Read past the replicas: a player who is still perfectly signed in must
+  // never be turned away because a replica hasn't caught up with their row.
+  const user = await loadAuthUserByUuid(ctx.db, result.playerUuid, ctx.request, { readFromPrimary: true })
   if (!user) {
-    await revokeAllRefreshTokensForPlayer(ctx.db, result.playerUuid)
+    // Deny this refresh, but don't revoke the whole family: both paths that
+    // deactivate or delete an account already revoke its tokens at the
+    // source, so anything reaching here is an unexplained empty read, and
+    // answering it by destroying every session the player has is the kind of
+    // collateral damage that is impossible to debug from the outside.
     const headers = new Headers()
     for (const cookie of expiredV2AuthCookies(ctx.request)) {
       headers.append("set-cookie", cookie)
