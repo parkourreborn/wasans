@@ -9,16 +9,18 @@ export const metadata: Metadata = {
 }
 
 const usageRules = [
-  "Use the site for normal score tracking, leaderboard browsing, and submission review.",
-  "Do not submit fake runs, stolen proof, malicious files, spam, or anything that breaks the game/community rules.",
-  "Do not try to break, scrape, overload, or bypass the site, its API, Discord login, moderation tools, or storage.",
-  "Do not impersonate other players or use someone else's Discord account.",
+  "Use the site for what it is for: tracking scores, browsing the leaderboard, and submitting and reviewing runs.",
+  "Do not submit fake runs, someone else's proof, malicious files, spam, or anything that breaks the game or community rules.",
+  "Do not try to break, scrape, overload, or work around the site, its API, Discord login, the moderation tools, or the video storage. There are rate limits — do not go looking for ways around them.",
+  "Do not impersonate another player or use someone else's Discord account.",
 ]
 
 const publicDataRules = [
-  "Profiles, scores, submissions, personal bests, world records, moderator notes, and proof videos may be public.",
-  "By submitting a score, you confirm you have the right to share the proof and let the project maintainers host, display, review, and moderate it.",
-  "Public score history may stay visible even if your account is deleted, but deleted accounts are shown as Deleted Account.",
+  "Your profile, scores, submissions, personal bests, world records, the moderator notes on your runs, and your proof videos are all public, through the API as well as the site.",
+  "Your proof video is reachable by its link as soon as it is uploaded — including while it is pending, and including if it is denied.",
+  "Submitting a run posts it to our Discord automatically, with your name, your Discord ID, the trial, and the time.",
+  "By submitting a run you confirm the proof is yours to share, and you let us host, display, review, and moderate it.",
+  "Your public score history can stay visible after you delete your account, shown as Deleted Account.",
 ]
 
 export default function TermsPage() {
@@ -33,10 +35,10 @@ export default function TermsPage() {
       <SectionCard title="Who runs this">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            This website is operated by the website operators and project maintainers for the Wasans score and submission community.
+            This site is run by the website operators and project maintainers of the Wasans score and submission community. It is a community project, not a company.
           </p>
           <p>
-            If you need to contact the project maintainers about these Terms, email{" "}
+            If you need to reach us about these Terms, email{" "}
             <a href={`mailto:${legalContactEmail}`} className="text-primary underline underline-offset-4">{legalContactEmail}</a>.
           </p>
         </div>
@@ -50,19 +52,22 @@ export default function TermsPage() {
         </ul>
       </SectionCard>
 
-      <SectionCard title="Discord login">
+      <SectionCard title="Logging in with Discord">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            Some features need Discord login. By logging in, you agree to these Terms and the{" "}
+            Some things need an account, and the only way to get one is Discord. Logging in means you accept these Terms and the{" "}
             <Link href="/privacy" className="text-primary underline underline-offset-4">Privacy Policy</Link>.
           </p>
           <p>
-            You are responsible for the Discord account you use. If your Discord account is compromised, you should secure it through Discord and contact the project maintainers if your site account was affected.
+            We ask Discord for the smallest permission it offers — enough to see your username, ID, and avatar, and nothing else. We do not keep the tokens Discord hands us; we read who you are and discard them.
+          </p>
+          <p>
+            The Discord account you use is your responsibility. If it gets compromised, secure it with Discord first, then tell us if anything happened to your account here.
           </p>
         </div>
       </SectionCard>
 
-      <SectionCard title="Public submissions and scores">
+      <SectionCard title="What is public">
         <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
           {publicDataRules.map((rule) => (
             <li key={rule}>{rule}</li>
@@ -73,45 +78,65 @@ export default function TermsPage() {
       <SectionCard title="Moderation">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            Moderators can approve, deny, edit, hide, or remove submissions when needed. They can also add notes, fix obvious mistakes, and protect the leaderboard from abuse.
+            Moderators can approve or deny a run, correct an obviously wrong time, and leave a note on it. Those notes are public, and every one of those actions is recorded in the audit log against the moderator who made it.
           </p>
           <p>
-            The project maintainers may suspend, deactivate, or delete access if an account breaks these Terms, abuses the site, creates risk, or causes problems for the community.
-          </p>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Account deletion and deactivation">
-        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
-          <p>
-            Deactivation is reversible. A deactivated account is hidden from normal player listings and can be reactivated by logging in with Discord again.
+            If a run is approved or denied, we will usually DM you on Discord to say so.
           </p>
           <p>
-            Deletion is permanent for account/login data. It removes Discord login data and sessions, logs you out, and changes public player information to Deleted Account. Public submissions, scores, PBs, WRs, and proof videos stay available.
+            Owners can also block an account from submitting new runs, with a reason you will see on the submission page. Existing runs stay where they are. This is for people who keep submitting fake or stolen proof.
+          </p>
+          <p>
+            Beyond that, we can deactivate or delete an account that breaks these Terms, abuses the site, or makes life worse for everyone else.
           </p>
         </div>
       </SectionCard>
 
-      <SectionCard title="Third-party services">
+      <SectionCard title="Leaderboard changes">
+        <p className="text-sm leading-6 text-muted-foreground">
+          Trials get added, versioned, and retired, and scores get recalculated when world records move. Your score and rank can change without you doing anything, and a run on a retired or re-versioned trial may stop counting. That is the leaderboard working as intended, not a mistake.
+        </p>
+      </SectionCard>
+
+      <SectionCard title="Deleting or deactivating your account">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            The site uses third-party services such as Discord for login/community features, Cloudflare for hosting/storage/database services, and proof/video providers like Medal when you submit links or files.
+            Deactivating is reversible. It hides your account from the player listings, and logging in with Discord again undoes it.
           </p>
           <p>
-            Those services have their own terms and policies. The project maintainers are not responsible for third-party services being unavailable, changing, or handling data under their own policies.
+            Deleting is not. It logs you out, removes your Discord ID and avatar, your IP records, and your login tokens, and renames your public profile to Deleted Account. Your submissions, scores, PBs, WRs, and proof videos stay up under that name — removing them would rewrite everyone else&apos;s leaderboard history too.
+          </p>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Ads">
+        <p className="text-sm leading-6 text-muted-foreground">
+          The site shows ads through Google AdSense to cover what it costs to run. Google decides what you see and sets its own cookies to do it — see the{" "}
+          <Link href="/privacy" className="text-primary underline underline-offset-4">Privacy Policy</Link>{" "}
+          for what that means. Blocking them is fine and nothing on the site depends on them.
+        </p>
+      </SectionCard>
+
+      <SectionCard title="Other people's services">
+        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            The site leans on Discord for login and community features, Cloudflare for hosting, the database, and video storage, Google for ads, and proof providers like Medal when you submit a link.
+          </p>
+          <p>
+            They all have their own terms, and they can go down, change, or handle your data however their own policies allow. That part is not something we can answer for.
           </p>
         </div>
       </SectionCard>
 
       <SectionCard title="No guarantees">
         <p className="text-sm leading-6 text-muted-foreground">
-          The site is provided as-is for the community. The project maintainers try to keep it accurate and available, but mistakes, outages, lost data, moderation changes, or leaderboard recalculations can happen.
+          This is a community project provided as-is. We try to keep it accurate and online, but outages happen, data gets lost, moderators make mistakes, and leaderboards get recalculated. Do not treat this site as the only copy of anything you care about.
         </p>
       </SectionCard>
 
       <SectionCard title="Governing law">
         <p className="text-sm leading-6 text-muted-foreground">
-          These Terms are governed by the laws of Finland, except where mandatory consumer protection, privacy, or data protection laws in your country provide otherwise.
+          These Terms are governed by the laws of Finland, except where consumer protection, privacy, or data protection law where you live says otherwise.
         </p>
       </SectionCard>
     </PageShell>
