@@ -29,37 +29,84 @@ function applyCorsHeaders(response: NextResponse, origin: string) {
   response.headers.set("Vary", "Origin")
 }
 
-export function middleware(request: NextRequest) {
-  const origin = request.headers.get("origin")
-  const isPreflight = request.method === "OPTIONS"
+// Everything the pages legitimately pull in. Kept as one place to look so a
+// new third-party dependency has to be a deliberate edit rather than an
+// accident nobody notices.
+const cspDirectives = [
+  "default-src 'self'",
+  // Next's hydration payload and the ad script need inline/eval today; this
+  // is the directive to tighten first (via nonces) once the report-only
+  // policy below is running clean.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://cdn.discordapp.com https://assets.wasans.tully.sh https://*.googlesyndication.com https://*.doubleclick.net",
+  "media-src 'self' blob: https://assets.wasans.tully.sh",
+  "font-src 'self' data:",
+  "connect-src 'self' https://assets.wasans.tully.sh https://*.googlesyndication.com https://*.doubleclick.net",
+  "frame-src https://*.googlesyndication.com https://*.doubleclick.net",
+  // Nothing here is meant to be framed, and nothing may post a form off-site.
+  "frame-ancestors 'none'",
+  "form-action 'self' https://discord.com",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+].join("; ")
 
-  if (!origin) {
-    if (isPreflight) {
-      return new NextResponse(null, { status: 204 })
-    }
+// Applied to every response, API and page alike. These are the headers that
+// decide how much an XSS or a clickjacking attempt is worth if one ever
+// lands, so they belong on responses that predate the bug rather than being
+// added after one is found.
+function applySecurityHeaders(response: NextResponse, request: NextRequest) {
+  response.headers.set("X-Content-Type-Options", "nosniff")
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
+  response.headers.set("X-Frame-Options", "DENY")
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin")
 
-    return NextResponse.next()
+  // Report-only to begin with: a CSP that breaks the site is a CSP someone
+  // switches off. Watch for violations, tighten script-src onto nonces, then
+  // promote this to Content-Security-Policy.
+  response.headers.set("Content-Security-Policy-Report-Only", cspDirectives)
+
+  if (request.nextUrl.protocol === "https:") {
+    response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
   }
 
-  if (!isAllowedOrigin(origin)) {
-    if (isPreflight) {
-      return NextResponse.json({ error: "Origin not allowed" }, { status: 403 })
-    }
-
-    return NextResponse.next()
-  }
-
-  if (isPreflight) {
-    const response = new NextResponse(null, { status: 204 })
-    applyCorsHeaders(response, origin)
-    return response
-  }
-
-  const response = NextResponse.next()
-  applyCorsHeaders(response, origin)
   return response
 }
 
+export function middleware(request: NextRequest) {
+  const origin = request.headers.get("origin")
+  const isApiRequest = request.nextUrl.pathname.startsWith("/v2/")
+  const isPreflight = request.method === "OPTIONS"
+
+  if (isPreflight && isApiRequest) {
+    if (!origin) {
+      return new NextResponse(null, { status: 204 })
+    }
+
+    if (!isAllowedOrigin(origin)) {
+      return NextResponse.json({ error: "Origin not allowed" }, { status: 403 })
+    }
+
+    const response = new NextResponse(null, { status: 204 })
+    applyCorsHeaders(response, origin)
+    return applySecurityHeaders(response, request)
+  }
+
+  const response = NextResponse.next()
+
+  if (isApiRequest && origin && isAllowedOrigin(origin)) {
+    applyCorsHeaders(response, origin)
+  }
+
+  return applySecurityHeaders(response, request)
+}
+
 export const config = {
-  matcher: ["/v2/:path*"],
+  matcher: [
+    // Everything except Next's own build output and files served straight
+    // from /public, which do not need (and should not pay for) this pass.
+    "/((?!_next/static|_next/image|favicon.ico).*)",
+  ],
 }

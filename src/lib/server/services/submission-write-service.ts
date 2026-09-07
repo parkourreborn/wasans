@@ -19,9 +19,21 @@ export type IncomingSubmission = {
 }
 
 const allowedLinkHosts = ["medal.tv", "www.medal.tv"]
+
+// One request may cover at most one run per trial; anything beyond that is
+// not a player filling in the form. Without a cap, a single accepted request
+// could fan out into an unbounded number of R2 writes and Medal fetches,
+// multiplied again by the per-minute submission limit.
+const maxSubmissionsPerRequest = 32
+
+// Generous for a trial run, and well inside the request body limit — the
+// point is that there was previously no server-side ceiling at all, so a
+// single account could push arbitrary volume into the bucket.
+const maxVideoBytes = 150 * 1024 * 1024
 const publicVideoBaseUrl = "https://assets.wasans.tully.sh"
 const scoreVideoContentType = "video/mp4"
 const scorePreviewContentType = "image/jpeg"
+const maxPreviewBytes = 2 * 1024 * 1024
 
 function isAllowedTrial(value: unknown): value is (typeof trials)[number] {
   return typeof value === "string" && trials.includes(value as (typeof trials)[number])
@@ -137,6 +149,10 @@ export async function createSubmissionsFromRequest(db: D1Database, env: Cloudfla
       throw new Error("Add at least one submission")
     }
 
+    if (incomingSubmissions.length > maxSubmissionsPerRequest) {
+      throw new Error(`A single request can hold at most ${maxSubmissionsPerRequest} submissions`)
+    }
+
     const player = await findPlayerByUuid(db, user.uuid)
     if (!player) {
       throw new Error("Player was not found")
@@ -195,6 +211,10 @@ export async function createSubmissionsFromRequest(db: D1Database, env: Cloudfla
           throw new Error(`Submission ${index + 1} must use a video file`)
         }
 
+        if (file.size > maxVideoBytes) {
+          throw new Error(`Submission ${index + 1}'s video is too large`)
+        }
+
         if (!env.SUBMISSION_VIDEOS) {
           throw new Error("Submission video bucket is not available")
         }
@@ -209,7 +229,7 @@ export async function createSubmissionsFromRequest(db: D1Database, env: Cloudfla
         }
 
         const preview = formData.get(`preview_file_${index}`)
-        if (preview instanceof File && preview.size > 0) {
+        if (preview instanceof File && preview.size > 0 && preview.size <= maxPreviewBytes) {
           const previewKey = `scores/${uuid}-preview.jpg`
           const uploadedPreview = await uploadVideo(env.SUBMISSION_VIDEOS, previewKey, preview, scorePreviewContentType)
           if (!uploadedPreview) {
@@ -234,10 +254,24 @@ export async function createSubmissionsFromRequest(db: D1Database, env: Cloudfla
           throw new Error(`Medal did not return a video file for submission ${index + 1}`)
         }
 
+        // The response is buffered whole, so its size is our memory use —
+        // and it is a remote host's number, not ours. Refuse an oversized
+        // one on the declared length where there is one, and again on what
+        // actually arrived where there isn't.
+        const declaredLength = Number(medalVideoResponse.headers.get("content-length") || "0")
+        if (Number.isFinite(declaredLength) && declaredLength > maxVideoBytes) {
+          throw new Error(`Submission ${index + 1}'s video is too large`)
+        }
+
+        const medalVideoBytes = await medalVideoResponse.arrayBuffer()
+        if (medalVideoBytes.byteLength > maxVideoBytes) {
+          throw new Error(`Submission ${index + 1}'s video is too large`)
+        }
+
         const uploaded = await uploadVideo(
           env.SUBMISSION_VIDEOS,
           objectKey,
-          await medalVideoResponse.arrayBuffer(),
+          medalVideoBytes,
           medalVideoType.startsWith("video/") ? medalVideoType : scoreVideoContentType
         )
 

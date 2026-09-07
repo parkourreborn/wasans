@@ -1,6 +1,5 @@
 import { jsonError, validationError } from "@/lib/server/http"
-import { loadAuthUserByUuid } from "@/lib/server/auth"
-import { isOwner } from "@/lib/server/auth"
+import { canModerate, isOwner, loadAuthUserByUuid } from "@/lib/server/auth"
 import { getSubmissionWithScore } from "@/lib/server/repositories/submission-repository"
 import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-repository"
 import { deleteSubmission, patchSubmission, resolveModeratorUser } from "@/lib/server/services/moderation-service"
@@ -46,14 +45,24 @@ export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   const moderatorLookup = await resolveModeratorUser(ctx.request, ctx.env, sessionUser, body?.discordId, ctx.requestId)
 
   if (moderatorLookup.error || !moderatorLookup.user) {
-    return jsonError(moderatorLookup.error || "Moderator permission is required", 403, {
+    // The lookup's debugInfo/error text names accounts and permission tiers.
+    // It stays in the server logs (keyed by requestId) rather than going out
+    // in the response, where it would answer questions the caller has not
+    // earned the right to ask.
+    return jsonError("Moderator permission is required", 403, {
       code: "forbidden",
       requestId: ctx.requestId,
-      details: { debug: moderatorLookup.debugInfo },
     })
   }
 
   const user = moderatorLookup.user
+
+  // resolveModeratorUser already refuses non-moderators; this is the
+  // belt-and-braces check so a future change to it cannot silently reopen
+  // the whole moderation surface.
+  if (!canModerate(user)) {
+    return jsonError("Moderator permission is required", 403, { code: "forbidden", requestId: ctx.requestId })
+  }
 
   if (!(await isFeatureEnabled(ctx.db, "moderation_enabled")) && !isOwner(user)) {
     return jsonError("Moderation is currently disabled", 403, { code: "forbidden", requestId: ctx.requestId })
