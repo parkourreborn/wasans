@@ -9,55 +9,59 @@ export const metadata: Metadata = {
 }
 
 const discordData = [
-  "Discord user ID",
-  "Discord username or display name",
-  "Discord avatar hash and discriminator when Discord provides them",
-  "Discord OAuth access token, refresh token, and token expiry",
+  "Your Discord user ID",
+  "Your Discord username or display name",
+  "Your Discord avatar hash and discriminator, when Discord gives them to us",
 ]
 
 const accountData = [
-  "Internal player UUID",
-  "Player name, score, permission level, and date joined",
-  "Account status, deactivation/deletion time, and terms/privacy acceptance timestamp",
-  "Session tokens used to keep you logged in",
+  "An internal player UUID we generate for you",
+  "Your player name, score, permission level, and the date you joined",
+  "Whether your account is active, deactivated, or deleted, and when that changed",
+  "When you last accepted these Terms and this Privacy Policy",
+  "Two login cookies: a short-lived one that proves who you are, and a longer-lived one that quietly renews it so you are not asked to sign in again every 15 minutes",
 ]
 
 const publicData = [
-  "Player profiles, names, avatars, scores, ranks, and join dates",
-  "Submissions, times, trials, states, moderator notes, and moderators shown on submissions",
-  "Personal bests, world records, public score videos, and Discord submission thread links when used",
+  "Your player profile: name, avatar, score, rank, and join date",
+  "Your Discord user ID, which the public API returns so the site can build your avatar image",
+  "Your submissions: trial, time, state, and the moderator note and moderator name attached to them",
+  "Your personal bests, any world records you hold, and the proof video for each run",
+  "The link to the Discord thread for a submission, where one exists",
 ]
 
 const legalBasis = [
-  "Account/login data is processed to provide the Discord login/account service.",
-  "Public scores, submissions, proof videos, PBs, WRs, and leaderboard data are processed to provide the community leaderboard and submission system.",
-  "Security logs, audit logs, moderation notes, and error logs are processed for legitimate interests such as security, abuse prevention, moderation, debugging, and protecting the integrity of the leaderboard.",
-  "Deletion and privacy requests are processed to comply with legal obligations.",
+  "We process your account and login data to give you an account at all — without it there is nothing to log in to.",
+  "We process scores, submissions, proof videos, PBs, WRs, and leaderboard data to run the leaderboard, which is the whole point of the site.",
+  "We process IP addresses, audit logs, moderation notes, and error logs under legitimate interests: keeping the leaderboard honest, catching ban evasion and abuse, and fixing things when they break.",
+  "We process deletion and privacy requests because the law says we have to.",
 ]
 
 const retentionItems = [
-  "Account/login data is kept while the account exists.",
-  "OAuth tokens and sessions are removed when the account is deleted.",
-  "Public submissions, scores, PBs, WRs, and proof videos may remain after deletion because they are part of the public leaderboard/archive.",
-  "Deleted accounts are shown as Deleted Account.",
-  "Logs are kept only as long as reasonably needed for security, moderation, debugging, and audit purposes.",
-  "Data may be kept longer if needed to handle abuse, disputes, security issues, or legal obligations.",
+  "Your account data sticks around while your account does.",
+  "IP records are deleted 180 days after we last saw them, and immediately if you delete your account.",
+  "Login tokens are deleted when you log out or delete your account, and expired ones are cleared out about a month later.",
+  "Rate-limit counters, which include a value derived from your IP, are cleared out after a day.",
+  "Audit logs and moderation notes are kept indefinitely. They are the leaderboard's history — who approved what, and when — and we would not be able to settle a dispute or unpick abuse without them.",
+  "Error logs are kept indefinitely too. We should trim these and have not yet.",
+  "Your public submissions, scores, PBs, WRs, and proof videos can stay up after you delete your account, because they are part of the public archive. They show as Deleted Account.",
+  "We may hold on to something longer if we are dealing with abuse, a dispute, a security problem, or a legal obligation.",
 ]
 
 const userRights = [
-  "Access to your data",
-  "Correction of inaccurate data",
-  "Deletion",
-  "Restriction",
-  "Objection",
-  "Portability, where applicable",
+  "See what we hold about you",
+  "Correct anything that is wrong",
+  "Have it deleted",
+  "Restrict what we do with it",
+  "Object to us processing it",
+  "Take it elsewhere, where that applies",
 ]
 
 const localStorageItems = [
-  "A session cookie for logged-in accounts",
-  "Short-lived Discord OAuth state cookies during login",
-  "Sidebar and UI preference storage",
-  "Calculator inputs, cached leaderboard data, and recently viewed submission IDs",
+  "Two cookies that keep you logged in, plus a couple of short-lived ones during the Discord login handshake",
+  "Your sidebar and interface preferences",
+  "Calculator inputs, cached leaderboard data, and the submission IDs you looked at recently, so the next/previous arrows work",
+  "Whatever Google's advertising script sets — see the section below",
 ]
 
 export default function PrivacyPage() {
@@ -72,30 +76,33 @@ export default function PrivacyPage() {
       <SectionCard title="Who to contact">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            The controller/operator for this site is currently <span className="font-medium text-foreground">The Wasans website operators and project maintainers</span>. There is no formal company or legal entity yet, so this may be updated if the project structure changes.
+            This site is run by <span className="font-medium text-foreground">the Wasans website operators and project maintainers</span> — a small group of people, not a company. There is no legal entity behind it yet, so this page will change if that ever changes.
           </p>
           <p>
-            For privacy questions, account deletion, or data requests, email{" "}
+            For anything privacy-related — a question, a deletion request, or a copy of your data — email{" "}
             <a href={`mailto:${legalContactEmail}`} className="text-primary underline underline-offset-4">{legalContactEmail}</a>.
           </p>
         </div>
       </SectionCard>
 
-      <SectionCard title="Discord login data">
+      <SectionCard title="What Discord tells us">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
-          <p>When you log in with Discord, the site requests Discord&apos;s identify scope and may store:</p>
+          <p>When you log in, we ask Discord for its <span className="font-medium text-foreground">identify</span> scope and keep:</p>
           <ul className="list-disc space-y-2 pl-5">
             {discordData.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
           <p>
-            Discord login is used to create your player account, keep you signed in, connect submissions to your player profile, and support moderation/community features.
+            The identify scope is the smallest one Discord offers. It does not include your email address, your servers, or any of your messages, and we could not read them if we wanted to.
+          </p>
+          <p>
+            <span className="font-medium text-foreground">We do not store Discord&apos;s access or refresh tokens.</span> We use them once during login to ask Discord who you are, and then throw them away. Keeping them would mean holding credentials to your Discord account that we have no use for, so we do not.
           </p>
         </div>
       </SectionCard>
 
-      <SectionCard title="Account data">
+      <SectionCard title="Your account">
         <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
           {accountData.map((item) => (
             <li key={item}>{item}</li>
@@ -103,21 +110,41 @@ export default function PrivacyPage() {
         </ul>
       </SectionCard>
 
-      <SectionCard title="Public data">
+      <SectionCard title="IP addresses">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
-          <p>Some site data is meant to be public so the leaderboard and submission archive work:</p>
+          <p>
+            While you are logged in, we record the IP address your requests come from, along with a first-seen and last-seen time and a count. It updates as you use the site, not just when you log in.
+          </p>
+          <p>
+            We do this for one reason: it is the only practical way to spot someone running alternate accounts to evade a ban or pad the leaderboard. It is not used for analytics, we do not build a profile from it, and we do not share it.
+          </p>
+          <p>
+            These records are not visible anywhere on the site — not to you, and not to moderators. Only the people who administer the database can see them, and they are deleted 180 days after we last saw the address, or straight away if you delete your account.
+          </p>
+          <p>
+            We also count requests per IP to stop people hammering the API. Those counters include a value derived from your address and are thrown away after a day.
+          </p>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="What is public">
+        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>A leaderboard only works if it is public, so most of what you put in is visible to anyone — including people who are not logged in, and through the API as well as the site:</p>
           <ul className="list-disc space-y-2 pl-5">
             {publicData.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
           <p>
-            Public submissions, scores, and videos can stay public after account deletion. Deleted accounts are shown as Deleted Account.
+            Two things worth calling out, because they surprise people. Your <span className="font-medium text-foreground">Discord user ID is public</span> — anyone can read it from the API and look you up on Discord. And a proof video is reachable by its link from the moment it is uploaded, which means <span className="font-medium text-foreground">runs that are still pending, or that were denied, can still be watched by anyone with the link</span>. If you would rather a run not be seen at all, do not submit it.
+          </p>
+          <p>
+            Public submissions, scores, and videos can stay up after you delete your account. They show as Deleted Account.
           </p>
         </div>
       </SectionCard>
 
-      <SectionCard title="Legal basis">
+      <SectionCard title="Why we are allowed to do this">
         <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
           {legalBasis.map((item) => (
             <li key={item}>{item}</li>
@@ -126,32 +153,68 @@ export default function PrivacyPage() {
       </SectionCard>
 
       <SectionCard title="Submissions and proof videos">
-        <p className="text-sm leading-6 text-muted-foreground">
-          When you submit a run, the site stores the trial, time, submission state, player information, and proof video. Uploaded videos and videos fetched from supported proof links are stored in the site&apos;s video storage and may be publicly viewable.
-        </p>
+        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            When you submit a run we store the trial, the time, the state, who submitted it, and the proof itself. If you upload a file we keep the file; if you paste a supported proof link, we download the video from there and keep our own copy. Either way it lands in our video storage and is publicly viewable.
+          </p>
+          <p>
+            We also generate a still frame from the video to use as a thumbnail.
+          </p>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="What we send to Discord">
+        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            Submitting a run posts it to our Discord server automatically, in a thread for that submission. The post includes your player name, your Discord user ID, the trial, and the time — so anyone who can see that channel can see your run before a moderator has touched it.
+          </p>
+          <p>
+            We may also send you a Discord DM when a moderator decides on one of your runs, or when your rank changes. If your privacy settings do not allow DMs from us, the message is simply dropped.
+          </p>
+        </div>
       </SectionCard>
 
       <SectionCard title="Logs and security data">
-        <p className="text-sm leading-6 text-muted-foreground">
-          The site stores audit logs for submissions, moderation, world record changes, and site errors. Error logs can include the page path, browser user agent, error message, stack trace, and your logged-in account if the error happened while you were signed in.
-        </p>
+        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            We keep an audit log of submissions, moderation decisions, world record changes, and permission changes — what happened, who did it, and when.
+          </p>
+          <p>
+            We also log errors, both ours and ones your browser hits. An error log can include the full URL of the page you were on, your browser&apos;s user agent, the error message and stack trace, and your account if you were signed in at the time. We do not go looking for anything else, but a stack trace is written by the browser and we cannot promise nothing incidental ends up in one.
+          </p>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Advertising">
+        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            The site loads <span className="font-medium text-foreground">Google AdSense</span> on every page. Google&apos;s script runs in your browser and can set its own cookies and storage to measure and personalise the ads it shows you. That data goes to Google, under Google&apos;s policies, and we do not see it or control it.
+          </p>
+          <p>
+            We should be straight with you: <span className="font-medium text-foreground">we do not currently ask for your consent before that script loads</span>, and if you are in the EU or UK we probably ought to. We are aware of it and it is on the list to fix, either with a consent prompt or by switching the ads to a non-personalised mode that does not need one.
+          </p>
+          <p>
+            In the meantime, you can manage what Google does with ad data through{" "}
+            <a href="https://myadcenter.google.com" className="text-primary underline underline-offset-4" target="_blank" rel="noopener noreferrer">Google My Ad Center</a>, and a content blocker will stop the script loading at all. Nothing else on the site depends on it.
+          </p>
+        </div>
       </SectionCard>
 
       <SectionCard title="Cookies and browser storage">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
-          <p>The site uses cookies and browser storage for login, security, preferences, and cached UI data:</p>
+          <p>Here is everything we put in your browser:</p>
           <ul className="list-disc space-y-2 pl-5">
             {localStorageItems.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
           <p>
-            The site does not currently use advertising or marketing cookies. If that changes, the project maintainers should add a consent flow before using non-essential tracking.
+            Everything in that list except the advertising script is needed for the site to work or to remember how you like it set up. None of it is used to track you across other websites.
           </p>
         </div>
       </SectionCard>
 
-      <SectionCard title="Data retention">
+      <SectionCard title="How long we keep things">
         <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
           {retentionItems.map((item) => (
             <li key={item}>{item}</li>
@@ -159,42 +222,51 @@ export default function PrivacyPage() {
         </ul>
       </SectionCard>
 
-      <SectionCard title="Third-party services">
-        <p className="text-sm leading-6 text-muted-foreground">
-          The site uses Discord for login and community features, Cloudflare for hosting/database/video storage, and proof providers like Medal when resolving submitted proof links. These services may process data under their own policies.
-        </p>
-      </SectionCard>
-
-      <SectionCard title="International transfers">
-        <p className="text-sm leading-6 text-muted-foreground">
-          Third-party services such as Discord, Cloudflare, and proof/video providers may process data outside the EU/EEA. Where required, appropriate safeguards or lawful transfer mechanisms should be used.
-        </p>
-      </SectionCard>
-
-      <SectionCard title="Deletion and deactivation">
+      <SectionCard title="Who else is involved">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            You can deactivate your account in Settings. Deactivation hides the account from normal player listings and is reversible by logging in with Discord again.
+            <span className="font-medium text-foreground">Discord</span> handles login and our community features. <span className="font-medium text-foreground">Cloudflare</span> hosts the site, the database, and the video storage. <span className="font-medium text-foreground">Google</span> serves the ads. <span className="font-medium text-foreground">Medal</span> and similar proof providers are involved when you submit a link and we fetch the video from them.
           </p>
           <p>
-            You can delete your account in Settings or request deletion by emailing{" "}
-            <a href={`mailto:${legalContactEmail}`} className="text-primary underline underline-offset-4">{legalContactEmail}</a>. Deletion removes Discord login data, OAuth tokens, active sessions, and personal account identity from the account row. Public submissions, scores, PBs, WRs, and proof videos stay available as Deleted Account.
+            Each of them handles data under their own policies, which we do not control.
+          </p>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Where your data goes">
+        <p className="text-sm leading-6 text-muted-foreground">
+          Discord, Cloudflare, Google, and the proof providers all operate outside the EU and EEA, so your data leaves it. We rely on the transfer terms those companies publish for their own services; we are not in a position to negotiate our own with them.
+        </p>
+      </SectionCard>
+
+      <SectionCard title="Deleting or deactivating your account">
+        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            <span className="font-medium text-foreground">Deactivating</span> is the reversible one. You can do it in Settings. It hides your account from the player listings, and logging in with Discord again brings it back.
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Deleting</span> is not reversible. You can do it in Settings, or email{" "}
+            <a href={`mailto:${legalContactEmail}`} className="text-primary underline underline-offset-4">{legalContactEmail}</a>{" "}
+            and we will do it for you. It removes your Discord ID and avatar, the link to your Discord account, your IP records, and every login token you have, and it renames your public profile to Deleted Account.
+          </p>
+          <p>
+            What stays: your submissions, scores, PBs, WRs, proof videos, and the audit log entries about them, all attributed to Deleted Account. We keep those because pulling one player&apos;s runs out of a leaderboard rewrites everyone else&apos;s history too.
           </p>
         </div>
       </SectionCard>
 
       <SectionCard title="Age">
         <p className="text-sm leading-6 text-muted-foreground">
-          Our website is not intended for children under the age of 13. By logging in via Discord, you confirm that you meet Discord&apos;s minimum age requirements.
+          This site is not meant for children under 13. By logging in with Discord you are confirming you meet Discord&apos;s minimum age for your country, which is 13 in most places and higher in some.
         </p>
       </SectionCard>
 
-      <SectionCard title="Your choices and rights">
+      <SectionCard title="Your rights">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            You can use public pages without logging in. If you log in, you can manage account deactivation or deletion in Settings. You can also email{" "}
+            You can browse the whole public site without logging in. If you do have an account, deactivation and deletion are both in Settings. Beyond that, email{" "}
             <a href={`mailto:${legalContactEmail}`} className="text-primary underline underline-offset-4">{legalContactEmail}</a>{" "}
-            to request:
+            and you can ask us to:
           </p>
           <ul className="list-disc space-y-2 pl-5">
             {userRights.map((item) => (
@@ -202,7 +274,10 @@ export default function PrivacyPage() {
             ))}
           </ul>
           <p>
-            Some rights may have limits, especially for public leaderboard/submission records, moderation integrity, security, or legal reasons. You may complain to your local data protection authority, or in Finland to the Office of the Data Protection Ombudsman.
+            Some of these have limits — mostly around public leaderboard records, keeping moderation decisions auditable, and security. We will tell you which limit applies rather than just declining.
+          </p>
+          <p>
+            If we get it wrong, you can complain to your local data protection authority. In Finland that is the Office of the Data Protection Ombudsman.
           </p>
         </div>
       </SectionCard>
