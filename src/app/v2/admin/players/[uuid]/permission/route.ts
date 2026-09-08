@@ -1,11 +1,22 @@
 import { jsonError, validationError } from "@/lib/server/http"
 import { insertAuditLog } from "@/lib/server/audit"
-import { PERMISSION_COMBO_MODERATOR, PERMISSION_MODERATOR, PERMISSION_OWNER } from "@/lib/server/auth"
+import {
+  PERMISSION_COMBO_MODERATOR,
+  PERMISSION_MODERATOR,
+  PERMISSION_OWNER,
+  PERMISSION_SENIOR_MODERATOR,
+} from "@/lib/server/auth"
 import { countOwners, getPlayerByUuid, setPlayerPermission } from "@/lib/server/repositories/player-repository"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 import { jsonOk, requireV2Owner, withV2Params } from "@/lib/server/v2/http"
 
-const VALID_PERMISSIONS = [0, PERMISSION_COMBO_MODERATOR, PERMISSION_MODERATOR, PERMISSION_OWNER]
+const VALID_PERMISSIONS = [
+  0,
+  PERMISSION_COMBO_MODERATOR,
+  PERMISSION_MODERATOR,
+  PERMISSION_SENIOR_MODERATOR,
+  PERMISSION_OWNER,
+]
 
 export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   const actor = await requireV2Owner(ctx)
@@ -14,7 +25,10 @@ export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   const permission = typeof body?.permission === "number" ? body.permission : NaN
 
   if (!VALID_PERMISSIONS.includes(permission)) {
-    return validationError("permission must be 0 (member), 1 (combo moderator), 2 (moderator), or 3 (owner)", ctx.requestId)
+    return validationError(
+      "permission must be 0 (member), 1 (combo moderator), 2 (moderator), 3 (senior moderator), or 4 (owner)",
+      ctx.requestId
+    )
   }
 
   const target = await getPlayerByUuid(ctx.db, uuid)

@@ -68,7 +68,13 @@ type SubmissionBanRow = {
 type SubmissionBansResponse = { data?: SubmissionBanRow[] }
 
 // Mirrors the players.permission tiers in src/lib/server/auth.ts.
-const permissionLabels: Record<number, string> = { 0: "Member", 1: "Combo Moderator", 2: "Moderator", 3: "Owner" }
+const permissionLabels: Record<number, string> = {
+  0: "Member",
+  1: "Combo Moderator",
+  2: "Moderator",
+  3: "Senior Moderator",
+  4: "Owner",
+}
 
 function formatTimestamp(value: number | null) {
   if (!value) {
@@ -136,7 +142,7 @@ export default function AdminPage() {
     loadAuth()
   }, [])
 
-  const isOwner = (authUser?.permission ?? 0) >= 3
+  const isOwner = (authUser?.permission ?? 0) >= 4
 
   const loadTrials = React.useCallback(async () => {
     setLoadingTrials(true)
@@ -716,7 +722,7 @@ export default function AdminPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="inline-flex flex-wrap justify-end gap-1.5">
-                            {[0, 1, 2, 3].map((level) => (
+                            {[0, 1, 2, 3, 4].map((level) => (
                               <Button
                                 key={level}
                                 type="button"
