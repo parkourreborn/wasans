@@ -138,7 +138,7 @@ function SubmissionNavButton({
 
   return (
     <Button asChild variant="outline" size="icon" aria-label={label}>
-      <Link href={`/submissions/${submissionUuid}`}>
+      <Link href={`/submissions/trials/${submissionUuid}`}>
         <Icon />
       </Link>
     </Button>
@@ -379,7 +379,7 @@ export default function Home() {
         return
       }
 
-      router.push("/submissions")
+      router.push("/submissions/trials")
       router.refresh()
     } catch (err) {
       console.error(err)

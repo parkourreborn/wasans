@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { toast } from "sonner"
+import { CheckIcon, GripVerticalIcon, PencilIcon, XIcon } from "lucide-react"
 
 type AuthUser = { uuid: string; permission: number }
 type AuthResponse = { data?: { user: AuthUser | null } }
@@ -46,6 +47,15 @@ type TrialsResponse = { data?: TrialRow[] }
 
 type FlagRow = { key: string; enabled: number; updated_at: number; updated_by: string | null }
 type FlagsResponse = { data?: FlagRow[] }
+
+type ComboCategoryRow = {
+  slug: string
+  label: string
+  status: "active" | "disabled"
+  sort_order: number
+  added_at: number
+}
+type ComboCategoriesResponse = { data?: ComboCategoryRow[] }
 
 type SubmissionBanRow = {
   player_uuid: string
@@ -99,6 +109,15 @@ export default function AdminPage() {
   const [loadingFlags, setLoadingFlags] = React.useState(true)
   const [flagSaving, setFlagSaving] = React.useState<string | null>(null)
 
+  const [categories, setCategories] = React.useState<ComboCategoryRow[]>([])
+  const [loadingCategories, setLoadingCategories] = React.useState(true)
+  const [newCategorySlug, setNewCategorySlug] = React.useState("")
+  const [newCategoryLabel, setNewCategoryLabel] = React.useState("")
+  const [categoryActionBusy, setCategoryActionBusy] = React.useState<string | null>(null)
+  const [editingCategorySlug, setEditingCategorySlug] = React.useState<string | null>(null)
+  const [editingCategoryLabel, setEditingCategoryLabel] = React.useState("")
+  const [draggedCategorySlug, setDraggedCategorySlug] = React.useState<string | null>(null)
+
   const [maintenanceBusy, setMaintenanceBusy] = React.useState<"refresh" | "deduplicate" | null>(null)
 
   React.useEffect(() => {
@@ -148,6 +167,22 @@ export default function AdminPage() {
     }
   }, [])
 
+  const loadCategories = React.useCallback(async () => {
+    setLoadingCategories(true)
+    try {
+      const response = await fetch(`${apiV2("/combo-categories")}?include=all`, { cache: "no-store" })
+      const json = (await response.json().catch(() => null)) as ComboCategoriesResponse | null
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to load combo categories"))
+      }
+      setCategories(json?.data || [])
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to load combo categories")
+    } finally {
+      setLoadingCategories(false)
+    }
+  }, [])
+
   const loadSubmissionBans = React.useCallback(async () => {
     setLoadingBans(true)
     try {
@@ -171,7 +206,8 @@ export default function AdminPage() {
     loadTrials()
     loadFlags()
     loadSubmissionBans()
-  }, [isOwner, loadTrials, loadFlags, loadSubmissionBans])
+    loadCategories()
+  }, [isOwner, loadTrials, loadFlags, loadSubmissionBans, loadCategories])
 
   const bannedUuids = React.useMemo(
     () => new Set(submissionBans.map((ban) => ban.player_uuid)),
@@ -329,6 +365,122 @@ export default function AdminPage() {
     } finally {
       setTrialActionBusy(null)
     }
+  }
+
+  const createCategory = async () => {
+    const slug = newCategorySlug.trim().toLowerCase()
+    const label = newCategoryLabel.trim()
+    if (!slug || !label) {
+      return
+    }
+    setCategoryActionBusy("create")
+    try {
+      const response = await fetch(apiV2("/combo-categories"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slug, label, sort_order: categories.length }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to add category"))
+      }
+      setNewCategorySlug("")
+      setNewCategoryLabel("")
+      toast.success(`${label} added to the combo leaderboard`)
+      await loadCategories()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to add category")
+    } finally {
+      setCategoryActionBusy(null)
+    }
+  }
+
+  const saveCategoryLabel = async (slug: string) => {
+    const label = editingCategoryLabel.trim()
+    if (!label) {
+      return
+    }
+    setCategoryActionBusy(slug)
+    try {
+      const response = await fetch(apiV2(`/combo-categories/${encodeURIComponent(slug)}`), {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ label }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to rename category"))
+      }
+      setEditingCategorySlug(null)
+      await loadCategories()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to rename category")
+    } finally {
+      setCategoryActionBusy(null)
+    }
+  }
+
+  const toggleCategoryStatus = async (slug: string, active: boolean) => {
+    setCategoryActionBusy(slug)
+    try {
+      const response = await fetch(apiV2(`/combo-categories/${encodeURIComponent(slug)}`), {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: active ? "active" : "disabled" }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to update category"))
+      }
+      setCategories((current) =>
+        current.map((category) => (category.slug === slug ? { ...category, status: active ? "active" : "disabled" } : category))
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to update category")
+    } finally {
+      setCategoryActionBusy(null)
+    }
+  }
+
+  const persistCategoryOrder = async (orderedCategories: ComboCategoryRow[]) => {
+    try {
+      const response = await fetch(apiV2("/combo-categories/reorder"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slugs: orderedCategories.map((category) => category.slug) }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to save category order"))
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to save category order")
+      await loadCategories()
+    }
+  }
+
+  const dropCategoryOn = (targetSlug: string) => {
+    if (!draggedCategorySlug || draggedCategorySlug === targetSlug) {
+      setDraggedCategorySlug(null)
+      return
+    }
+
+    setCategories((current) => {
+      const fromIndex = current.findIndex((category) => category.slug === draggedCategorySlug)
+      const toIndex = current.findIndex((category) => category.slug === targetSlug)
+      if (fromIndex === -1 || toIndex === -1) {
+        return current
+      }
+
+      const reordered = [...current]
+      const [moved] = reordered.splice(fromIndex, 1)
+      reordered.splice(toIndex, 0, moved)
+
+      persistCategoryOrder(reordered)
+      return reordered
+    })
+
+    setDraggedCategorySlug(null)
   }
 
   const toggleFlag = async (key: string, enabled: boolean) => {
@@ -667,6 +819,131 @@ export default function AdminPage() {
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                         No trials registered yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Combo Categories"
+        description="Add, rename, enable/disable, or drag to reorder the categories shown on the Combo Leaderboard."
+      >
+        <div className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={newCategorySlug}
+              onChange={(event) => setNewCategorySlug(event.target.value)}
+              placeholder="slug (e.g. gearless)"
+              className="sm:w-48"
+            />
+            <Input
+              value={newCategoryLabel}
+              onChange={(event) => setNewCategoryLabel(event.target.value)}
+              placeholder="Display label (e.g. Gearless)"
+              className="sm:flex-1"
+            />
+            <Button
+              type="button"
+              disabled={categoryActionBusy === "create" || !newCategorySlug.trim() || !newCategoryLabel.trim()}
+              onClick={createCategory}
+            >
+              Add category
+            </Button>
+          </div>
+
+          {loadingCategories ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner className="size-4" /> Loading categories...
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8" />
+                    <TableHead>Slug</TableHead>
+                    <TableHead>Label</TableHead>
+                    <TableHead>Added</TableHead>
+                    <TableHead className="text-right">Active</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {categories.map((category) => (
+                    <TableRow
+                      key={category.slug}
+                      draggable
+                      onDragStart={() => setDraggedCategorySlug(category.slug)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => dropCategoryOn(category.slug)}
+                      className={draggedCategorySlug === category.slug ? "opacity-50" : undefined}
+                    >
+                      <TableCell className="cursor-grab text-muted-foreground">
+                        <GripVerticalIcon className="size-4" />
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{category.slug}</TableCell>
+                      <TableCell className="font-medium">
+                        {editingCategorySlug === category.slug ? (
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              value={editingCategoryLabel}
+                              onChange={(event) => setEditingCategoryLabel(event.target.value)}
+                              className="h-8 max-w-48"
+                              autoFocus
+                            />
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="outline"
+                              disabled={categoryActionBusy === category.slug || !editingCategoryLabel.trim()}
+                              onClick={() => saveCategoryLabel(category.slug)}
+                              aria-label="Save label"
+                            >
+                              <CheckIcon className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="outline"
+                              onClick={() => setEditingCategorySlug(null)}
+                              aria-label="Cancel"
+                            >
+                              <XIcon className="size-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 hover:text-primary"
+                            onClick={() => {
+                              setEditingCategorySlug(category.slug)
+                              setEditingCategoryLabel(category.label)
+                            }}
+                          >
+                            {category.label}
+                            <PencilIcon className="size-3 text-muted-foreground" />
+                          </button>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{formatTimestamp(category.added_at)}</TableCell>
+                      <TableCell className="text-right">
+                        <Switch
+                          checked={category.status === "active"}
+                          disabled={categoryActionBusy === category.slug}
+                          onCheckedChange={(checked) => toggleCategoryStatus(category.slug, checked)}
+                          aria-label={`Toggle ${category.label}`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {categories.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                        No combo categories yet.
                       </TableCell>
                     </TableRow>
                   ) : null}

@@ -1,8 +1,8 @@
 import "server-only"
 
-export type FeatureFlagKey = "submissions_enabled" | "moderation_enabled"
+export type FeatureFlagKey = "submissions_enabled" | "moderation_enabled" | "combo_submissions_enabled"
 
-export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = ["submissions_enabled", "moderation_enabled"]
+export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = ["submissions_enabled", "moderation_enabled", "combo_submissions_enabled"]
 
 export type FeatureFlagRow = {
   key: FeatureFlagKey

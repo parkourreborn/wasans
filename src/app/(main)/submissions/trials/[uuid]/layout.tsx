@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: SubmissionLayoutProps): Promi
   const time = formatTime(String(submission.time))
   const title = `${submission.trial_name} ${time} | ${submission.player_name}`
   const description = `${submission.player_name}'s ${submission.trial_name} submission in ${time}.`
-  const pageUrl = `${siteUrl}/submissions/${uuid}`
+  const pageUrl = `${siteUrl}/submissions/trials/${uuid}`
   const videoUrl = `${videoBaseUrl}/scores/${uuid}.mp4`
 
   return {
