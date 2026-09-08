@@ -1,4 +1,5 @@
 import "server-only"
+import { PERMISSION_OWNER } from "@/lib/server/auth"
 
 type PlayerListOptions = {
   limit: number
@@ -73,9 +74,9 @@ export async function countOwners(db: D1Database) {
   const row = await db.prepare(
     `SELECT COUNT(*) AS count
      FROM players
-     WHERE permission >= 2
+     WHERE permission >= ?
        AND COALESCE(account_status, 'active') = 'active'`
-  ).first<{ count: number }>()
+  ).bind(PERMISSION_OWNER).first<{ count: number }>()
 
   return Number(row?.count ?? 0)
 }

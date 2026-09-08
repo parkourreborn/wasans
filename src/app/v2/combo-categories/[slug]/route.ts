@@ -7,10 +7,10 @@ import {
   type ComboCategoryStatus,
 } from "@/lib/server/repositories/combo-category-repository"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
-import { jsonOk, requireV2Moderator, withV2Params } from "@/lib/server/v2/http"
+import { jsonOk, requireV2ComboModerator, withV2Params } from "@/lib/server/v2/http"
 
 export const PATCH = withV2Params<{ slug: string }>(async (ctx, { slug }) => {
-  const user = await requireV2Moderator(ctx)
+  const user = await requireV2ComboModerator(ctx)
 
   const body = await ctx.request.json().catch(() => null) as { label?: unknown; status?: unknown } | null
   const label = typeof body?.label === "string" ? body.label.trim() : undefined
