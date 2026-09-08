@@ -42,6 +42,7 @@ type TrialRow = {
   version: number
   version_changed_at: number | null
   removed_at: number | null
+  sort_order: number
 }
 type TrialsResponse = { data?: TrialRow[] }
 
@@ -98,6 +99,7 @@ export default function AdminPage() {
   const [loadingTrials, setLoadingTrials] = React.useState(true)
   const [newTrialName, setNewTrialName] = React.useState("")
   const [trialActionBusy, setTrialActionBusy] = React.useState<string | null>(null)
+  const [draggedTrialName, setDraggedTrialName] = React.useState<string | null>(null)
 
   const [submissionBans, setSubmissionBans] = React.useState<SubmissionBanRow[]>([])
   const [loadingBans, setLoadingBans] = React.useState(true)
@@ -365,6 +367,95 @@ export default function AdminPage() {
     } finally {
       setTrialActionBusy(null)
     }
+  }
+
+  const unretireTrial = async (name: string) => {
+    setTrialActionBusy(name)
+    try {
+      const response = await fetch(apiV2(`/admin/trials/${encodeURIComponent(name)}/unretire`), { method: "POST" })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to unretire trial"))
+      }
+      toast.success(`${name} is active again`)
+      await loadTrials()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to unretire trial")
+    } finally {
+      setTrialActionBusy(null)
+    }
+  }
+
+  const unbumpTrialVersion = async (name: string) => {
+    setTrialActionBusy(name)
+    try {
+      const response = await fetch(apiV2(`/admin/trials/${encodeURIComponent(name)}/unbump-version`), { method: "POST" })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to undo version change"))
+      }
+      toast.success(`${name}'s version change was undone`)
+      await loadTrials()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to undo version change")
+    } finally {
+      setTrialActionBusy(null)
+    }
+  }
+
+  const activeTrials = React.useMemo(
+    () => trials.filter((trial) => trial.status === "active").sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)),
+    [trials]
+  )
+  const retiredTrials = React.useMemo(
+    () => trials.filter((trial) => trial.status === "removed").sort((a, b) => (b.removed_at ?? 0) - (a.removed_at ?? 0)),
+    [trials]
+  )
+
+  const persistTrialOrder = async (orderedTrials: TrialRow[]) => {
+    try {
+      const response = await fetch(apiV2("/admin/trials/reorder"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ names: orderedTrials.map((trial) => trial.name) }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to save trial order"))
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to save trial order")
+      await loadTrials()
+    }
+  }
+
+  const dropTrialOn = (targetName: string) => {
+    if (!draggedTrialName || draggedTrialName === targetName) {
+      setDraggedTrialName(null)
+      return
+    }
+
+    setTrials((current) => {
+      const active = current.filter((trial) => trial.status === "active").sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+      const fromIndex = active.findIndex((trial) => trial.name === draggedTrialName)
+      const toIndex = active.findIndex((trial) => trial.name === targetName)
+      if (fromIndex === -1 || toIndex === -1) {
+        return current
+      }
+
+      const reordered = [...active]
+      const [moved] = reordered.splice(fromIndex, 1)
+      reordered.splice(toIndex, 0, moved)
+
+      persistTrialOrder(reordered)
+
+      const reorderedByName = new Map(reordered.map((trial, index) => [trial.name, index]))
+      return current.map((trial) =>
+        reorderedByName.has(trial.name) ? { ...trial, sort_order: reorderedByName.get(trial.name)! } : trial
+      )
+    })
+
+    setDraggedTrialName(null)
   }
 
   const createCategory = async () => {
@@ -742,7 +833,7 @@ export default function AdminPage() {
 
       <SectionCard
         title="Trials"
-        description="Add, retire, or mark a trial changed. Every change has a 7-day grace period before it affects scores."
+        description="Add, retire, mark a trial changed, or drag to reorder. Every change has a 7-day grace period before it affects scores, and every action here can be undone — undoing restores the exact prior state rather than stacking on top."
       >
         <div className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -766,21 +857,27 @@ export default function AdminPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8" />
                     <TableHead>Trial</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead>Version</TableHead>
                     <TableHead>Added</TableHead>
-                    <TableHead>Removed</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {trials.map((trial) => (
-                    <TableRow key={trial.name}>
-                      <TableCell className="font-medium">{trial.name}</TableCell>
-                      <TableCell>
-                        <Badge variant={trial.status === "active" ? "secondary" : "destructive"}>{trial.status}</Badge>
+                  {activeTrials.map((trial) => (
+                    <TableRow
+                      key={trial.name}
+                      draggable
+                      onDragStart={() => setDraggedTrialName(trial.name)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => dropTrialOn(trial.name)}
+                      className={draggedTrialName === trial.name ? "opacity-50" : undefined}
+                    >
+                      <TableCell className="cursor-grab text-muted-foreground">
+                        <GripVerticalIcon className="size-4" />
                       </TableCell>
+                      <TableCell className="font-medium">{trial.name}</TableCell>
                       <TableCell>
                         v{trial.version}
                         {trial.version_changed_at ? (
@@ -788,37 +885,45 @@ export default function AdminPage() {
                         ) : null}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatTimestamp(trial.added_at)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{formatTimestamp(trial.removed_at)}</TableCell>
                       <TableCell className="text-right">
-                        {trial.status === "active" ? (
-                          <div className="inline-flex gap-1.5">
+                        <div className="inline-flex gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={trialActionBusy === trial.name}
+                            onClick={() => bumpTrialVersion(trial.name)}
+                          >
+                            Mark changed
+                          </Button>
+                          {trial.version > 1 ? (
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
                               disabled={trialActionBusy === trial.name}
-                              onClick={() => bumpTrialVersion(trial.name)}
+                              onClick={() => unbumpTrialVersion(trial.name)}
                             >
-                              Mark changed
+                              Undo change
                             </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="destructive"
-                              disabled={trialActionBusy === trial.name}
-                              onClick={() => retireTrial(trial.name)}
-                            >
-                              Retire
-                            </Button>
-                          </div>
-                        ) : null}
+                          ) : null}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={trialActionBusy === trial.name}
+                            onClick={() => retireTrial(trial.name)}
+                          >
+                            Retire
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {trials.length === 0 ? (
+                  {activeTrials.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                        No trials registered yet.
+                      <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                        No active trials.
                       </TableCell>
                     </TableRow>
                   ) : null}
@@ -826,6 +931,44 @@ export default function AdminPage() {
               </Table>
             </div>
           )}
+
+          {!loadingTrials && retiredTrials.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">Retired</p>
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Trial</TableHead>
+                      <TableHead>Version</TableHead>
+                      <TableHead>Retired</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {retiredTrials.map((trial) => (
+                      <TableRow key={trial.name}>
+                        <TableCell className="font-medium">{trial.name}</TableCell>
+                        <TableCell>v{trial.version}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{formatTimestamp(trial.removed_at)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={trialActionBusy === trial.name}
+                            onClick={() => unretireTrial(trial.name)}
+                          >
+                            Unretire
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          ) : null}
         </div>
       </SectionCard>
 
