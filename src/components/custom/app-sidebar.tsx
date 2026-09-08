@@ -342,7 +342,7 @@ export function AppSidebar() {
                   : user.permission >= 3
                   ? "Senior Moderator"
                   : user.permission >= 2
-                  ? "Moderator"
+                  ? "Junior Moderator"
                   : user.permission >= 1
                   ? "Combo Moderator"
                   : "Member"}

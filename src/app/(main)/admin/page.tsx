@@ -71,7 +71,7 @@ type SubmissionBansResponse = { data?: SubmissionBanRow[] }
 const permissionLabels: Record<number, string> = {
   0: "Member",
   1: "Combo Moderator",
-  2: "Moderator",
+  2: "Junior Moderator",
   3: "Senior Moderator",
   4: "Owner",
 }
