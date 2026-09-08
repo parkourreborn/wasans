@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TrialName, trials } from "@/lib/trials"
+import { useTrialOrder } from "@/hooks/use-trial-order"
 import calculateScore from "@/lib/calc-score"
 import { PageShell, SubmissionList } from "@/components/custom/page-shell"
 
@@ -133,6 +134,7 @@ function scoreFor(wr: number | undefined, time: string | number, trial: TrialNam
 function SubmissionsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { orderedTrialNames } = useTrialOrder()
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [wrSubmissionIds, setWrSubmissionIds] = useState<Set<string>>(new Set())
   const [worldRecordTimes, setWorldRecordTimes] = useState<Record<string, number>>({})
@@ -545,7 +547,7 @@ function SubmissionsPage() {
                         <SelectValue placeholder="Select trial" />
                       </SelectTrigger>
                       <SelectContent>
-                        {trials.map((trial) => (
+                        {orderedTrialNames.map((trial) => (
                           <SelectItem key={trial} value={trial}>
                             {trial}
                           </SelectItem>

@@ -7,6 +7,7 @@ import { apiV2 } from "@/lib/api"
 import { PageHeader, PageShell } from "@/components/custom/page-shell"
 import calculateScore from "@/lib/calc-score"
 import { trials as trialNames, TrialName } from "@/lib/trials"
+import { useTrialOrder } from "@/hooks/use-trial-order"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Spinner } from "@/components/ui/spinner"
@@ -109,6 +110,7 @@ type ListResponse<T> = {
 }
 
 function ComparePageClient() {
+  const { orderedTrialNames } = useTrialOrder()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -229,7 +231,7 @@ function ComparePageClient() {
 
   const rows = React.useMemo(
     () =>
-      trialNames.map((trialName) => {
+      orderedTrialNames.map((trialName) => {
         const trial = trialName.toUpperCase()
         const aTime = Number(playerATimes[trial].time)
         const bTime = Number(playerBTimes[trial].time)
@@ -257,7 +259,7 @@ function ComparePageClient() {
           },
         }
       }),
-    [playerATimes, playerBTimes, worldRecords]
+    [orderedTrialNames, playerATimes, playerBTimes, worldRecords]
   )
 
   return (

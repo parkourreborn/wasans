@@ -26,6 +26,11 @@ const submissionRules = [
   "Staff can ban an individual player from submitting. A banned player keeps their account, approved runs, and score, but cannot create new submissions until the ban is lifted.",
 ]
 
+const comboRules = [
+  "The full clip must be shown starting from 0 combo all the way to the recorded combo count.",
+  "Username must be visible, and the final combo count must be shown in chat (or on the profile page if chat doesn't post it).",
+]
+
 const applicationRules = [
   "To become an official member, your Wasans score must meet the minimum requirement. The current requirement is 0.300.",
   "Use the calculator page to estimate your score with the current WRs from the site's WR table.",
@@ -89,6 +94,14 @@ export default function RulesPage() {
       <SectionCard title="Submission rules" description="Requirements for proof, time entry, and moderation flow.">
         <ul className="list-disc space-y-2 pl-5">
           {submissionRules.map((rule) => (
+            <li key={rule}>{rule}</li>
+          ))}
+        </ul>
+      </SectionCard>
+
+      <SectionCard title="Combo rules" description="What makes a combo leaderboard submission valid.">
+        <ul className="list-disc space-y-2 pl-5">
+          {comboRules.map((rule) => (
             <li key={rule}>{rule}</li>
           ))}
         </ul>
