@@ -282,7 +282,7 @@ export default function CombosLeaderboardPage() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <p className="text-xl font-bold">{row.combo_count}</p>
+                      <p className="text-xl font-bold">{row.combo_count?.toLocaleString()}</p>
                       {row.submission_uuid && (
                         <Button variant="outline" size="sm" className="cursor-pointer" asChild>
                           <Link href={`/submissions/${row.submission_uuid}`}>View</Link>
