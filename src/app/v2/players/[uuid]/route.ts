@@ -17,12 +17,13 @@ export const GET = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   )
 
   const includePbs = include.has("pbs") || parseBoolean(url.searchParams.get("include_pbs"), false)
+  const includeComboPbs = include.has("combo_pbs")
   const includeRecentSubmissions = include.has("recent_submissions")
   const submissionsLimit = Math.max(1, Math.min(50, Number(url.searchParams.get("submissions_limit") || "10")))
 
-  const key = await cacheKey(ctx.cache, "players", uuid, includePbs ? 1 : 0, includeRecentSubmissions ? 1 : 0, submissionsLimit)
+  const key = await cacheKey(ctx.cache, "players", uuid, includePbs ? 1 : 0, includeComboPbs ? 1 : 0, includeRecentSubmissions ? 1 : 0, submissionsLimit)
   const { value: detail } = await readThroughCache(ctx.cache, key, 60, () =>
-    buildPlayerDetail(ctx.db, uuid, { includePbs, includeRecentSubmissions, submissionsLimit })
+    buildPlayerDetail(ctx.db, uuid, { includePbs, includeComboPbs, includeRecentSubmissions, submissionsLimit })
   )
 
   return jsonOk({ player: detail ?? null }, { requestId: ctx.requestId })
