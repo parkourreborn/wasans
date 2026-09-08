@@ -317,6 +317,8 @@ export default function ComboSubmissionView({
   const formattedDate = formatDate(date)
   const badges = [state === "approved" ? "approved" : state === "denied" ? "denied" : "pending"]
   const storedModeratorNote = submission.moderator_note?.trim()
+  // Combo moderators (permission === 1) and up can moderate combo
+  // submissions, same as general moderators/owners.
   const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 1
   const canModerate = (authUser?.permission ?? 0) >= 1
   const currentSubmissionIndex = submissionUuids.findIndex((item) => item === uuid)

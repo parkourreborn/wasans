@@ -2,7 +2,7 @@ import "server-only"
 import calculateScore from "@/lib/calc-score"
 import type { TrialName } from "@/lib/trials"
 import type { AuthUser } from "@/lib/server/auth"
-import { canModerate } from "@/lib/server/auth"
+import { canModerate, PERMISSION_MODERATOR } from "@/lib/server/auth"
 import { secretsMatch } from "@/lib/constant-time"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
@@ -255,14 +255,15 @@ export async function resolveModeratorUser(
     }
   }
 
-  // Check permission level
+  // Check permission level. Trial moderation requires a general moderator
+  // (or owner) — combo-only moderators do not pass canModerate.
   if (!canModerate(moderator)) {
-    const error = `User does not have moderator permissions (permission level: ${moderator.permission}, required: >= 1)`
+    const error = `User does not have moderator permissions (permission level: ${moderator.permission}, required: >= ${PERMISSION_MODERATOR})`
     console.error(`[${requestId}] ${error}`)
     return {
       user: null,
       error,
-      debugInfo: `Permission level is ${moderator.permission}, need >= 1`
+      debugInfo: `Permission level is ${moderator.permission}, need >= ${PERMISSION_MODERATOR}`
     }
   }
 

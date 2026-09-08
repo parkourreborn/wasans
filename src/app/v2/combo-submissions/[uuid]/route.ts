@@ -6,7 +6,7 @@ import { deleteComboSubmission, patchComboSubmission } from "@/lib/server/servic
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
 import { bumpCacheGeneration, cacheKey, readThroughCache } from "@/lib/server/v2/cache"
-import { jsonOk, requireV2Moderator, withV2Params } from "@/lib/server/v2/http"
+import { jsonOk, requireV2ComboModerator, withV2Params } from "@/lib/server/v2/http"
 
 function isValidComboSubmissionUuid(uuid: string) {
   return /^[A-Za-z0-9_-]{6,64}$/.test(uuid)
@@ -39,7 +39,7 @@ export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
     return validationError("Invalid JSON request body", ctx.requestId)
   }
 
-  const user = await requireV2Moderator(ctx)
+  const user = await requireV2ComboModerator(ctx)
 
   if (!(await isFeatureEnabled(ctx.db, "moderation_enabled")) && !isOwner(user)) {
     return jsonError("Moderation is currently disabled", 403, { code: "forbidden", requestId: ctx.requestId })
