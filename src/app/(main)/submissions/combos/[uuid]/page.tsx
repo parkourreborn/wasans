@@ -90,6 +90,35 @@ function getSubmissionUuids() {
   }
 }
 
+// Handles youtube.com/watch?v=, youtu.be/, and youtube.com/shorts|embed/ links
+// — the same hosts allowedComboLinkHosts validates on submission.
+function getYoutubeEmbedId(url: string) {
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.toLowerCase()
+
+    if (host === "youtu.be") {
+      return parsed.pathname.split("/").filter(Boolean)[0] || null
+    }
+
+    if (host === "youtube.com" || host === "www.youtube.com" || host === "m.youtube.com") {
+      const videoId = parsed.searchParams.get("v")
+      if (videoId) {
+        return videoId
+      }
+
+      const [first, second] = parsed.pathname.split("/").filter(Boolean)
+      if (first === "shorts" || first === "embed") {
+        return second || null
+      }
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
+
 function formatDate(unixTime: number) {
   const date = new Date(unixTime * 1000)
   const month = String(date.getMonth() + 1).padStart(2, "0")
@@ -366,6 +395,7 @@ export default function ComboSubmissionDetailPage() {
 
   const { player_name, category_slug, date, combo_count, state, moderator_username } = submission
   const categoryLabel = categoryLabels[category_slug] || category_slug
+  const embedId = getYoutubeEmbedId(submission.youtube_url)
   const formattedDate = formatDate(date)
   const badges = [state === "approved" ? "approved" : state === "denied" ? "denied" : "pending"]
   const storedModeratorNote = submission.moderator_note?.trim()
@@ -548,15 +578,35 @@ export default function ComboSubmissionDetailPage() {
         </CardHeader>
 
         <CardContent>
-          <div className="flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border p-8">
-            <p className="text-sm text-muted-foreground">Proof video is hosted on YouTube, not on this site.</p>
-            <Button asChild>
-              <a href={submission.youtube_url} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon />
-                Watch on YouTube
-              </a>
-            </Button>
-          </div>
+          {embedId ? (
+            <div className="flex w-full flex-col items-center gap-3">
+              <div className="aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
+                <iframe
+                  src={`https://www.youtube.com/embed/${embedId}`}
+                  title={`${player_name}'s ${categoryLabel} combo submission`}
+                  className="h-full w-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <a href={submission.youtube_url} target="_blank" rel="noreferrer">
+                  <ExternalLinkIcon />
+                  Open on YouTube
+                </a>
+              </Button>
+            </div>
+          ) : (
+            <div className="flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border p-8">
+              <p className="text-sm text-muted-foreground">Proof video is hosted on YouTube, not on this site.</p>
+              <Button asChild>
+                <a href={submission.youtube_url} target="_blank" rel="noreferrer">
+                  <ExternalLinkIcon />
+                  Watch on YouTube
+                </a>
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
