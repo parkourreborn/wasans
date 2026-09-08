@@ -77,34 +77,35 @@ CREATE TABLE trials (
   added_at INTEGER NOT NULL,
   version INTEGER NOT NULL DEFAULT 1,
   version_changed_at INTEGER,
-  removed_at INTEGER
+  removed_at INTEGER,
+  sort_order INTEGER NOT NULL DEFAULT 0
 );
 
-INSERT OR IGNORE INTO trials (name, status, added_at, version) VALUES
-  ('Crystal', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Genesis', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Glass', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Riser', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Solar', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Vestibule', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Celsius', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Circulation', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Flow', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Martyr', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Neon Bold', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Sawdust', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Ascension', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Faith', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Gale', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Grip', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Thread', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Umbrel', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Depot', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Flame', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Ironsing', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Monoxide', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Rust Belt', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1),
-  ('Wisp', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1);
+INSERT OR IGNORE INTO trials (name, status, added_at, version, sort_order) VALUES
+  ('Crystal', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 0),
+  ('Genesis', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 1),
+  ('Glass', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 2),
+  ('Riser', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 3),
+  ('Solar', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 4),
+  ('Vestibule', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 5),
+  ('Celsius', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 6),
+  ('Circulation', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 7),
+  ('Flow', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 8),
+  ('Martyr', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 9),
+  ('Neon Bold', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 10),
+  ('Sawdust', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 11),
+  ('Ascension', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 12),
+  ('Faith', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 13),
+  ('Gale', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 14),
+  ('Grip', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 15),
+  ('Thread', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 16),
+  ('Umbrel', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 17),
+  ('Depot', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 18),
+  ('Flame', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 19),
+  ('Ironsing', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 20),
+  ('Monoxide', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 21),
+  ('Rust Belt', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 22),
+  ('Wisp', 'active', CAST(strftime('%s', 'now') AS INTEGER) - 31536000, 1, 23);
 
 -- Submissions
 CREATE TABLE submissions (
