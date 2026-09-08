@@ -4,11 +4,21 @@ import {
   ComboCategoryError,
   createComboCategory,
   listActiveComboCategories,
+  listComboCategories,
 } from "@/lib/server/repositories/combo-category-repository"
 import { bumpCacheGeneration, cacheKey, readThroughCache } from "@/lib/server/v2/cache"
 import { jsonOk, requireV2Moderator, withV2Context } from "@/lib/server/v2/http"
 
 export const GET = withV2Context(async (ctx) => {
+  const includeAll = new URL(ctx.request.url).searchParams.get("include") === "all"
+
+  if (includeAll) {
+    await requireV2Moderator(ctx)
+    const key = await cacheKey(ctx.cache, "combo-categories", "all-list")
+    const { value } = await readThroughCache(ctx.cache, key, 60, () => listComboCategories(ctx.db))
+    return jsonOk(value, { requestId: ctx.requestId })
+  }
+
   const key = await cacheKey(ctx.cache, "combo-categories", "active-list")
   const { value } = await readThroughCache(ctx.cache, key, 60, () => listActiveComboCategories(ctx.db))
 

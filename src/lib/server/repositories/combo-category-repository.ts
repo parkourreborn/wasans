@@ -106,6 +106,20 @@ export async function renameComboCategory(db: D1Database, slug: string, label: s
   return getComboCategory(db, slug)
 }
 
+// Bulk-assigns sort_order to match the given order (index = new sort_order).
+// Unknown slugs are silently ignored by the UPDATE's WHERE clause rather than
+// throwing, since this is only ever called with the admin's own current
+// category list.
+export async function reorderComboCategories(db: D1Database, orderedSlugs: string[]) {
+  const statements = orderedSlugs.map((slug, index) =>
+    db.prepare(`UPDATE combo_categories SET sort_order = ? WHERE slug = ?`).bind(index, slug)
+  )
+
+  if (statements.length) {
+    await db.batch(statements)
+  }
+}
+
 export async function setComboCategoryStatus(db: D1Database, slug: string, status: ComboCategoryStatus) {
   const existing = await getComboCategory(db, slug)
   if (!existing) {
