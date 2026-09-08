@@ -32,10 +32,12 @@ import {
   CalculatorIcon,
   ExternalLinkIcon,
   FileTextIcon,
+  FlameIcon,
   HelpCircleIcon,
   HistoryIcon,
   HomeIcon,
   LogInIcon,
+  ListChecksIcon,
   MedalIcon,
   OctagonAlertIcon,
   ShieldIcon,
@@ -95,8 +97,14 @@ const boardLinks: SidebarLinkGroup[] = [
     icon: MedalIcon,
     children: [{ href: "/wrs/history", label: "History", icon: HistoryIcon }],
   },
-  { href: "/submissions", label: "Submissions", icon: TimerIcon },
+  {
+    href: "/submissions/trials",
+    label: "Submissions",
+    icon: TimerIcon,
+    children: [{ href: "/submissions/combos", label: "Combos", icon: ListChecksIcon }],
+  },
   { href: "/players", label: "Leaderboard", icon: TrophyIcon },
+  { href: "/combos", label: "Combo Leaderboard", icon: FlameIcon },
 ]
 
 function SidebarNavItem({

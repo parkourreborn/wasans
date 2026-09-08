@@ -635,7 +635,7 @@ export default function NewSubmissionPage() {
       }
 
       setMessage("Submitted")
-      router.push("/submissions")
+      router.push("/submissions/trials")
       router.refresh()
     } catch (err) {
       console.error(err)

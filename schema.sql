@@ -3,6 +3,9 @@
 
 DROP TABLE IF EXISTS wrs;
 DROP TABLE IF EXISTS pbs;
+DROP TABLE IF EXISTS combo_pbs;
+DROP TABLE IF EXISTS combo_submissions;
+DROP TABLE IF EXISTS combo_categories;
 DROP TABLE IF EXISTS submission_bans;
 DROP TABLE IF EXISTS submissions;
 DROP TABLE IF EXISTS oauth_accounts;
@@ -177,6 +180,61 @@ CREATE TABLE submission_bans (
 
 CREATE INDEX idx_submission_bans_banned_at ON submission_bans(banned_at DESC);
 
+-- Combo leaderboard: a second, fully independent leaderboard where players
+-- submit a YouTube link + a combo count (higher is better) for an
+-- admin-configurable category. Never touches players.score, pbs, wrs, or
+-- any trial scoring logic.
+CREATE TABLE combo_categories (
+  slug TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  added_at INTEGER NOT NULL
+);
+
+INSERT OR IGNORE INTO combo_categories (slug, label, status, sort_order, added_at) VALUES
+  ('gearless', 'Gearless', 'active', 0, CAST(strftime('%s','now') AS INTEGER)),
+  ('yank',     'Yank',     'active', 1, CAST(strftime('%s','now') AS INTEGER)),
+  ('swing',    'Swing',    'active', 2, CAST(strftime('%s','now') AS INTEGER)),
+  ('mag',      'Mag',      'active', 3, CAST(strftime('%s','now') AS INTEGER));
+
+-- Combo submissions (analog of submissions)
+CREATE TABLE combo_submissions (
+  uuid TEXT PRIMARY KEY,
+  player_uuid TEXT NOT NULL,
+  category_slug TEXT NOT NULL,
+  player_name TEXT NOT NULL,
+  combo_count INTEGER NOT NULL,
+  youtube_url TEXT NOT NULL,
+  date INTEGER NOT NULL,
+  moderator_note TEXT,
+  moderator_username TEXT,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('approved', 'denied', 'pending')),
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (category_slug) REFERENCES combo_categories(slug) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_combo_submissions_player_state_category_date ON combo_submissions(player_uuid, state, category_slug, date);
+CREATE INDEX idx_combo_submissions_state_category_count_date ON combo_submissions(state, category_slug, combo_count DESC, date ASC);
+CREATE INDEX idx_combo_submissions_category_state_date_uuid ON combo_submissions(category_slug, state, date, uuid);
+
+-- Combo personal bests (analog of pbs): one row per (player, category) =
+-- their best approved submission.
+CREATE TABLE combo_pbs (
+  player_uuid TEXT NOT NULL,
+  category_slug TEXT NOT NULL,
+  submission_uuid TEXT NOT NULL,
+  player_name TEXT NOT NULL,
+  combo_count INTEGER NOT NULL,
+  date INTEGER NOT NULL,
+  PRIMARY KEY (player_uuid, category_slug),
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (submission_uuid) REFERENCES combo_submissions(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (category_slug) REFERENCES combo_categories(slug) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_combo_pbs_category_slug ON combo_pbs(category_slug, combo_count DESC, date ASC);
+
 -- Audit logs for submissions, WRs, moderation actions, and client/server errors
 CREATE TABLE audit_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,7 +263,8 @@ CREATE TABLE feature_flags (
 
 INSERT OR IGNORE INTO feature_flags (key, enabled, updated_at) VALUES
   ('submissions_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER)),
-  ('moderation_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER));
+  ('moderation_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER)),
+  ('combo_submissions_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER));
 
 -- v2 API: rotating refresh tokens for JWT auth
 CREATE TABLE refresh_tokens (
