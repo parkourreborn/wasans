@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { apiV2 } from "@/lib/api"
-import { trials } from "@/lib/trials"
 import { useApiGet } from "@/hooks/use-api"
+import { useTrialOrder } from "@/hooks/use-trial-order"
 import { SubmissionCard } from "@/components/custom/submission-card"
 import { ErrorState, PageHeader, PageShell, SubmissionList } from "@/components/custom/page-shell"
 import { Card, CardContent } from "@/components/ui/card"
@@ -32,19 +32,6 @@ type WorldRecordsResponse = {
 }
 
 const submissionUuidListKey = "submission_uuids"
-const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
-
-function compareByTrialOrder(aTrialName: string, bTrialName: string) {
-  const aOrder = trialOrderByName.get(String(aTrialName).toUpperCase())
-  const bOrder = trialOrderByName.get(String(bTrialName).toUpperCase())
-
-  if (aOrder == null && bOrder == null) {
-    return aTrialName.localeCompare(bTrialName)
-  }
-  if (aOrder == null) return 1
-  if (bOrder == null) return -1
-  return aOrder - bOrder
-}
 
 function formatTime(rawTime: number | string) {
   const timeStr = String(rawTime)
@@ -67,6 +54,7 @@ function formatDate(unixTime: number) {
 export default function WorldRecordsPage() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
+  const { compareByTrialOrder } = useTrialOrder()
   const { data, loading, error } = useApiGet<WorldRecordsResponse>(apiV2("/records/world"))
   const submissions = data?.data ?? []
 
@@ -74,7 +62,7 @@ export default function WorldRecordsPage() {
 
   const orderedSubmissions = useMemo(
     () => [...submissions].sort((a, b) => compareByTrialOrder(a.trial_name, b.trial_name)),
-    [submissions]
+    [submissions, compareByTrialOrder]
   )
 
   const filteredSubmissions = useMemo(() => {

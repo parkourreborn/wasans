@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { apiV2 } from "@/lib/api"
 import { TrialName, trials as trialNames } from "@/lib/trials"
+import { useTrialOrder } from "@/hooks/use-trial-order"
 import { PageHeader, PageShell } from "@/components/custom/page-shell"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -96,6 +97,7 @@ function getPlayerUuid() {
 }
 
 export default function CalculatorPage() {
+  const { orderedTrialNames } = useTrialOrder()
   const [worldRecords, setWorldRecords] = React.useState<Array<WorldRecordValue>>([])
   const [loadingWorldRecords, setLoadingWorldRecords] = React.useState(true)
   const [worldRecordError, setWorldRecordError] = React.useState<string | null>(null)
@@ -252,7 +254,7 @@ export default function CalculatorPage() {
 
   const rows = React.useMemo(
     () =>
-      trialNames.map((trialName) => {
+      orderedTrialNames.map((trialName) => {
         const trial = trialKey(trialName)
         const wrEntry = worldRecords.find((u) => trialKey(u.trial_name) === trial)
         const wr = Number(wrEntry?.time || 0)
@@ -274,7 +276,7 @@ export default function CalculatorPage() {
           score: isValidTime ? scoreFor(wr, your_time, trialName) : 0,
         }
       }),
-    [times, worldRecords]
+    [orderedTrialNames, times, worldRecords]
   )
 
   const rawAverageScore = React.useMemo(() => {
