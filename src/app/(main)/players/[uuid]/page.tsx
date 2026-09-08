@@ -8,6 +8,7 @@ import calculateScore from "@/lib/calc-score"
 import { TrialName, trials } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
 import { SubmissionCard } from "@/components/custom/submission-card"
+import { ComboSubmissionCard } from "@/components/custom/combo-submission-card"
 import { ErrorState, PageShell, SubmissionList } from "@/components/custom/page-shell"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { Card, CardContent } from "@/components/ui/card"
@@ -68,11 +69,29 @@ type SubmissionValue = {
   moderator_username?: string | null
 }
 
+type ComboSubmissionValue = {
+  uuid: string
+  category_slug: string
+  combo_count: number
+  youtube_url: string
+  date: number
+  state: "approved" | "pending" | "denied"
+  moderator_note?: string | null
+  moderator_username?: string | null
+  player_id?: string | null
+  discord_avatar?: string | null
+  discord_discriminator?: string | null
+}
+
+type ComboCategory = { slug: string; label: string }
+
 type PlayerDetailResponse = { data?: { player: PlayerInfo | null }; error?: { message?: string } }
 type WorldRecordsResponse = { data?: WorldRecordValue[]; error?: { message?: string } }
 type SubmissionsResponse = { data?: SubmissionValue[]; meta?: { count?: number }; error?: { message?: string } }
+type ComboSubmissionsResponse = { data?: ComboSubmissionValue[]; error?: { message?: string } }
+type ComboCategoriesResponse = { data?: ComboCategory[]; error?: { message?: string } }
 
-type ViewMode = "submissions" | "pbs"
+type ViewMode = "submissions" | "pbs" | "combos"
 
 const trialOrderByName = new Map(trials.map((trial, index) => [trial.toUpperCase(), index]))
 const submissionUuidListKey = "submission_uuids"
@@ -120,12 +139,32 @@ async function fetchAllPlayerSubmissions(playerUuid: string) {
   return all
 }
 
+async function fetchApprovedPlayerCombos(playerUuid: string) {
+  const params = new URLSearchParams({
+    player_uuid: playerUuid,
+    state: "approved",
+    page: "1",
+    limit: "100",
+  })
+
+  const response = await fetch(`${apiV2("/combo-submissions")}?${params.toString()}`, { cache: "no-store" })
+  const json = (await response.json()) as ComboSubmissionsResponse
+
+  if (!response.ok) {
+    throw new Error(json.error?.message || "Unable to load combo submissions")
+  }
+
+  return json.data || []
+}
+
 export default function PlayerProfilePage() {
   const { uuid } = useParams()
   const router = useRouter()
   const [player, setPlayer] = React.useState<PlayerInfo | null>(null)
   const [worldRecords, setWorldRecords] = React.useState<WorldRecordValue[]>([])
   const [submissions, setSubmissions] = React.useState<SubmissionValue[]>([])
+  const [combos, setCombos] = React.useState<ComboSubmissionValue[]>([])
+  const [comboCategories, setComboCategories] = React.useState<ComboCategory[]>([])
   const [mode, setMode] = React.useState<ViewMode>("submissions")
   const [search, setSearch] = React.useState("")
   const [loading, setLoading] = React.useState(true)
@@ -141,10 +180,15 @@ export default function PlayerProfilePage() {
       setError(null)
 
       try {
-        const [playerResponse, wrResponse, submissionRows] = await Promise.all([
+        const [playerResponse, wrResponse, submissionRows, categoriesResponse, comboRows] = await Promise.all([
           fetch(`${apiV2(`/players/${encodeURIComponent(uuid)}`)}?include=pbs`, { cache: "no-store" }),
           fetch(apiV2("/records/world"), { cache: "no-store" }),
           fetchAllPlayerSubmissions(uuid),
+          fetch(apiV2("/combo-categories"), { cache: "force-cache" }),
+          fetchApprovedPlayerCombos(uuid).catch((err) => {
+            console.error(err)
+            return [] as ComboSubmissionValue[]
+          }),
         ])
 
         const playerJson = (await playerResponse.json()) as PlayerDetailResponse
@@ -158,9 +202,15 @@ export default function PlayerProfilePage() {
           throw new Error(wrJson.error?.message || "Unable to load world records")
         }
 
+        if (categoriesResponse.ok) {
+          const categoriesJson = (await categoriesResponse.json()) as ComboCategoriesResponse
+          setComboCategories(categoriesJson.data || [])
+        }
+
         setPlayer(playerJson.data?.player || null)
         setWorldRecords(wrJson.data || [])
         setSubmissions(submissionRows)
+        setCombos(comboRows)
       } catch (err) {
         console.error(err)
         setError("We couldn't load this profile right now.")
@@ -247,17 +297,48 @@ export default function PlayerProfilePage() {
     })
   }, [submissionRows, search])
 
+  const comboCategoryLabelBySlug = React.useMemo(() => {
+    return new Map(comboCategories.map((category) => [category.slug, category.label]))
+  }, [comboCategories])
+
+  const orderedCombos = React.useMemo(() => {
+    return [...combos].sort((a, b) => {
+      const aLabel = comboCategoryLabelBySlug.get(a.category_slug) || a.category_slug
+      const bLabel = comboCategoryLabelBySlug.get(b.category_slug) || b.category_slug
+      return aLabel.localeCompare(bLabel)
+    })
+  }, [combos, comboCategoryLabelBySlug])
+
+  const filteredCombos = React.useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) {
+      return orderedCombos
+    }
+
+    return orderedCombos.filter((row) => {
+      const categoryLabel = comboCategoryLabelBySlug.get(row.category_slug) || row.category_slug
+      return (
+        categoryLabel.toLowerCase().includes(query)
+        || String(row.combo_count).includes(query)
+        || formatDate(row.date).toLowerCase().includes(query)
+      )
+    })
+  }, [orderedCombos, comboCategoryLabelBySlug, search])
+
   React.useEffect(() => {
     if (typeof window === "undefined" || loading || !player) {
       return
     }
 
-    const visibleSubmissionUuids = mode === "submissions"
-      ? filteredSubmissions.map((row) => row.uuid)
-      : filteredPbs.map((row) => row.submission_uuid)
+    const visibleSubmissionUuids =
+      mode === "submissions"
+        ? filteredSubmissions.map((row) => row.uuid)
+        : mode === "pbs"
+          ? filteredPbs.map((row) => row.submission_uuid)
+          : filteredCombos.map((row) => row.uuid)
 
     window.localStorage.setItem(submissionUuidListKey, JSON.stringify(visibleSubmissionUuids))
-  }, [filteredPbs, filteredSubmissions, loading, mode, player])
+  }, [filteredCombos, filteredPbs, filteredSubmissions, loading, mode, player])
 
   if (loading) {
     return (
@@ -378,7 +459,13 @@ export default function PlayerProfilePage() {
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={mode === "submissions" ? "Search submissions by trial, state, time, date, uuid" : "Search PBs by trial, time, date"}
+            placeholder={
+              mode === "submissions"
+                ? "Search submissions by trial, state, time, date, uuid"
+                : mode === "pbs"
+                  ? "Search PBs by trial, time, date"
+                  : "Search combo bests by category, count, date"
+            }
             className="w-full min-w-0 lg:flex-1"
           />
 
@@ -387,6 +474,7 @@ export default function PlayerProfilePage() {
               <TabsList>
                 <TabsTrigger className="cursor-pointer" value="submissions">All Submissions</TabsTrigger>
                 <TabsTrigger className="cursor-pointer" value="pbs">Personal Bests</TabsTrigger>
+                <TabsTrigger className="cursor-pointer" value="combos">Combo Bests</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -414,7 +502,7 @@ export default function PlayerProfilePage() {
                 scoreText={row.state !== "denied" ? row.score.toFixed(3) : undefined}
                 moderatorNote={row.moderator_note}
                 moderatorUsername={row.moderator_username}
-                onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
+                onNavigate={(submissionUuid) => router.push(`/submissions/trials/${submissionUuid}`)}
               />
             ))
           ) : (
@@ -422,29 +510,55 @@ export default function PlayerProfilePage() {
               No matching submissions.
             </div>
           )
-        ) : filteredPbs.length > 0 ? (
-          filteredPbs.map((row) => (
-            <SubmissionCard
-              key={`${row.submission_uuid}-${row.trial_name}`}
-              submissionUuid={row.submission_uuid}
-              trialName={row.trial_name}
-              timeText={formatTime(row.time)}
+        ) : mode === "pbs" ? (
+          filteredPbs.length > 0 ? (
+            filteredPbs.map((row) => (
+              <SubmissionCard
+                key={`${row.submission_uuid}-${row.trial_name}`}
+                submissionUuid={row.submission_uuid}
+                trialName={row.trial_name}
+                timeText={formatTime(row.time)}
+                playerUuid={player.uuid}
+                playerName={player.player_name}
+                playerScore={player.score}
+                playerId={player.player_id}
+                playerDiscordAvatar={player.discord_avatar}
+                playerDiscordDiscriminator={player.discord_discriminator}
+                dateText={formatDate(row.date)}
+                state="approved"
+                isWr={wrSubmissionIds.has(row.submission_uuid)}
+                scoreText={row.score.toFixed(3)}
+                onNavigate={(submissionUuid) => router.push(`/submissions/trials/${submissionUuid}`)}
+              />
+            ))
+          ) : (
+            <div className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
+              No matching personal bests.
+            </div>
+          )
+        ) : filteredCombos.length > 0 ? (
+          filteredCombos.map((row) => (
+            <ComboSubmissionCard
+              key={row.uuid}
+              submissionUuid={row.uuid}
+              categoryLabel={comboCategoryLabelBySlug.get(row.category_slug) || row.category_slug}
+              comboCount={row.combo_count}
+              youtubeUrl={row.youtube_url}
               playerUuid={player.uuid}
               playerName={player.player_name}
-              playerScore={player.score}
-              playerId={player.player_id}
-              playerDiscordAvatar={player.discord_avatar}
-              playerDiscordDiscriminator={player.discord_discriminator}
+              playerId={row.player_id ?? player.player_id}
+              playerDiscordAvatar={row.discord_avatar ?? player.discord_avatar}
+              playerDiscordDiscriminator={row.discord_discriminator ?? player.discord_discriminator}
               dateText={formatDate(row.date)}
-              state="approved"
-              isWr={wrSubmissionIds.has(row.submission_uuid)}
-              scoreText={row.score.toFixed(3)}
-              onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
+              state={row.state}
+              moderatorNote={row.moderator_note}
+              moderatorUsername={row.moderator_username}
+              onNavigate={(submissionUuid) => router.push(`/submissions/combos/${submissionUuid}`)}
             />
           ))
         ) : (
           <div className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
-            No matching personal bests.
+            No matching combo bests.
           </div>
         )}
       </SubmissionList>
