@@ -63,7 +63,7 @@ export function ComboSubmissionCard({
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">{categoryLabel}</p>
-              <p className="text-3xl font-bold leading-tight xl:text-4xl">{comboCount}</p>
+              <p className="text-3xl font-bold leading-tight xl:text-4xl">{comboCount.toLocaleString()}</p>
             </div>
             <Badge variant={state === "approved" ? "approved" : state === "denied" ? "denied" : "default"}>
               {state === "approved" ? "Approved" : state === "denied" ? "Denied" : "Pending"}

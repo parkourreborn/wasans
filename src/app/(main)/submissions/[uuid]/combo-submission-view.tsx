@@ -346,7 +346,7 @@ export default function ComboSubmissionView({
               <div className="flex min-w-0 flex-col items-center gap-2 text-center">
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <h2 className="text-2xl font-bold lg:text-3xl">
-                    {categoryLabel} {combo_count}
+                    {categoryLabel} {combo_count.toLocaleString()}
                   </h2>
                   <Badges badges={badges} />
                 </div>
