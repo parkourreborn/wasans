@@ -2,7 +2,7 @@ import "server-only"
 import calculateScore from "@/lib/calc-score"
 import type { TrialName } from "@/lib/trials"
 import type { AuthUser } from "@/lib/server/auth"
-import { canModerate, PERMISSION_MODERATOR } from "@/lib/server/auth"
+import { canDeleteTrialSubmission, canModerate, PERMISSION_MODERATOR } from "@/lib/server/auth"
 import { secretsMatch } from "@/lib/constant-time"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
@@ -639,7 +639,7 @@ export async function deleteSubmission(
     throw new Error("Submission was not found")
   }
 
-  if (submission.player_uuid !== user.uuid && !canModerate(user)) {
+  if (submission.player_uuid !== user.uuid && !canDeleteTrialSubmission(user)) {
     throw new Error("You can only delete your own submissions")
   }
 

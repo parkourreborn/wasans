@@ -394,9 +394,11 @@ export default function TrialSubmissionView({
     isWrSubmission ? "wr" : "",
   ]
   const videoSrc = `https://assets.wasans.tully.sh/scores/${uuid}.mp4`
-  // Trial submissions are general-moderator+ territory; combo moderators
-  // (permission === 1) don't get moderation controls here.
-  const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 2
+  // Trial submissions are moderator+ territory; combo moderators
+  // (permission === 1) don't get moderation controls here. Deleting is
+  // further restricted to senior moderators+ (permission >= 3) — plain
+  // moderators (2) can approve/deny/edit but not delete.
+  const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 3
   const canModerate = (authUser?.permission ?? 0) >= 2
   const currentSubmissionIndex = submissionUuids.findIndex((item) => item === uuid)
   const canNavigate = currentSubmissionIndex >= 0 && submissionUuids.length > 1

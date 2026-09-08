@@ -298,7 +298,7 @@ export function AppSidebar() {
               </>
             )}
 
-            {(user?.permission ?? 0) >= 3 && (
+            {(user?.permission ?? 0) >= 4 && (
               <SidebarNavItem
                 item={{ href: "/admin", label: "Admin", icon: ShieldIcon }}
                 pathname={pathname}
@@ -337,8 +337,10 @@ export function AppSidebar() {
                 {formatPlayerNameWithScore(user.player_name, user.score)}
               </Link>
               <p className="truncate text-xs text-muted-foreground">
-                {user.permission >= 3
+                {user.permission >= 4
                   ? "Owner"
+                  : user.permission >= 3
+                  ? "Senior Moderator"
                   : user.permission >= 2
                   ? "Moderator"
                   : user.permission >= 1
