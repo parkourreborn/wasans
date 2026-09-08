@@ -37,7 +37,7 @@ export const botConfig = {
     submission_api_base_url: process.env.SUBMISSION_API_BASE_URL || 'https://wasans.tully.sh/v2/submissions/',
     bot_token: BOT_TOKEN,
     api_secret: API_SECRET,
-    moderator_role_id: process.env.MODERATOR_ROLE_ID || '1340709947758874624',
+    moderator_role_id: process.env.MODERATOR_ROLE_ID || '1547026410307194920',
     state_tags: {
         pending: process.env.TAG_PENDING_ID || '1351580041896656936',
         approved: process.env.TAG_APPROVED_ID || '1351581039499284521',
