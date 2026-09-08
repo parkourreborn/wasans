@@ -1,7 +1,7 @@
 import "server-only"
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { getRequestId, jsonError, mergeResponseHeaders, type ApiErrorCode } from "@/lib/server/http"
-import { canModerate, isOwner, loadAuthUserByUuid, type AuthUser } from "@/lib/server/auth"
+import { canModerate, canModerateCombo, isOwner, loadAuthUserByUuid, type AuthUser } from "@/lib/server/auth"
 import { signJwt, verifyJwt } from "./jwt"
 
 export { getRequestId } from "@/lib/server/http"
@@ -57,6 +57,17 @@ export async function requireV2User(ctx: V2Context): Promise<AuthUser> {
 export async function requireV2Moderator(ctx: V2Context): Promise<AuthUser> {
   const user = await requireV2User(ctx)
   if (!canModerate(user)) {
+    throw new ApiError("Moderator permission is required", 403, "forbidden")
+  }
+
+  return user
+}
+
+// For combo-scoped routes (combo submissions, combo categories): admits
+// combo moderators as well as general moderators/owners.
+export async function requireV2ComboModerator(ctx: V2Context): Promise<AuthUser> {
+  const user = await requireV2User(ctx)
+  if (!canModerateCombo(user)) {
     throw new ApiError("Moderator permission is required", 403, "forbidden")
   }
 

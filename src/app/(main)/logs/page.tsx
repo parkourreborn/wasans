@@ -156,7 +156,7 @@ export default function LogsPage() {
   }, [])
 
   const loadLogs = React.useCallback(async () => {
-    if (!user || user.permission < 1) {
+    if (!user || user.permission < 2) {
       return
     }
 

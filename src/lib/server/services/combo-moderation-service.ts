@@ -1,6 +1,6 @@
 import "server-only"
 import type { AuthUser } from "@/lib/server/auth"
-import { canModerate } from "@/lib/server/auth"
+import { canModerateCombo } from "@/lib/server/auth"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
 import {
@@ -31,7 +31,7 @@ export async function patchComboSubmission(
 
   // Never rely on the route having gated this: this is the single function
   // every combo moderation action funnels through.
-  if (!canModerate(user)) {
+  if (!canModerateCombo(user)) {
     throw new Error("Moderator permission is required")
   }
 
@@ -110,7 +110,7 @@ export async function deleteComboSubmission(
     throw new Error("Combo submission was not found")
   }
 
-  if (submission.player_uuid !== user.uuid && !canModerate(user)) {
+  if (submission.player_uuid !== user.uuid && !canModerateCombo(user)) {
     throw new Error("You can only delete your own combo submissions")
   }
 

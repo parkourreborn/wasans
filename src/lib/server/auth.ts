@@ -53,14 +53,27 @@ export async function loadAuthUserByUuid(
   return user
 }
 
-// players.permission tiers: 0 = member, 1 = moderator, 2 = owner. Owners are
-// moderators too (canModerate is still >= 1) but additionally get feature
-// flag control (see src/lib/server/repositories/feature-flag-repository.ts).
-export const PERMISSION_MODERATOR = 1
-export const PERMISSION_OWNER = 2
+// players.permission tiers: 0 = member, 1 = combo moderator, 2 = moderator
+// (general — trials and combos both), 3 = owner. Each tier includes every
+// ability of the tiers below it: a general moderator can also do everything
+// a combo moderator can, and an owner can do everything a general moderator
+// can, plus feature flag control (see
+// src/lib/server/repositories/feature-flag-repository.ts).
+export const PERMISSION_COMBO_MODERATOR = 1
+export const PERMISSION_MODERATOR = 2
+export const PERMISSION_OWNER = 3
 
+// Gates trial-submission moderation and other general/trial admin actions.
+// Combo-only moderators (permission === PERMISSION_COMBO_MODERATOR) do not
+// pass this — use canModerateCombo for combo-scoped actions instead.
 export function canModerate(user: { permission: number } | null) {
   return Boolean(user && user.permission >= PERMISSION_MODERATOR)
+}
+
+// Gates combo-submission moderation and combo-category management. Anyone
+// who can moderate in general (canModerate) can also moderate combos.
+export function canModerateCombo(user: { permission: number } | null) {
+  return Boolean(user && user.permission >= PERMISSION_COMBO_MODERATOR)
 }
 
 export function isOwner(user: { permission: number } | null) {
