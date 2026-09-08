@@ -318,9 +318,10 @@ export default function ComboSubmissionView({
   const badges = [state === "approved" ? "approved" : state === "denied" ? "denied" : "pending"]
   const storedModeratorNote = submission.moderator_note?.trim()
   // Combo moderators (1) and up can moderate combo submissions, same as
-  // general moderators/owners. Deleting is the exception: plain moderators
-  // (2) can't delete anything, so combo-delete is combo moderator (1) or
-  // senior moderator+ (>= 3), skipping over plain moderator (2).
+  // junior/senior moderators and owners. Deleting is the exception: junior
+  // moderators (2) can't delete anything, so combo-delete is combo
+  // moderator (1) or senior moderator+ (>= 3), skipping over junior
+  // moderator (2).
   const permissionLevel = authUser?.permission ?? 0
   const canDelete =
     authUser?.uuid === submission.player_uuid || permissionLevel === 1 || permissionLevel >= 3
