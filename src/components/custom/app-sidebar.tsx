@@ -195,7 +195,9 @@ export function AppSidebar() {
   }, [])
 
   useEffect(() => {
-    if ((user?.permission ?? 0) < 1) {
+    // Audit logs are a general-moderator+ surface (combo moderators are not
+    // admitted by requireV2Moderator on /admin/audit-logs).
+    if ((user?.permission ?? 0) < 2) {
       return
     }
 
@@ -276,7 +278,7 @@ export function AppSidebar() {
               </Fragment>
             ))}
 
-            {(user?.permission ?? 0) >= 1 && (
+            {(user?.permission ?? 0) >= 2 && (
               <>
                 <SidebarSeparator />
                 <SidebarNavItem
@@ -296,7 +298,7 @@ export function AppSidebar() {
               </>
             )}
 
-            {(user?.permission ?? 0) >= 2 && (
+            {(user?.permission ?? 0) >= 4 && (
               <SidebarNavItem
                 item={{ href: "/admin", label: "Admin", icon: ShieldIcon }}
                 pathname={pathname}
@@ -335,7 +337,15 @@ export function AppSidebar() {
                 {formatPlayerNameWithScore(user.player_name, user.score)}
               </Link>
               <p className="truncate text-xs text-muted-foreground">
-                {user.permission >= 2 ? "Owner" : user.permission >= 1 ? "Moderator" : "Member"}
+                {user.permission >= 4
+                  ? "Owner"
+                  : user.permission >= 3
+                  ? "Senior Moderator"
+                  : user.permission >= 2
+                  ? "Junior Moderator"
+                  : user.permission >= 1
+                  ? "Combo Moderator"
+                  : "Member"}
               </p>
             </div>
           </div>

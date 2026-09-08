@@ -53,14 +53,53 @@ export async function loadAuthUserByUuid(
   return user
 }
 
-// players.permission tiers: 0 = member, 1 = moderator, 2 = owner. Owners are
-// moderators too (canModerate is still >= 1) but additionally get feature
-// flag control (see src/lib/server/repositories/feature-flag-repository.ts).
-export const PERMISSION_MODERATOR = 1
-export const PERMISSION_OWNER = 2
+// players.permission tiers:
+//   0 = member
+//   1 = combo moderator     — combo submissions/categories only, incl. delete
+//   2 = junior moderator    — everything (trials + combos), EXCEPT delete
+//   3 = senior moderator    — everything (trials + combos), including delete
+//   4 = owner               — everything, plus feature flag control (see
+//                             src/lib/server/repositories/feature-flag-repository.ts)
+//
+// This is *not* a strictly-ordered "higher tier can do everything a lower
+// tier can" scale for deletion: junior moderator (2) sits above combo
+// moderator (1) in scope (general vs. combo-only) but below it in this one
+// capability, so delete access is gated by its own functions below rather
+// than a single permission >= N check.
+export const PERMISSION_COMBO_MODERATOR = 1
+export const PERMISSION_JUNIOR_MODERATOR = 2
+export const PERMISSION_SENIOR_MODERATOR = 3
+export const PERMISSION_OWNER = 4
 
+// Gates non-delete trial-submission moderation (approve/deny/edit note/edit
+// time) and other general/trial admin actions (trial retire/version-bump/
+// reorder, audit log viewing). Combo-only moderators (permission ===
+// PERMISSION_COMBO_MODERATOR) do not pass this — use canModerateCombo for
+// combo-scoped actions instead.
 export function canModerate(user: { permission: number } | null) {
-  return Boolean(user && user.permission >= PERMISSION_MODERATOR)
+  return Boolean(user && user.permission >= PERMISSION_JUNIOR_MODERATOR)
+}
+
+// Gates non-delete combo-submission moderation and combo-category
+// management. Anyone who can moderate in general (canModerate) can also
+// moderate combos, plus combo-only moderators.
+export function canModerateCombo(user: { permission: number } | null) {
+  return Boolean(user && user.permission >= PERMISSION_COMBO_MODERATOR)
+}
+
+// Gates deleting a trial submission. Junior moderator (2) is excluded on
+// purpose — only senior moderators and owners may delete trial times.
+export function canDeleteTrialSubmission(user: { permission: number } | null) {
+  return Boolean(user && user.permission >= PERMISSION_SENIOR_MODERATOR)
+}
+
+// Gates deleting a combo submission. Combo moderators keep full delete
+// rights within their own domain even though junior moderators (2) don't.
+export function canDeleteComboSubmission(user: { permission: number } | null) {
+  return Boolean(
+    user &&
+      (user.permission === PERMISSION_COMBO_MODERATOR || user.permission >= PERMISSION_SENIOR_MODERATOR)
+  )
 }
 
 export function isOwner(user: { permission: number } | null) {

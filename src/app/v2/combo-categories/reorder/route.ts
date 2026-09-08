@@ -2,10 +2,10 @@ import { validationError } from "@/lib/server/http"
 import { insertAuditLog } from "@/lib/server/audit"
 import { reorderComboCategories } from "@/lib/server/repositories/combo-category-repository"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
-import { jsonOk, requireV2Moderator, withV2Context } from "@/lib/server/v2/http"
+import { jsonOk, requireV2ComboModerator, withV2Context } from "@/lib/server/v2/http"
 
 export const POST = withV2Context(async (ctx) => {
-  const user = await requireV2Moderator(ctx)
+  const user = await requireV2ComboModerator(ctx)
 
   const body = await ctx.request.json().catch(() => null) as { slugs?: unknown } | null
   const slugs = Array.isArray(body?.slugs) ? body.slugs.filter((slug): slug is string => typeof slug === "string") : null
