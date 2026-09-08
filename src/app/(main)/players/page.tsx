@@ -292,7 +292,7 @@ export default function PlayersPage() {
                 <div className="flex items-center gap-2">
                   {mode === "trial" && row.submissionUuid ? (
                     <Button variant="outline" size="sm" className="cursor-pointer" asChild>
-                      <Link href={`/submissions/trials/${encodeURIComponent(row.submissionUuid)}`}>
+                      <Link href={`/submissions/${encodeURIComponent(row.submissionUuid)}`}>
                         View Submission
                       </Link>
                     </Button>

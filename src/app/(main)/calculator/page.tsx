@@ -393,7 +393,7 @@ export default function CalculatorPage() {
                   <TableCell className="px-2 py-1 text-left text-xs font-medium text-primary">
                     {row.wrSubmissionUuid ? (
                       <Link
-                        href={`/submissions/trials/${encodeURIComponent(row.wrSubmissionUuid)}`}
+                        href={`/submissions/${encodeURIComponent(row.wrSubmissionUuid)}`}
                         className="underline underline-offset-4"
                       >
                         {row.wr ? row.wr.toFixed(3) : "0.000"}

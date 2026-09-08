@@ -157,7 +157,7 @@ export default function WorldRecordsPage() {
               isWr={wrIds.has(submission.submission_uuid)}
               moderatorNote={submission.moderator_note}
               moderatorUsername={submission.moderator_username}
-              onNavigate={(submissionUuid) => router.push(`/submissions/trials/${submissionUuid}`)}
+              onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
             />
           ))
         )}

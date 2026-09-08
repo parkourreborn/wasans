@@ -502,7 +502,7 @@ export default function PlayerProfilePage() {
                 scoreText={row.state !== "denied" ? row.score.toFixed(3) : undefined}
                 moderatorNote={row.moderator_note}
                 moderatorUsername={row.moderator_username}
-                onNavigate={(submissionUuid) => router.push(`/submissions/trials/${submissionUuid}`)}
+                onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
               />
             ))
           ) : (
@@ -528,7 +528,7 @@ export default function PlayerProfilePage() {
                 state="approved"
                 isWr={wrSubmissionIds.has(row.submission_uuid)}
                 scoreText={row.score.toFixed(3)}
-                onNavigate={(submissionUuid) => router.push(`/submissions/trials/${submissionUuid}`)}
+                onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
               />
             ))
           ) : (
@@ -553,7 +553,7 @@ export default function PlayerProfilePage() {
               state={row.state}
               moderatorNote={row.moderator_note}
               moderatorUsername={row.moderator_username}
-              onNavigate={(submissionUuid) => router.push(`/submissions/combos/${submissionUuid}`)}
+              onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
             />
           ))
         ) : (

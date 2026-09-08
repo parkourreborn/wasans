@@ -285,7 +285,7 @@ export default function CombosLeaderboardPage() {
                       <p className="text-xl font-bold">{row.combo_count}</p>
                       {row.submission_uuid && (
                         <Button variant="outline" size="sm" className="cursor-pointer" asChild>
-                          <Link href={`/submissions/combos/${row.submission_uuid}`}>View</Link>
+                          <Link href={`/submissions/${row.submission_uuid}`}>View</Link>
                         </Button>
                       )}
                     </div>

@@ -2,12 +2,15 @@
 
 import { useEffect, useState, type MouseEvent } from "react"
 import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import Badges from "@/components/custom/badges"
+import { formatPlayerNameWithScore } from "@/lib/player-score"
+import calculateScore from "@/lib/calc-score"
+import { TrialName } from "@/lib/trials"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import {
   AlertDialog,
@@ -25,35 +28,39 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
-  ExternalLinkIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
 import { apiV2 } from "@/lib/api"
 
-type ComboSubmissionValue = {
+export type TrialSubmissionValue = {
   uuid: string
   player_uuid: string
-  category_slug: string
+  trial_name: string
   player_name: string
-  combo_count: number
-  youtube_url: string
+  player_score: number
+  time: number | string
   date: number
   state: string
   moderator_note?: string | null
   moderator_username?: string | null
-  player_id?: string | null
-  discord_avatar?: string | null
-  discord_discriminator?: string | null
 }
 
-type ComboSubmissionResponse = {
-  data?: { results: ComboSubmissionValue[] }
+type SubmissionResponse = {
+  data?: { results: TrialSubmissionValue[] }
   error?: { message?: string }
 }
 
-type ComboCategory = { slug: string; label: string }
-type ComboCategoriesResponse = { data?: ComboCategory[] }
+type WorldRecordValue = {
+  trial_name: string
+  time: number | string
+  submission_uuid: string
+}
+
+type WorldRecordsResponse = {
+  data?: WorldRecordValue[]
+  error?: { message?: string }
+}
 
 type AuthUser = {
   uuid: string
@@ -90,33 +97,15 @@ function getSubmissionUuids() {
   }
 }
 
-// Handles youtube.com/watch?v=, youtu.be/, and youtube.com/shorts|embed/ links
-// — the same hosts allowedComboLinkHosts validates on submission.
-function getYoutubeEmbedId(url: string) {
-  try {
-    const parsed = new URL(url)
-    const host = parsed.hostname.toLowerCase()
-
-    if (host === "youtu.be") {
-      return parsed.pathname.split("/").filter(Boolean)[0] || null
-    }
-
-    if (host === "youtube.com" || host === "www.youtube.com" || host === "m.youtube.com") {
-      const videoId = parsed.searchParams.get("v")
-      if (videoId) {
-        return videoId
-      }
-
-      const [first, second] = parsed.pathname.split("/").filter(Boolean)
-      if (first === "shorts" || first === "embed") {
-        return second || null
-      }
-    }
-
-    return null
-  } catch {
-    return null
+function formatTime(rawTime: string) {
+  const match = rawTime.match(/^0*([0-9]+)\.(\d{1,3})$/)
+  if (!match) {
+    return rawTime
   }
+
+  const [, seconds, ms] = match
+  const formattedMs = ms.padEnd(3, "0")
+  return `${String(Number(seconds))}.${formattedMs}`
 }
 
 function formatDate(unixTime: number) {
@@ -127,7 +116,7 @@ function formatDate(unixTime: number) {
   return `${month}-${day}-${year}`
 }
 
-function ComboSubmissionNavButton({
+function SubmissionNavButton({
   direction,
   submissionUuid,
 }: {
@@ -147,68 +136,53 @@ function ComboSubmissionNavButton({
 
   return (
     <Button asChild variant="outline" size="icon" aria-label={label}>
-      <Link href={`/submissions/combos/${submissionUuid}`}>
+      <Link href={`/submissions/${submissionUuid}`}>
         <Icon />
       </Link>
     </Button>
   )
 }
 
-export default function ComboSubmissionDetailPage() {
-  const params = useParams<{ uuid: string }>()
+export default function TrialSubmissionView({
+  uuid,
+  initialSubmission,
+}: {
+  uuid: string
+  initialSubmission: TrialSubmissionValue
+}) {
   const router = useRouter()
-  const uuid = params.uuid
   const [submissionUuids, setSubmissionUuids] = useState<string[]>([])
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
-  const [submission, setSubmission] = useState<ComboSubmissionValue | null>(null)
-  const [categoryLabels, setCategoryLabels] = useState<Record<string, string>>({})
-  const [loading, setLoading] = useState(true)
+  const [submission, setSubmission] = useState<TrialSubmissionValue | null>(initialSubmission)
   const [saving, setSaving] = useState(false)
   const [moderatorNote, setModeratorNote] = useState("")
   const [noteDialogOpen, setNoteDialogOpen] = useState(false)
   const [denyDialogOpen, setDenyDialogOpen] = useState(false)
+  const [editTimeDialogOpen, setEditTimeDialogOpen] = useState(false)
+  const [editTimeValue, setEditTimeValue] = useState("")
+  const [editTimeError, setEditTimeError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [worldRecords, setWorldRecords] = useState<WorldRecordValue[]>([])
 
   useEffect(() => {
     setSubmissionUuids(getSubmissionUuids())
   }, [uuid])
 
   useEffect(() => {
-    const fetchSubmission = async () => {
-      setLoading(true)
-      setError(null)
-
+    const fetchWorldRecords = async () => {
       try {
-        const [submissionResponse, categoriesResponse] = await Promise.all([
-          fetch(apiV2(`/combo-submissions/${uuid}`)),
-          fetch(apiV2("/combo-categories"), { cache: "force-cache" }),
-        ])
+        const wrResponse = await fetch(apiV2("/records/world"), { cache: "force-cache" })
+        const wrJson = (await wrResponse.json().catch(() => null)) as WorldRecordsResponse | null
 
-        const submissionJson: unknown = await submissionResponse.json().catch(() => null)
-
-        if (!submissionResponse.ok) {
-          setError("Unable to load combo submission data.")
-          return
+        if (wrResponse.ok) {
+          setWorldRecords(wrJson?.data || [])
         }
-
-        if (categoriesResponse.ok) {
-          const categoriesJson = (await categoriesResponse.json().catch(() => null)) as ComboCategoriesResponse | null
-          setCategoryLabels(
-            Object.fromEntries((categoriesJson?.data || []).map((category) => [category.slug, category.label]))
-          )
-        }
-
-        const responseData = submissionJson as ComboSubmissionResponse
-        setSubmission(responseData.data?.results?.[0] ?? null)
       } catch (err) {
-        setError("Unable to load combo submission data.")
         console.error(err)
-      } finally {
-        setLoading(false)
       }
     }
 
-    fetchSubmission()
+    fetchWorldRecords()
   }, [uuid])
 
   useEffect(() => {
@@ -233,7 +207,7 @@ export default function ComboSubmissionDetailPage() {
     setError(null)
 
     try {
-      const response = await fetch(apiV2(`/combo-submissions/${uuid}`), {
+      const response = await fetch(apiV2(`/submissions/${uuid}`), {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -241,10 +215,10 @@ export default function ComboSubmissionDetailPage() {
           ...(state === "denied" && reason ? { moderator_note: reason } : {}),
         }),
       })
-      const json = (await response.json().catch(() => null)) as ComboSubmissionResponse | null
+      const json = (await response.json().catch(() => null)) as SubmissionResponse | null
 
       if (!response.ok) {
-        setError(json?.error?.message || "Unable to update combo submission")
+        setError(json?.error?.message || "Unable to update submission")
         return
       }
 
@@ -255,7 +229,7 @@ export default function ComboSubmissionDetailPage() {
       }
     } catch (err) {
       console.error(err)
-      setError("Unable to update combo submission")
+      setError("Unable to update submission")
     } finally {
       setSaving(false)
     }
@@ -266,15 +240,15 @@ export default function ComboSubmissionDetailPage() {
     setError(null)
 
     try {
-      const response = await fetch(apiV2(`/combo-submissions/${uuid}`), {
+      const response = await fetch(apiV2(`/submissions/${uuid}`), {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ moderator_note: note }),
       })
-      const json = (await response.json().catch(() => null)) as ComboSubmissionResponse | null
+      const json = (await response.json().catch(() => null)) as SubmissionResponse | null
 
       if (!response.ok) {
-        setError(json?.error?.message || "Unable to update combo submission")
+        setError(json?.error?.message || "Unable to update submission")
         return
       }
 
@@ -283,7 +257,7 @@ export default function ComboSubmissionDetailPage() {
       setModeratorNote("")
     } catch (err) {
       console.error(err)
-      setError("Unable to update combo submission")
+      setError("Unable to update submission")
     } finally {
       setSaving(false)
     }
@@ -299,6 +273,12 @@ export default function ComboSubmissionDetailPage() {
     setNoteDialogOpen(true)
   }
 
+  const openEditTimeDialog = () => {
+    setEditTimeValue(String(submission?.time ?? ""))
+    setEditTimeError(null)
+    setEditTimeDialogOpen(true)
+  }
+
   const submitDenyReason = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     updateState("denied", moderatorNote)
@@ -309,64 +289,70 @@ export default function ComboSubmissionDetailPage() {
     updateModeratorNote(moderatorNote)
   }
 
-  const deleteSubmission = async () => {
+  const submitEditTime = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    if (!submission) {
+      return
+    }
+
+    const value = editTimeValue.trim()
+    if (!/^[0-9]+(\.[0-9]{1,3})?$/.test(value) || Number(value) <= 0) {
+      setEditTimeError("Enter a valid positive time with up to three decimals.")
+      return
+    }
+
     setSaving(true)
     setError(null)
+    setEditTimeError(null)
 
     try {
-      const response = await fetch(apiV2(`/combo-submissions/${uuid}`), { method: "DELETE" })
-      const json = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
+      const response = await fetch(apiV2(`/submissions/${uuid}`), {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ time: value }),
+      })
+
+      const json = (await response.json().catch(() => null)) as
+        | SubmissionResponse
+        | null
 
       if (!response.ok) {
-        setError(json?.error?.message || "Unable to delete combo submission")
+        const message = json?.error?.message || "Unable to update submission time"
+        setEditTimeError(message)
         return
       }
 
-      router.push("/submissions/combos")
-      router.refresh()
+      setSubmission(json?.data?.results?.[0] ?? submission)
+      setEditTimeDialogOpen(false)
     } catch (err) {
       console.error(err)
-      setError("Unable to delete combo submission")
+      setEditTimeError("Unable to update submission time")
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="w-full min-h-screen p-4">
-        <Card className="w-full">
-          <CardHeader>
-            <div className="w-full flex flex-col gap-4">
-              <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)_2rem] items-start gap-3">
-                <Skeleton className="size-9 rounded-md" />
-                <div className="flex min-w-0 flex-col items-center gap-2 text-center">
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    <Skeleton className="h-8 w-56" />
-                    <Skeleton className="h-5 w-20" />
-                  </div>
-                  <div className="flex flex-wrap items-center justify-center gap-3">
-                    <Skeleton className="h-4 w-40" />
-                    <Skeleton className="hidden h-5 w-px sm:block" />
-                    <Skeleton className="h-4 w-24" />
-                  </div>
-                </div>
-                <Skeleton className="size-9 rounded-md" />
-              </div>
-              <div className="flex flex-col justify-center gap-2 sm:flex-row">
-                <Skeleton className="h-10 w-24" />
-                <Skeleton className="h-10 w-24" />
-                <Skeleton className="h-10 w-24" />
-                <Skeleton className="h-10 w-24" />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-40 w-full rounded-md" />
-          </CardContent>
-        </Card>
-      </div>
-    )
+  const deleteSubmission = async () => {
+    setSaving(true)
+    setError(null)
+
+    try {
+      const response = await fetch(apiV2(`/submissions/${uuid}`), { method: "DELETE" })
+      const json = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
+
+      if (!response.ok) {
+        setError(json?.error?.message || "Unable to delete submission")
+        return
+      }
+
+      router.push("/submissions/trials")
+      router.refresh()
+    } catch (err) {
+      console.error(err)
+      setError("Unable to delete submission")
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (error) {
@@ -386,25 +372,36 @@ export default function ComboSubmissionDetailPage() {
       <div className="w-full min-h-screen flex items-center justify-center p-4">
         <Card className="w-full">
           <CardContent>
-            <p className="text-muted-foreground text-center">No combo submission found.</p>
+            <p className="text-muted-foreground text-center">No submission found.</p>
           </CardContent>
         </Card>
       </div>
     )
   }
 
-  const { player_name, category_slug, date, combo_count, state, moderator_username } = submission
-  const categoryLabel = categoryLabels[category_slug] || category_slug
-  const embedId = getYoutubeEmbedId(submission.youtube_url)
-  const formattedDate = formatDate(date)
-  const badges = [state === "approved" ? "approved" : state === "denied" ? "denied" : "pending"]
+  const { player_name, trial_name, date, time: rawTimeValue, state, moderator_username } = submission
   const storedModeratorNote = submission.moderator_note?.trim()
+  const rawTimeString = String(rawTimeValue)
+  const time = formatTime(rawTimeString)
+  const formattedDate = formatDate(date)
+  const wrForTrial = worldRecords.find((record) => record.trial_name === trial_name)
+  const isWrSubmission = wrForTrial?.submission_uuid === uuid
+  const runScore = wrForTrial
+    ? Number(calculateScore(Number(wrForTrial.time), Number(rawTimeValue), trial_name as TrialName).toFixed(3))
+    : 0
+  const badges = [
+    state === "approved" ? "approved" : state === "denied" ? "denied" : "pending",
+    isWrSubmission ? "wr" : "",
+  ]
+  const videoSrc = `https://assets.wasans.tully.sh/scores/${uuid}.mp4`
   const canDelete = authUser?.uuid === submission.player_uuid || (authUser?.permission ?? 0) >= 1
   const canModerate = (authUser?.permission ?? 0) >= 1
   const currentSubmissionIndex = submissionUuids.findIndex((item) => item === uuid)
   const canNavigate = currentSubmissionIndex >= 0 && submissionUuids.length > 1
   const previousSubmissionUuid =
-    canNavigate && currentSubmissionIndex > 0 ? submissionUuids[currentSubmissionIndex - 1] : null
+    canNavigate && currentSubmissionIndex > 0
+      ? submissionUuids[currentSubmissionIndex - 1]
+      : null
   const nextSubmissionUuid =
     canNavigate && currentSubmissionIndex < submissionUuids.length - 1
       ? submissionUuids[currentSubmissionIndex + 1]
@@ -416,13 +413,11 @@ export default function ComboSubmissionDetailPage() {
         <CardHeader>
           <div className="w-full flex flex-col gap-4">
             <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)_2rem] items-start gap-3">
-              <ComboSubmissionNavButton direction="previous" submissionUuid={previousSubmissionUuid} />
+              <SubmissionNavButton direction="previous" submissionUuid={previousSubmissionUuid} />
 
               <div className="flex min-w-0 flex-col items-center gap-2 text-center">
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                  <h2 className="text-2xl font-bold lg:text-3xl">
-                    {categoryLabel} {combo_count}
-                  </h2>
+                  <h2 className="text-2xl font-bold lg:text-3xl">{trial_name} {time}</h2>
                   <Badges badges={badges} />
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-3">
@@ -430,10 +425,12 @@ export default function ComboSubmissionDetailPage() {
                     href={`/players/${submission.player_uuid}`}
                     className="lg:text-lg text-muted-foreground underline underline-offset-4"
                   >
-                    {player_name}
+                    {formatPlayerNameWithScore(player_name, submission.player_score)}
                   </Link>
                   <Separator orientation="vertical" className="hidden h-5 sm:block" />
                   <p className="text-muted-foreground">{formattedDate}</p>
+                  <Separator orientation="vertical" className="hidden h-5 sm:block" />
+                  <p className="text-muted-foreground">Run score: {runScore.toFixed(3)}</p>
                   {moderator_username && (
                     <>
                       <Separator orientation="vertical" className="hidden h-5 sm:block" />
@@ -448,7 +445,7 @@ export default function ComboSubmissionDetailPage() {
                 )}
               </div>
 
-              <ComboSubmissionNavButton direction="next" submissionUuid={nextSubmissionUuid} />
+              <SubmissionNavButton direction="next" submissionUuid={nextSubmissionUuid} />
             </div>
 
             {(canModerate || canDelete) && (
@@ -482,10 +479,22 @@ export default function ComboSubmissionDetailPage() {
                       <XIcon />
                       Denied
                     </Button>
-                    <Button type="button" variant="outline" disabled={saving} onClick={openNoteDialog}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={openNoteDialog}
+                    >
                       Add note
                     </Button>
-
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={openEditTimeDialog}
+                    >
+                      Edit time
+                    </Button>
                     <AlertDialog open={denyDialogOpen} onOpenChange={setDenyDialogOpen}>
                       <AlertDialogContent>
                         <AlertDialogHeader>
@@ -517,7 +526,6 @@ export default function ComboSubmissionDetailPage() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-
                     <AlertDialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
                       <AlertDialogContent>
                         <AlertDialogHeader>
@@ -539,12 +547,67 @@ export default function ComboSubmissionDetailPage() {
                         </div>
                         <AlertDialogFooter>
                           <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction disabled={saving} onClick={submitModeratorNote}>
+                          <AlertDialogAction
+                            disabled={saving}
+                            onClick={submitModeratorNote}
+                          >
                             Save note
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                    {editTimeDialogOpen && (
+                      <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 px-4"
+                        role="dialog"
+                        aria-modal="true"
+                        onClick={() => setEditTimeDialogOpen(false)}
+                      >
+                        <div
+                          className="w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-lg"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="text-lg font-semibold">Edit submission time</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Update the recorded time for this submission.
+                              </p>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => setEditTimeDialogOpen(false)}>
+                              <XIcon />
+                            </Button>
+                          </div>
+
+                          <div className="mt-5 space-y-4">
+                            <div>
+                              <label className="mb-2 block text-sm font-medium text-muted-foreground">
+                                Time
+                              </label>
+                              <Input
+                                value={editTimeValue}
+                                onChange={(event) => setEditTimeValue(event.target.value)}
+                                placeholder="12.345"
+                                className="w-full"
+                                disabled={saving}
+                              />
+                            </div>
+                            {editTimeError && (
+                              <p className="text-sm text-destructive">{editTimeError}</p>
+                            )}
+                          </div>
+
+                          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                            <Button variant="outline" disabled={saving} onClick={() => setEditTimeDialogOpen(false)}>
+                              Cancel
+                            </Button>
+                            <Button disabled={saving} onClick={submitEditTime}>
+                              Save time
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -558,9 +621,9 @@ export default function ComboSubmissionDetailPage() {
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Delete combo submission?</AlertDialogTitle>
+                        <AlertDialogTitle>Delete submission?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This removes the submission. This cannot be undone.
+                          This removes the submission and its stored score video. This cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -578,35 +641,7 @@ export default function ComboSubmissionDetailPage() {
         </CardHeader>
 
         <CardContent>
-          {embedId ? (
-            <div className="flex w-full flex-col items-center gap-3">
-              <div className="aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
-                <iframe
-                  src={`https://www.youtube.com/embed/${embedId}`}
-                  title={`${player_name}'s ${categoryLabel} combo submission`}
-                  className="h-full w-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              </div>
-              <Button asChild variant="outline" size="sm">
-                <a href={submission.youtube_url} target="_blank" rel="noreferrer">
-                  <ExternalLinkIcon />
-                  Open on YouTube
-                </a>
-              </Button>
-            </div>
-          ) : (
-            <div className="flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border p-8">
-              <p className="text-sm text-muted-foreground">Proof video is hosted on YouTube, not on this site.</p>
-              <Button asChild>
-                <a href={submission.youtube_url} target="_blank" rel="noreferrer">
-                  <ExternalLinkIcon />
-                  Watch on YouTube
-                </a>
-              </Button>
-            </div>
-          )}
+          <video controls className="w-full" src={videoSrc} />
         </CardContent>
       </Card>
     </div>

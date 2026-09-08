@@ -207,7 +207,7 @@ export default function WorldRecordHistoryPage() {
               state="approved"
               moderatorNote={record.moderator_note}
               moderatorUsername={record.moderator_username}
-              onNavigate={(submissionUuid) => router.push(`/submissions/trials/${submissionUuid}`)}
+              onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
             />
           ))
         )}

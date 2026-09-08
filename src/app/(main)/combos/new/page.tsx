@@ -144,7 +144,7 @@ export default function NewComboSubmissionPage() {
       }
 
       const createdUuid = json?.data?.results?.[0]?.uuid
-      router.push(createdUuid ? `/submissions/combos/${createdUuid}` : "/combos")
+      router.push(createdUuid ? `/submissions/${createdUuid}` : "/combos")
       router.refresh()
     } catch (err) {
       console.error(err)
