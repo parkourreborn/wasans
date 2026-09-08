@@ -7,11 +7,13 @@ import {
     StringSelectMenuBuilder,
 } from 'discord.js';
 import { randomUUID } from 'node:crypto';
+import { comboCategoryChoices, getComboCategories, resolveComboCategory } from '../comboCategories.js';
 import { botConfig, cardRateLimit } from '../config.js';
 import { logger } from '../logger.js';
 import { fetchAvatarDataUri } from '../render/avatar.js';
 import { cachedRender } from '../render/cache.js';
 import { pngAttachment, renderAttachment, renderPng } from '../render/png.js';
+import { renderComboOverviewCard } from '../render/templates/comboOverview.js';
 import { renderLeaderboardCard } from '../render/templates/leaderboard.js';
 import { renderPbsCard } from '../render/templates/pbs.js';
 import { renderStatsCard } from '../render/templates/stats.js';
@@ -19,9 +21,17 @@ import { renderSubmissionsCard } from '../render/templates/submissions.js';
 import { renderWrsCard } from '../render/templates/wrs.js';
 import { createRateLimiter } from '../rateLimit.js';
 import { resolveSubmissionUrl } from '../resolvers.js';
+import { apiGet, asArray, getTotal } from '../wasansApi.js';
 
-const API_BASE_URL = 'https://wasans.tully.sh/v2/';
 const PAGE_SIZE = 10;
+// The combo board front page shows this many holders per category.
+const OVERVIEW_PER_CATEGORY = 3;
+// Categories are admin-configurable and unbounded, but one tall card gets
+// scaled down to illegibility in Discord — and each category costs a request.
+// Past this many the overview shows the first few and points at the per-category
+// view for the rest.
+const OVERVIEW_MAX_CATEGORIES = 8;
+const COMBO_STATES = ['approved', 'pending', 'denied'];
 const CUSTOM_ID_PREFIX = 'wasans-slash';
 
 export const trials = [
@@ -57,30 +67,6 @@ function reserveCardRender(userId) {
 function truncate(value, maxLength) {
     const text = String(value ?? '');
     return text.length <= maxLength ? text : `${text.slice(0, maxLength - 3)}...`;
-}
-
-function asArray(payload) {
-    if (Array.isArray(payload)) return payload;
-
-    const listCandidates = [
-        payload?.data,
-        // Trial leaderboards nest the rows one level deeper, alongside the WR.
-        payload?.data?.results,
-        payload?.items,
-        payload?.results,
-        payload?.leaderboard,
-        payload?.records,
-        payload?.submissions,
-        payload?.players,
-    ];
-
-    return listCandidates.find(Array.isArray) || [];
-}
-
-function getTotal(payload) {
-    const meta = payload?.meta;
-    const total = meta?.total ?? meta?.count;
-    return Number.isFinite(Number(total)) ? Number(total) : null;
 }
 
 function getPlayerName(item) {
@@ -130,6 +116,54 @@ function formatTime(value) {
     return 'N/A';
 }
 
+// The list cards show exact counts — ranking depends on the difference between
+// two nearby combos — but group them so seven digits stay readable.
+function formatComboCount(value) {
+    const num = toNumber(value);
+    return num === null ? 'N/A' : num.toLocaleString('en-US');
+}
+
+// Combo counts run large, so the headline stat is abbreviated to three
+// significant figures: 784573 -> "784k", 3520000 -> "3.52m".
+//
+// The three digits are taken by integer division rather than by scaling to a
+// float and rounding: it truncates (so the figure never overstates a real
+// count) and it sidesteps binary rounding, which would otherwise turn
+// 1150000 into "1.14m".
+const COMBO_UNIT_SUFFIXES = ['', 'k', 'm', 'b', 't'];
+
+function formatComboCountShort(value) {
+    const num = toNumber(value);
+    if (num === null) return 'N/A';
+
+    const sign = num < 0 ? '-' : '';
+    const abs = Math.floor(Math.abs(num));
+
+    // Anything under a thousand is already at most three digits.
+    if (abs < 1000) return `${sign}${abs}`;
+
+    const digitCount = String(abs).length;
+    const unitIndex = Math.min(Math.floor((digitCount - 1) / 3), COMBO_UNIT_SUFFIXES.length - 1);
+    const suffix = COMBO_UNIT_SUFFIXES[unitIndex];
+
+    // How many of the three digits sit left of the decimal point: 1234 -> 1,
+    // 12345 -> 2, 784573 -> 3.
+    const wholeDigits = digitCount - unitIndex * 3;
+    const kept = String(Math.floor(abs / 10 ** (digitCount - 3)));
+
+    const rendered = wholeDigits >= 3 ? kept : `${kept.slice(0, wholeDigits)}.${kept.slice(wholeDigits)}`;
+
+    return `${sign}${rendered}${suffix}`;
+}
+
+function getComboCount(item) {
+    return item?.combo_count ?? item?.count ?? null;
+}
+
+function getComboCategorySlug(item) {
+    return item?.category_slug || item?.category || null;
+}
+
 function formatJoinDate(value) {
     const seconds = toNumber(value);
     if (seconds === null || seconds <= 0) return null;
@@ -143,44 +177,6 @@ function formatJoinDate(value) {
 
 function cleanNickname(value) {
     return String(value || '').replace(/\s+\(\d+(?:\.\d+)?\)\s*$/, '').trim();
-}
-
-async function apiGet(pathname, query = undefined) {
-    const url = new URL(pathname, API_BASE_URL);
-
-    if (query && typeof query === 'object') {
-        for (const [key, value] of Object.entries(query)) {
-            if (value === undefined || value === null || value === '') continue;
-            url.searchParams.set(key, String(value));
-        }
-    }
-
-    const response = await fetch(url);
-    const rawBody = await response.text();
-
-    let parsedBody = null;
-    if (rawBody) {
-        try {
-            parsedBody = JSON.parse(rawBody);
-        } catch {
-            parsedBody = null;
-        }
-    }
-
-    if (!response.ok) {
-        const message =
-            parsedBody?.error?.message ||
-            parsedBody?.error ||
-            parsedBody?.message ||
-            parsedBody?.detail ||
-            rawBody ||
-            `API request failed with status ${response.status}`;
-        const error = new Error(message);
-        error.status = response.status;
-        throw error;
-    }
-
-    return parsedBody;
 }
 
 async function findPlayerByName(searchTerm) {
@@ -279,6 +275,52 @@ function buildCommandDefinitions() {
                     .setDescription('Player name or Discord mention')
                     .setRequired(true),
             ),
+        new SlashCommandBuilder()
+            .setName('combos')
+            .setDescription('View the combo leaderboard for a category, or an overview of every category')
+            .addStringOption((option) =>
+                option
+                    .setName('category')
+                    .setDescription('Combo category (leave empty for an overview of them all)')
+                    .setAutocomplete(true)
+                    .setRequired(false),
+            ),
+        new SlashCommandBuilder()
+            .setName('combopbs')
+            .setDescription("View a player's best combo in every category")
+            .addStringOption((option) =>
+                option
+                    .setName('player')
+                    .setDescription('Player name or Discord mention')
+                    .setRequired(true),
+            ),
+        new SlashCommandBuilder()
+            .setName('combosubmissions')
+            .setDescription('View recent combo submissions')
+            .addStringOption((option) =>
+                option
+                    .setName('player')
+                    .setDescription('Player name or Discord mention')
+                    .setRequired(false),
+            )
+            .addStringOption((option) =>
+                option
+                    .setName('category')
+                    .setDescription('Combo category')
+                    .setAutocomplete(true)
+                    .setRequired(false),
+            )
+            .addStringOption((option) =>
+                option
+                    .setName('state')
+                    .setDescription('Only show submissions in this state')
+                    .addChoices(
+                        { name: 'Approved', value: 'approved' },
+                        { name: 'Pending', value: 'pending' },
+                        { name: 'Denied', value: 'denied' },
+                    )
+                    .setRequired(false),
+            ),
     ];
 }
 
@@ -322,8 +364,37 @@ function renderCard(context, rows, page, totalPages) {
         return renderLeaderboardCard({ trial: meta.trial, entries: rows, page, totalPages, total: meta.total });
     }
 
+    if (context.kind === 'combos') {
+        return renderLeaderboardCard({
+            entries: rows,
+            page,
+            totalPages,
+            eyebrow: 'WASANS · Combo Leaderboard',
+            title: meta.category,
+            subtitle: `Highest combo counts on ${meta.category}`,
+            emptyMessage: 'No approved combos in this category yet.',
+            footerNote:
+                meta.total === null ? null : `${meta.total} ranked player${meta.total === 1 ? '' : 's'}`,
+        });
+    }
+
     if (context.kind === 'submissions') {
         return renderSubmissionsCard({ player: meta.player, submissions: rows, page, totalPages, total: meta.total });
+    }
+
+    if (context.kind === 'combosubmissions') {
+        return renderSubmissionsCard({
+            player: meta.player,
+            submissions: rows,
+            page,
+            totalPages,
+            total: meta.total,
+            eyebrow: 'WASANS · Combos',
+            title: meta.player ? `${meta.player}'s Combo Submissions` : 'Recent Combo Submissions',
+            subtitle: meta.subtitle,
+            emptyMessage: 'No combo submissions found.',
+            noun: 'combo submission',
+        });
     }
 
     if (context.kind === 'pbs') {
@@ -334,6 +405,22 @@ function renderCard(context, rows, page, totalPages) {
             totalPages,
             completed: meta.completed,
             totalTrials: meta.totalTrials,
+        });
+    }
+
+    if (context.kind === 'combopbs') {
+        return renderPbsCard({
+            player: meta.player,
+            entries: rows,
+            page,
+            totalPages,
+            completed: meta.completed,
+            totalTrials: meta.totalCategories,
+            eyebrow: 'WASANS · Combo Bests',
+            noun: 'categories',
+            verb: 'ranked',
+            emptyMessage: 'No approved combos found for this player.',
+            emptyValue: 'No combo',
         });
     }
 
@@ -604,7 +691,7 @@ async function handleStatsCommand(interaction) {
 
     const [detailPayload, countPayload, approvedPayload, recordsPayload] = await Promise.all([
         apiGet(`players/${encodeURIComponent(playerUuid)}`, {
-            include: 'pbs,recent_submissions',
+            include: 'pbs,combo_pbs,recent_submissions',
             submissions_limit: 1,
         }),
         // Only the envelope's total is needed for the counts, so ask for the
@@ -616,8 +703,13 @@ async function handleStatsCommand(interaction) {
 
     const detail = detailPayload?.data?.player || detailPayload?.data || player;
     const pbs = Array.isArray(detail?.pbs) ? detail.pbs : [];
+    const comboPbs = Array.isArray(detail?.combo_pbs) ? detail.combo_pbs : [];
     const recentSubmissions = Array.isArray(detail?.recent_submissions) ? detail.recent_submissions : [];
     const mostRecent = recentSubmissions[0] || null;
+
+    // Their single best combo, whichever category it came from.
+    const comboCounts = comboPbs.map((pb) => toNumber(getComboCount(pb))).filter((count) => count !== null);
+    const highestCombo = comboCounts.length > 0 ? Math.max(...comboCounts) : null;
 
     const worldRecords = asArray(recordsPayload).filter((record) => record?.player_uuid === playerUuid);
     const submissionCount = getTotal(countPayload);
@@ -636,6 +728,7 @@ async function handleStatsCommand(interaction) {
             { label: 'Approved', value: approvedCount === null ? '—' : String(approvedCount) },
             { label: 'Personal Bests', value: `${pbs.length} / ${trials.length}` },
             { label: 'World Records', value: String(worldRecords.length), accent: worldRecords.length > 0 },
+            { label: 'Highest Combo', value: highestCombo === null ? '—' : formatComboCountShort(highestCombo) },
         ],
         latest: mostRecent
             ? {
@@ -667,20 +760,266 @@ async function handleStatsCommand(interaction) {
     });
 }
 
+// Fetches one category's combo leaderboard and keeps only the players who
+// actually have an approved combo. The endpoint LEFT JOINs every player so the
+// unranked ones come back with a null count, and meta.total counts all players
+// rather than the ranked ones — so the ranked count is derived here, the same
+// way the trial leaderboard does it.
+async function fetchComboLeaderboard(categorySlug, { limit = 100 } = {}) {
+    const payload = await apiGet(`leaderboards/combos/${encodeURIComponent(categorySlug)}`, { limit });
+
+    return asArray(payload).filter((item) => getComboCount(item) !== null);
+}
+
+function comboLeaderboardRows(entries) {
+    return entries.map((item, index) => ({
+        rank: item?.rank || index + 1,
+        name: getPlayerName(item),
+        stat: formatComboCount(getComboCount(item)),
+    }));
+}
+
+async function handleCombosOverview(interaction) {
+    const allCategories = await getComboCategories();
+
+    if (allCategories.length === 0) {
+        await interaction.editReply('No combo categories are currently active.');
+        return;
+    }
+
+    const categories = allCategories.slice(0, OVERVIEW_MAX_CATEGORIES);
+    const omitted = allCategories.length - categories.length;
+
+    const boards = await Promise.all(
+        categories.map(async (category) => {
+            const entries = await fetchComboLeaderboard(category.slug).catch(() => null);
+
+            return {
+                label: category.label,
+                // A category whose board failed to load is shown as empty rather
+                // than failing the whole overview.
+                total: entries === null ? null : entries.length,
+                entries: comboLeaderboardRows((entries || []).slice(0, OVERVIEW_PER_CATEGORY)),
+            };
+        }),
+    );
+
+    const { svg, width } = renderComboOverviewCard({
+        categories: boards,
+        perCategory: OVERVIEW_PER_CATEGORY,
+        omitted,
+    });
+
+    await interaction.editReply({
+        content: '',
+        embeds: [],
+        files: [renderAttachment(svg, width, 'combos')],
+        attachments: [],
+        components: [],
+    });
+}
+
+async function handleCombosCommand(interaction) {
+    const categoryInput = interaction.options.getString('category');
+
+    if (!categoryInput) {
+        await handleCombosOverview(interaction);
+        return;
+    }
+
+    const category = await resolveComboCategory(categoryInput);
+    if (!category) {
+        await interaction.editReply('Unknown combo category. Pick one from the autocomplete suggestions.');
+        return;
+    }
+
+    const entries = await fetchComboLeaderboard(category.slug);
+
+    await sendPaginatedReply(interaction, {
+        ownerId: interaction.user.id,
+        kind: 'combos',
+        meta: { category: category.label, total: entries.length },
+        rows: comboLeaderboardRows(entries),
+        options: entries.map((item, index) => {
+            const submissionUuid = getSubmissionUuid(item);
+            if (!submissionUuid) return null;
+
+            return {
+                label: truncate(`#${item?.rank || index + 1} ${getPlayerName(item)}`, 100),
+                value: submissionUuid,
+                description: truncate(`${category.label} · ${formatComboCount(getComboCount(item))} combo`, 100),
+            };
+        }),
+    });
+}
+
+// Combo bests list every active category, including the ones the player has no
+// approved combo in, so the card reads as a checklist the way /pbs does.
+function buildComboPbRows(categories, comboPbs) {
+    const byCategory = new Map(
+        comboPbs
+            .map((pb) => [getComboCategorySlug(pb), pb])
+            .filter(([slug]) => slug),
+    );
+
+    return categories.map((category) => {
+        const pb = byCategory.get(category.slug) || null;
+
+        return {
+            label: category.label,
+            value: pb ? formatComboCount(getComboCount(pb)) : null,
+            submissionUuid: pb ? getSubmissionUuid(pb) : null,
+        };
+    });
+}
+
+async function handleComboPbsCommand(interaction) {
+    const playerInput = interaction.options.getString('player', true);
+    const player = await resolvePlayerFromInput(interaction, playerInput);
+    if (!player) {
+        await interaction.editReply('Player not found.');
+        return;
+    }
+
+    const playerUuid = getPlayerUuid(player);
+    if (!playerUuid) {
+        await interaction.editReply('Player found, but no UUID was returned by the API.');
+        return;
+    }
+
+    const [detailPayload, categories] = await Promise.all([
+        apiGet(`players/${encodeURIComponent(playerUuid)}`, { include: 'combo_pbs' }),
+        getComboCategories(),
+    ]);
+
+    const detail = detailPayload?.data?.player || detailPayload?.data || null;
+    const comboPbs = Array.isArray(detail?.combo_pbs) ? detail.combo_pbs : [];
+
+    const rows = buildComboPbRows(categories, comboPbs);
+    const completed = rows.filter((row) => row.value).length;
+
+    await sendPaginatedReply(interaction, {
+        ownerId: interaction.user.id,
+        kind: 'combopbs',
+        meta: { player: getPlayerName(detail || player), completed, totalCategories: rows.length },
+        rows,
+        options: rows.map((row) => {
+            if (!row.submissionUuid) return null;
+
+            return {
+                label: truncate(row.label, 100),
+                value: row.submissionUuid,
+                description: truncate(`Best · ${row.value} combo`, 100),
+            };
+        }),
+    });
+}
+
+async function handleComboSubmissionsCommand(interaction) {
+    const playerInput = interaction.options.getString('player');
+    const categoryInput = interaction.options.getString('category');
+    const stateInput = interaction.options.getString('state');
+
+    let player = null;
+    if (playerInput) {
+        player = await resolvePlayerFromInput(interaction, playerInput);
+        if (!player) {
+            await interaction.editReply('Player not found.');
+            return;
+        }
+
+        if (!getPlayerUuid(player)) {
+            await interaction.editReply('Player found, but no UUID was returned by the API.');
+            return;
+        }
+    }
+
+    let category = null;
+    if (categoryInput) {
+        category = await resolveComboCategory(categoryInput);
+        if (!category) {
+            await interaction.editReply('Unknown combo category. Pick one from the autocomplete suggestions.');
+            return;
+        }
+    }
+
+    const state = stateInput && COMBO_STATES.includes(stateInput) ? stateInput : undefined;
+
+    const [payload, categories] = await Promise.all([
+        apiGet('combo-submissions', {
+            player_uuid: player ? getPlayerUuid(player) : undefined,
+            category: category ? category.slug : undefined,
+            state,
+            limit: 100,
+        }),
+        getComboCategories(),
+    ]);
+
+    const submissions = asArray(payload);
+    // Combo submissions carry only the category slug, so the label comes from
+    // the category list; a since-disabled category falls back to its slug.
+    const labelBySlug = new Map(categories.map((item) => [item.slug, item.label]));
+
+    const filters = [category ? category.label : null, state ? getSubmissionStatus({ state }) : null].filter(Boolean);
+
+    await sendPaginatedReply(interaction, {
+        ownerId: interaction.user.id,
+        kind: 'combosubmissions',
+        meta: {
+            player: player ? getPlayerName(player) : null,
+            total: getTotal(payload),
+            subtitle: filters.length > 0 ? `${filters.join(' · ')} · newest first` : 'Newest combos first',
+        },
+        rows: submissions.map((submission) => {
+            const slug = getComboCategorySlug(submission);
+
+            return {
+                label: labelBySlug.get(slug) || slug || 'Unknown category',
+                player: getPlayerName(submission),
+                state: getSubmissionStatus(submission),
+                value: formatComboCount(getComboCount(submission)),
+            };
+        }),
+        options: submissions.map((submission) => {
+            const submissionUuid = getSubmissionUuid(submission);
+            if (!submissionUuid) return null;
+
+            const slug = getComboCategorySlug(submission);
+
+            return {
+                label: truncate(`${labelBySlug.get(slug) || slug} • ${getPlayerName(submission)}`, 100),
+                value: submissionUuid,
+                description: truncate(`${formatComboCount(getComboCount(submission))} combo`, 100),
+            };
+        }),
+    });
+}
+
+const COMBO_CATEGORY_AUTOCOMPLETE = new Set(['combos', 'combosubmissions']);
+
 async function handleAutocomplete(interaction) {
-    if (interaction.commandName !== 'leaderboard') return false;
-
     const focused = interaction.options.getFocused(true);
-    if (focused.name !== 'trial') return false;
 
-    const value = String(focused.value || '').toLowerCase();
-    const choices = trials
-        .filter((trialName) => trialName.toLowerCase().includes(value))
-        .slice(0, 25)
-        .map((trialName) => ({ name: trialName, value: trialName }));
+    if (interaction.commandName === 'leaderboard' && focused.name === 'trial') {
+        const value = String(focused.value || '').toLowerCase();
+        const choices = trials
+            .filter((trialName) => trialName.toLowerCase().includes(value))
+            .slice(0, 25)
+            .map((trialName) => ({ name: trialName, value: trialName }));
 
-    await interaction.respond(choices);
-    return true;
+        await interaction.respond(choices);
+        return true;
+    }
+
+    if (COMBO_CATEGORY_AUTOCOMPLETE.has(interaction.commandName) && focused.name === 'category') {
+        // comboCategoryChoices never rejects — it serves the cached list, then
+        // the seeded slugs — so autocomplete always answers inside Discord's
+        // 3 second window.
+        await interaction.respond(await comboCategoryChoices(focused.value));
+        return true;
+    }
+
+    return false;
 }
 
 async function handleComponentInteraction(interaction) {
@@ -751,6 +1090,9 @@ async function handleChatInputCommand(interaction) {
         pbs: handlePbsCommand,
         wrs: handleWrsCommand,
         stats: handleStatsCommand,
+        combos: handleCombosCommand,
+        combopbs: handleComboPbsCommand,
+        combosubmissions: handleComboSubmissionsCommand,
     };
 
     const handler = handlers[interaction.commandName];

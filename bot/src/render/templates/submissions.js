@@ -3,6 +3,10 @@ import { fitText, pill, svgDocument, text, theme } from '../theme.js';
 
 // A submission row leads with a state dot so pending/denied entries are
 // scannable at a glance, then trial, player, and the time on the right.
+//
+// Rows carry label/value rather than trial/time specifically, so combo
+// submissions (category + combo count) reuse this template. `trial` and `time`
+// stay accepted as the trial-side names.
 const DOT_X = layout.padding + 26;
 const TRIAL_X = layout.padding + 48;
 const TRIAL_COLUMN = 200;
@@ -14,6 +18,11 @@ export function renderSubmissionsCard({
     page = 1,
     totalPages = 1,
     total = null,
+    eyebrow = 'WASANS',
+    title = null,
+    subtitle = null,
+    emptyMessage = null,
+    noun = 'submission',
 }) {
     const height = cardHeight(submissions.length);
     const playerX = TRIAL_X + TRIAL_COLUMN;
@@ -21,15 +30,19 @@ export function renderSubmissionsCard({
 
     const body = [
         header({
-            eyebrow: 'WASANS',
-            title: player ? `${player}'s Submissions` : 'Recent Submissions',
-            subtitle: player ? 'Newest runs first' : 'The newest runs across every player',
+            eyebrow,
+            title: title || (player ? `${player}'s Submissions` : 'Recent Submissions'),
+            subtitle: subtitle || (player ? 'Newest runs first' : 'The newest runs across every player'),
             badge: `Page ${page}/${totalPages}`,
         }),
     ];
 
     if (submissions.length === 0) {
-        body.push(emptyState(player ? 'No submissions found for this player.' : 'No submissions found.'));
+        body.push(
+            emptyState(
+                emptyMessage || (player ? 'No submissions found for this player.' : 'No submissions found.'),
+            ),
+        );
     }
 
     submissions.forEach((submission, index) => {
@@ -39,7 +52,7 @@ export function renderSubmissionsCard({
         body.push(rowPanel(index));
         body.push(`<circle cx="${DOT_X}" cy="${centerY}" r="5" fill="${color}" />`);
         body.push(
-            text(fitText(submission.trial, 18, TRIAL_COLUMN - 20, 700), {
+            text(fitText(submission.label ?? submission.trial, 18, TRIAL_COLUMN - 20, 700), {
                 x: TRIAL_X,
                 y: centerY + 6,
                 size: 18,
@@ -70,7 +83,7 @@ export function renderSubmissionsCard({
             }),
         );
         body.push(
-            text(submission.time, {
+            text(submission.value ?? submission.time, {
                 x: theme.width - layout.padding - 20,
                 y: centerY + 7,
                 size: 18,
@@ -81,7 +94,7 @@ export function renderSubmissionsCard({
         );
     });
 
-    body.push(footer(height, { right: total === null ? null : `${total} submission${total === 1 ? '' : 's'}` }));
+    body.push(footer(height, { right: total === null ? null : `${total} ${noun}${total === 1 ? '' : 's'}` }));
 
     return { svg: svgDocument(theme.width, height, body.join('')), width: theme.width };
 }

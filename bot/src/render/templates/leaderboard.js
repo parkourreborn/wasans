@@ -3,6 +3,9 @@ import { fitText, pill, svgDocument, text, textWidth, theme } from '../theme.js'
 
 // Rows read "rank · player · stat". The stat column is reserved on the right so
 // a long player name gets ellipsised instead of colliding with it.
+//
+// The header text defaults to the trial/overall wording but is overridable, so
+// the combo leaderboard reuses this template instead of copying it.
 const STAT_COLUMN = 180;
 const NAME_X = layout.padding + 72;
 const WR_PILL_WIDTH = 46;
@@ -14,15 +17,21 @@ export function renderLeaderboardCard({
     totalPages = 1,
     total = null,
     emptyMessage = 'No leaderboard entries found.',
+    eyebrow = null,
+    title = null,
+    subtitle = null,
+    footerNote = undefined,
 }) {
     const height = cardHeight(entries.length);
     const nameLimit = theme.width - layout.padding - STAT_COLUMN - NAME_X;
 
     const body = [
         header({
-            eyebrow: trial ? 'WASANS · Trial Leaderboard' : 'WASANS',
-            title: trial || 'Overall Leaderboard',
-            subtitle: trial ? `Fastest recorded times on ${trial}` : 'Ranked by total score across every trial',
+            eyebrow: eyebrow || (trial ? 'WASANS · Trial Leaderboard' : 'WASANS'),
+            title: title || trial || 'Overall Leaderboard',
+            subtitle:
+                subtitle
+                || (trial ? `Fastest recorded times on ${trial}` : 'Ranked by total score across every trial'),
             badge: `Page ${page}/${totalPages}`,
         }),
     ];
@@ -69,7 +78,12 @@ export function renderLeaderboardCard({
 
     body.push(
         footer(height, {
-            right: total === null ? null : `${total} ranked player${total === 1 ? '' : 's'}`,
+            right:
+                footerNote !== undefined
+                    ? footerNote
+                    : total === null
+                      ? null
+                      : `${total} ranked player${total === 1 ? '' : 's'}`,
         }),
     );
 
