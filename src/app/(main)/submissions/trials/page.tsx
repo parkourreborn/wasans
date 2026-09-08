@@ -653,7 +653,7 @@ function SubmissionsPage() {
                   moderatorNote={submission.moderator_note}
                   moderatorUsername={submission.moderator_username}
                   className="h-full overflow-hidden transition-colors hover:border-foreground/30"
-                  onNavigate={(submissionUuid) => router.push(`/submissions/trials/${submissionUuid}`)}
+                  onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
                 />
               ))}
             </SubmissionList>

@@ -336,7 +336,7 @@ function ComparePageClient() {
                           <div className="text-xs">
                             {row.playerA.submissionUuid ? (
                               <Link
-                                href={`/submissions/trials/${encodeURIComponent(row.playerA.submissionUuid)}`}
+                                href={`/submissions/${encodeURIComponent(row.playerA.submissionUuid)}`}
                                 className={`inline-flex items-center gap-2 ${timeIndicatorClass(
                                   Number(row.playerA.time),
                                   Number(row.playerB.time)
@@ -367,7 +367,7 @@ function ComparePageClient() {
                           <div className="text-xs">
                             {row.playerB.submissionUuid ? (
                               <Link
-                                href={`/submissions/trials/${encodeURIComponent(row.playerB.submissionUuid)}`}
+                                href={`/submissions/${encodeURIComponent(row.playerB.submissionUuid)}`}
                                 className={`inline-flex items-center gap-2 ${timeIndicatorClass(
                                   Number(row.playerB.time),
                                   Number(row.playerA.time)
