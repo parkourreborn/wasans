@@ -20,6 +20,13 @@ export type AuditAction =
   | "player_submission_unbanned"
   | "auth_refresh_failed"
   | "site_error"
+  | "combo_submission_created"
+  | "combo_submission_updated"
+  | "combo_submission_approved"
+  | "combo_submission_denied"
+  | "combo_submission_deleted"
+  | "combo_category_created"
+  | "combo_category_updated"
 
 // Split out from insertAuditLog so callers writing several audit rows at
 // once (e.g. the deduplicate sweep) can send them as one db.batch() instead

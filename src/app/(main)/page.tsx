@@ -28,7 +28,7 @@ const quickLinks = [
     icon: InfoIcon,
   },
   {
-    href: "/submissions",
+    href: "/submissions/trials",
     title: "Submit Runs",
     description: "Submit your own runs for review.",
     icon: ClipboardListIcon,
