@@ -1,9 +1,10 @@
 import "server-only"
 import calculateScore from "../calc-score"
 import { TrialName } from "../trials"
-import { syncDiscordMembersOnScoreChange } from "./notifications"
+import { getRoleForScore, getRoleIndex, syncDiscordMembersOnScoreChange } from "./notifications"
 import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
 import { validSubmissionSql } from "@/lib/server/trial-lifecycle"
+import { checkRankupPrizeCandidates, checkScoreReachedPrizeCandidates } from "@/lib/server/prize-candidate-checker"
 
 type BestSubmissionRow = {
   trial_name: TrialName
@@ -28,6 +29,7 @@ type RefreshPlayerScoreOptions = {
 type PlayerScoreRow = {
   uuid: string
   score: number
+  player_name: string
 }
 
 type BestSubmissionRowWithPlayer = BestSubmissionRow & {
@@ -66,7 +68,7 @@ export async function refreshPlayerScores(
            AND ${fallbackValidSql}
          GROUP BY submissions.player_uuid, submissions.trial_name`
       ).bind(...uniquePlayerUuids, now, now, now),
-      db.prepare(`SELECT uuid, score FROM players WHERE uuid IN (${placeholders})`).bind(...uniquePlayerUuids),
+      db.prepare(`SELECT uuid, score, player_name FROM players WHERE uuid IN (${placeholders})`).bind(...uniquePlayerUuids),
     ]),
     getCountedTrialCount(db, now),
   ])
@@ -80,6 +82,7 @@ export async function refreshPlayerScores(
   const pbsByPlayer = new Map<string, BestSubmissionRow[]>()
   const fallbackByPlayer = new Map<string, BestSubmissionRow[]>()
   const currentScoresByPlayer = new Map(currentScoresRows.map((row) => [row.uuid, Number(row.score)]))
+  const playerNamesByUuid = new Map(currentScoresRows.map((row) => [row.uuid, row.player_name]))
 
   for (const row of pbsRows || []) {
     const existing = pbsByPlayer.get(row.player_uuid) ?? []
@@ -96,6 +99,7 @@ export async function refreshPlayerScores(
   const updates = [] as Array<ReturnType<D1Database["prepare"]>>
   const refreshedPlayers: Array<{ uuid: string; score: number }> = []
   const discordUpdates: Array<{ playerUuid: string; oldScore: number }> = []
+  const scoreChanges: Array<{ playerUuid: string; playerName: string; oldScore: number; newScore: number }> = []
 
   for (const playerUuid of uniquePlayerUuids) {
     const bestRows = pbsByPlayer.get(playerUuid) ?? fallbackByPlayer.get(playerUuid) ?? []
@@ -118,6 +122,14 @@ export async function refreshPlayerScores(
     const score = Number((total / Math.max(trialCount, 1)).toFixed(3))
     updates.push(db.prepare(`UPDATE players SET score = ? WHERE uuid = ?`).bind(score, playerUuid))
     refreshedPlayers.push({ uuid: playerUuid, score })
+    if (score !== oldScore) {
+      scoreChanges.push({
+        playerUuid,
+        playerName: playerNamesByUuid.get(playerUuid) ?? "",
+        oldScore,
+        newScore: score,
+      })
+    }
 
     if (trialCount === 0) {
       currentScoresByPlayer.set(playerUuid, 0)
@@ -130,6 +142,25 @@ export async function refreshPlayerScores(
 
   if (updates.length > 0) {
     await db.batch(updates)
+  }
+
+  // Runs for every score change this function makes, regardless of
+  // discordUpdateMode -- unlike syncDiscordMembersOnScoreChange below (which
+  // only runs when Discord sync isn't explicitly opted out of), prize
+  // detection must never depend on that unrelated toggle.
+  if (scoreChanges.length > 0) {
+    await Promise.all(
+      scoreChanges.map(async ({ playerUuid, playerName, oldScore, newScore }) => {
+        await checkScoreReachedPrizeCandidates(db, { playerUuid, playerName, oldScore, newScore })
+
+        const oldRoleId = getRoleForScore(oldScore)
+        const newRoleId = getRoleForScore(newScore)
+        const isPromotion = Boolean(
+          oldRoleId && newRoleId && oldRoleId !== newRoleId && getRoleIndex(newRoleId) > getRoleIndex(oldRoleId)
+        )
+        await checkRankupPrizeCandidates(db, { playerUuid, playerName, isPromotion, newRoleId })
+      })
+    )
   }
 
   if (discordUpdates.length > 0) {

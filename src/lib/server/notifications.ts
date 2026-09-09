@@ -60,7 +60,7 @@ const roleNames: Record<string, string> = {
   "1257994883059290245": "router",
 }
 
-function getRoleForScore(score: number) {
+export function getRoleForScore(score: number) {
   if (!Number.isFinite(score)) {
     return null
   }
@@ -94,7 +94,7 @@ export function getRankLabel(score: number) {
   return roleId ? roleNames[roleId] ?? roleId : null
 }
 
-function getRoleIndex(roleId: string) {
+export function getRoleIndex(roleId: string) {
   return sortedRankRoles.findIndex((rank) => rank.roleId === roleId)
 }
 
