@@ -48,6 +48,7 @@ type PrizeCandidate = {
 
 type TrialOption = { name: string; status: "active" | "removed" }
 type ComboCategoryOption = { slug: string; label: string; status: "active" | "disabled" }
+type PlayerOption = { uuid: string; player_name: string }
 
 function jsonErrorMessage(json: unknown, fallback: string) {
   if (json && typeof json === "object" && "error" in json) {
@@ -81,6 +82,103 @@ const criteriaLabels: Record<PrizeCriteriaType, string> = {
   score_reached: "Score reached",
 }
 
+// Debounced name search against the public /v2/players?search= endpoint
+// (same one the "Player permissions" section above uses), collapsing to a
+// small chip once a result is picked so the surrounding prize card stays
+// compact.
+function PlayerSearchInput({
+  selected,
+  onSelect,
+  onClear,
+}: {
+  selected: PlayerOption | null
+  onSelect: (player: PlayerOption) => void
+  onClear: () => void
+}) {
+  const [query, setQuery] = React.useState("")
+  const [results, setResults] = React.useState<PlayerOption[]>([])
+  const [searching, setSearching] = React.useState(false)
+  const [open, setOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    const trimmed = query.trim()
+    if (!trimmed) {
+      setResults([])
+      setSearching(false)
+      return
+    }
+
+    setSearching(true)
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`${apiV2("/players")}?search=${encodeURIComponent(trimmed)}&limit=8`, { cache: "no-store" })
+        const json = (await response.json().catch(() => null)) as { data?: PlayerOption[] } | null
+        setResults(response.ok ? json?.data || [] : [])
+      } catch {
+        setResults([])
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+
+    return () => window.clearTimeout(timeout)
+  }, [query])
+
+  if (selected) {
+    return (
+      <div className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-sm">
+        <span className="font-medium">{selected.player_name}</span>
+        <Button type="button" variant="ghost" size="icon-xs" onClick={onClear} aria-label="Clear selected player">
+          <XIcon className="size-3.5" />
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative flex-1">
+      <Input
+        placeholder="Search player by name"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        // Delayed so a click on a result (which blurs the input first) still
+        // registers before the dropdown closes.
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+      />
+      {open && query.trim() ? (
+        <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-border bg-popover shadow-md">
+          {searching ? (
+            <div className="p-2 text-xs text-muted-foreground">Searching...</div>
+          ) : results.length === 0 ? (
+            <div className="p-2 text-xs text-muted-foreground">No players found.</div>
+          ) : (
+            results.map((player) => (
+              <button
+                key={player.uuid}
+                type="button"
+                className="block w-full px-2.5 py-1.5 text-left text-sm hover:bg-accent"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onSelect(player)
+                  setQuery("")
+                  setResults([])
+                  setOpen(false)
+                }}
+              >
+                {player.player_name}
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function PrizesSection() {
   const [prizes, setPrizes] = React.useState<Prize[]>([])
   const [winnersByPrize, setWinnersByPrize] = React.useState<Record<string, PrizeWinner[]>>({})
@@ -101,7 +199,7 @@ export function PrizesSection() {
   const [endsAt, setEndsAt] = React.useState("")
   const [creating, setCreating] = React.useState(false)
 
-  const [addWinnerUuid, setAddWinnerUuid] = React.useState<Record<string, string>>({})
+  const [addWinnerSelected, setAddWinnerSelected] = React.useState<Record<string, PlayerOption | null>>({})
   const [busyUuid, setBusyUuid] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
@@ -238,9 +336,9 @@ export function PrizesSection() {
   }
 
   const addWinner = async (prizeUuid: string) => {
-    const playerUuid = (addWinnerUuid[prizeUuid] || "").trim()
-    if (!playerUuid) {
-      toast.error("Player UUID is required")
+    const player = addWinnerSelected[prizeUuid]
+    if (!player) {
+      toast.error("Search for and select a player first")
       return
     }
     setBusyUuid(prizeUuid)
@@ -248,13 +346,13 @@ export function PrizesSection() {
       const response = await fetch(apiV2(`/prizes/${prizeUuid}/winners`), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ player_uuid: playerUuid }),
+        body: JSON.stringify({ player_uuid: player.uuid }),
       })
       const json = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(jsonErrorMessage(json, "Unable to add winner"))
       }
-      setAddWinnerUuid((prev) => ({ ...prev, [prizeUuid]: "" }))
+      setAddWinnerSelected((prev) => ({ ...prev, [prizeUuid]: null }))
       toast.success("Winner added")
       await load()
     } catch (err) {
@@ -503,13 +601,19 @@ export function PrizesSection() {
                   ) : null}
 
                   {prize.status !== "closed" ? (
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Player UUID"
-                        value={addWinnerUuid[prize.uuid] || ""}
-                        onChange={(e) => setAddWinnerUuid((prev) => ({ ...prev, [prize.uuid]: e.target.value }))}
+                    <div className="flex items-start gap-2">
+                      <PlayerSearchInput
+                        selected={addWinnerSelected[prize.uuid] ?? null}
+                        onSelect={(player) => setAddWinnerSelected((prev) => ({ ...prev, [prize.uuid]: player }))}
+                        onClear={() => setAddWinnerSelected((prev) => ({ ...prev, [prize.uuid]: null }))}
                       />
-                      <Button type="button" variant="outline" size="sm" disabled={busyUuid === prize.uuid} onClick={() => addWinner(prize.uuid)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busyUuid === prize.uuid || !addWinnerSelected[prize.uuid]}
+                        onClick={() => addWinner(prize.uuid)}
+                      >
                         Add winner
                       </Button>
                     </div>
