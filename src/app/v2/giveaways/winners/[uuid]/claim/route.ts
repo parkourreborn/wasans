@@ -1,6 +1,7 @@
 import { jsonError, validationError } from "@/lib/server/http"
 import { insertAuditLog } from "@/lib/server/audit"
 import { GiveawayError, markGiveawayWinnerClaimed } from "@/lib/server/repositories/giveaway-repository"
+import { notifyGiveawayChanged } from "@/lib/server/services/giveaway-notify-service"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 import { jsonOk, requireV2Owner, withV2Params } from "@/lib/server/v2/http"
 
@@ -20,6 +21,7 @@ export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
       details: { claimed: body.claimed },
     })
     await bumpCacheGeneration(ctx.cache)
+    ctx.ctx.waitUntil(notifyGiveawayChanged(ctx.db, winner.giveaway_uuid))
 
     return jsonOk(winner, { requestId: ctx.requestId })
   } catch (error) {
