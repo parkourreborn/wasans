@@ -36,6 +36,7 @@ type Prize = {
   max_winners: number | null
   ends_at: number | null
   status: PrizeStatus
+  created_at: number
 }
 type PrizeWithWinners = Prize & { winners: PrizeWinner[] }
 type PrizesResponse = { data?: Prize[] }
@@ -49,10 +50,16 @@ type Giveaway = {
   max_winners: number
   ends_at: number
   status: PrizeStatus
+  created_at: number
 }
 type GiveawayWithDetails = Giveaway & { winners: GiveawayWinner[]; entry_count: number; viewer_has_joined: boolean }
 type GiveawaysResponse = { data?: Giveaway[] }
 type GiveawayDetailResponse = { data?: { giveaway: Giveaway; winners: GiveawayWinner[]; entry_count: number; viewer_has_joined: boolean } }
+
+// Mirrors the "unseen error" badge on /logs (see app-sidebar.tsx): the
+// sidebar polls the same active prizes/giveaways endpoints to decide whether
+// to show the dot, and this key is what marks them as seen once visited.
+const lastSeenPrizeStorageKey = "wasans:last-seen-prize-at"
 
 function jsonErrorMessage(json: unknown, fallback: string) {
   if (json && typeof json === "object" && "error" in json) {
@@ -148,6 +155,16 @@ export default function PrizesPage() {
 
       const prizeList = prizesJson?.data || []
       const giveawayList = giveawaysJson?.data || []
+
+      // Only active prizes/giveaways count toward "seen" -- history is past
+      // activity nobody needs a badge nudge to go look at.
+      if (nextFilter === "active") {
+        const createdTimestamps = [...prizeList, ...giveawayList].map((item) => item.created_at)
+        if (createdTimestamps.length > 0) {
+          window.localStorage.setItem(lastSeenPrizeStorageKey, String(Math.max(...createdTimestamps)))
+          window.dispatchEvent(new CustomEvent("wasans:last-seen-prize-updated"))
+        }
+      }
 
       const [prizeDetails, giveawayDetails] = await Promise.all([
         Promise.all(
