@@ -36,6 +36,7 @@ type Submission = {
   player_id?: string | null
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   trial_name: string
   player_name: string
   player_score: number
@@ -646,6 +647,7 @@ function SubmissionsPage() {
                   playerId={submission.player_id}
                   playerDiscordAvatar={submission.discord_avatar}
                   playerDiscordDiscriminator={submission.discord_discriminator}
+                  playerAuthProvider={submission.auth_provider}
                   dateText={formatDate(submission.date)}
                   state={submission.state}
                   isWr={wrSubmissionIds.has(submission.uuid)}

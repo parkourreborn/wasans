@@ -34,7 +34,8 @@
 		"enabled": true
 	},
 	"vars": {
-		"discordClientId": "1501043686828544121"
+		"discordClientId": "1501043686828544121",
+		"googleClientId": "185761022277-buat4302ug19v6f03e9limul0cil5s5d.apps.googleusercontent.com"
 	},
 	"d1_databases": [
 		{

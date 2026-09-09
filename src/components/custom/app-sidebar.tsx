@@ -174,6 +174,12 @@ function loginHref(pathname: string | null) {
   return `${apiV2("/auth/discord/start")}?next=${encodeURIComponent(next)}`
 }
 
+// Same full-page-navigation reasoning as loginHref above applies here too.
+function googleLoginHref(pathname: string | null) {
+  const next = pathname && pathname.startsWith("/") ? pathname : "/"
+  return `${apiV2("/auth/google/start")}?next=${encodeURIComponent(next)}`
+}
+
 export function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
@@ -437,6 +443,7 @@ export function AppSidebar() {
                 discordId={user.player_id}
                 discordAvatar={user.discord_avatar}
                 discordDiscriminator={user.discord_discriminator}
+                authProvider={user.auth_provider}
               />
             </Link>
             <div className="min-w-0 group-data-[collapsible=icon]:hidden">
@@ -467,6 +474,13 @@ export function AppSidebar() {
             >
               <LogInIcon className="size-4" />
               <span>Login with Discord</span>
+            </a>
+            <a
+              href={googleLoginHref(pathname)}
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <LogInIcon className="size-4" />
+              <span>Continue with Google</span>
             </a>
             <p className="px-2 text-[11px] leading-5 text-muted-foreground">
               By logging in, you agree to{" "}

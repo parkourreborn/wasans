@@ -43,6 +43,7 @@ type PlayerInfo = {
   player_id: string
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   player_name: string
   score: number
   date_joined: number
@@ -61,6 +62,7 @@ type SubmissionValue = {
   player_id?: string | null
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   trial_name: string
   time: number | string
   state: "approved" | "pending" | "denied"
@@ -81,6 +83,7 @@ type ComboSubmissionValue = {
   player_id?: string | null
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
 }
 
 type ComboCategory = { slug: string; label: string }
@@ -431,6 +434,7 @@ export default function PlayerProfilePage() {
               discordId={player.player_id}
               discordAvatar={player.discord_avatar}
               discordDiscriminator={player.discord_discriminator}
+              authProvider={player.auth_provider}
               size="lg"
               className="size-20 shrink-0 lg:size-24"
             />
@@ -496,6 +500,7 @@ export default function PlayerProfilePage() {
                 playerId={row.player_id ?? player.player_id}
                 playerDiscordAvatar={row.discord_avatar ?? player.discord_avatar}
                 playerDiscordDiscriminator={row.discord_discriminator ?? player.discord_discriminator}
+                playerAuthProvider={row.auth_provider ?? player.auth_provider}
                 dateText={formatDate(row.date)}
                 state={row.state}
                 isWr={wrSubmissionIds.has(row.uuid)}
@@ -524,6 +529,7 @@ export default function PlayerProfilePage() {
                 playerId={player.player_id}
                 playerDiscordAvatar={player.discord_avatar}
                 playerDiscordDiscriminator={player.discord_discriminator}
+                playerAuthProvider={player.auth_provider}
                 dateText={formatDate(row.date)}
                 state="approved"
                 isWr={wrSubmissionIds.has(row.submission_uuid)}
@@ -549,6 +555,7 @@ export default function PlayerProfilePage() {
               playerId={row.player_id ?? player.player_id}
               playerDiscordAvatar={row.discord_avatar ?? player.discord_avatar}
               playerDiscordDiscriminator={row.discord_discriminator ?? player.discord_discriminator}
+              playerAuthProvider={row.auth_provider ?? player.auth_provider}
               dateText={formatDate(row.date)}
               state={row.state}
               moderatorNote={row.moderator_note}

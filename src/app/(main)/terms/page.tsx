@@ -12,13 +12,13 @@ const usageRules = [
   "Use the site for what it is for: tracking scores, browsing the leaderboard, and submitting and reviewing runs.",
   "Do not submit fake runs, someone else's proof, malicious files, spam, or anything that breaks the game or community rules.",
   "Do not try to break, scrape, overload, or work around the site, its API, Discord login, the moderation tools, or the video storage. There are rate limits — do not go looking for ways around them.",
-  "Do not impersonate another player or use someone else's Discord account.",
+  "Do not impersonate another player or use someone else's Discord or Google account.",
 ]
 
 const publicDataRules = [
   "Your profile, scores, submissions, personal bests, world records, the moderator notes on your runs, and your proof videos are all public, through the API as well as the site.",
   "Your proof video is reachable by its link as soon as it is uploaded — including while it is pending, and including if it is denied.",
-  "Submitting a run posts it to our Discord automatically, with your name, your Discord ID, the trial, and the time.",
+  "If you're logged in with Discord, submitting a run posts it to our Discord automatically, with your name, your Discord ID, the trial, and the time. Google-only accounts skip this — there is no linked Discord account to post to.",
   "By submitting a run you confirm the proof is yours to share, and you let us host, display, review, and moderate it.",
   "Your public score history can stay visible after you delete your account, shown as Deleted Account.",
 ]
@@ -52,17 +52,17 @@ export default function TermsPage() {
         </ul>
       </SectionCard>
 
-      <SectionCard title="Logging in with Discord">
+      <SectionCard title="Logging in with Discord or Google">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            Some things need an account, and the only way to get one is Discord. Logging in means you accept these Terms and the{" "}
+            Some things need an account, and you can get one with Discord or Google — they are independent, and logging in with one does not link to or require the other. Logging in means you accept these Terms and the{" "}
             <Link href="/privacy" className="text-primary underline underline-offset-4">Privacy Policy</Link>.
           </p>
           <p>
-            We ask Discord for the smallest permission it offers — enough to see your username, ID, and avatar, and nothing else. We do not keep the tokens Discord hands us; we read who you are and discard them.
+            We ask Discord for the smallest permission it offers — enough to see your username, ID, and avatar, and nothing else. We ask Google for the smallest permission it offers too — enough to see your account ID and a display name, and nothing else; we do not request your email. We do not keep the tokens either of them hands us; we read who you are and discard them.
           </p>
           <p>
-            The Discord account you use is your responsibility. If it gets compromised, secure it with Discord first, then tell us if anything happened to your account here.
+            Whichever account you use is your responsibility. If it gets compromised, secure it with Discord or Google first, then tell us if anything happened to your account here.
           </p>
         </div>
       </SectionCard>
@@ -101,10 +101,10 @@ export default function TermsPage() {
       <SectionCard title="Deleting or deactivating your account">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            Deactivating is reversible. It hides your account from the player listings, and logging in with Discord again undoes it.
+            Deactivating is reversible. It hides your account from the player listings, and logging in again undoes it.
           </p>
           <p>
-            Deleting is not. It logs you out, removes your Discord ID and avatar, your IP records, and your login tokens, and renames your public profile to Deleted Account. Your submissions, scores, PBs, WRs, and proof videos stay up under that name — removing them would rewrite everyone else&apos;s leaderboard history too.
+            Deleting is not. It logs you out, removes your account ID and avatar, your IP records, and your login tokens, and renames your public profile to Deleted Account. Your submissions, scores, PBs, WRs, and proof videos stay up under that name — removing them would rewrite everyone else&apos;s leaderboard history too.
           </p>
         </div>
       </SectionCard>
@@ -112,7 +112,7 @@ export default function TermsPage() {
       <SectionCard title="Other people's services">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            The site leans on Discord for login and community features, Cloudflare for hosting, the database, and video storage, and proof providers like Medal when you submit a link. There are no ads and no analytics.
+            The site leans on Discord for login and community features, Google for login when you choose it, Cloudflare for hosting, the database, and video storage, and proof providers like Medal when you submit a link. There are no ads and no analytics.
           </p>
           <p>
             They all have their own terms, and they can go down, change, or handle your data however their own policies allow. That part is not something we can answer for.

@@ -30,8 +30,25 @@ type PlayerAuthRow = {
   permission: number
 }
 
+type GoogleTokenResponse = {
+  access_token: string
+  token_type: string
+  expires_in: number
+}
+
+// Only sub/name/given_name are ever read off Google's response. email,
+// picture, locale, etc. are deliberately left untyped so nothing downstream
+// can accidentally read or persist them.
+type GoogleUserResponse = {
+  sub: string
+  name?: string | null
+  given_name?: string | null
+}
+
 const discordTokenUrl = "https://discord.com/api/oauth2/token"
 const discordMeUrl = "https://discord.com/api/users/@me"
+const googleTokenUrl = "https://oauth2.googleapis.com/token"
+const googleUserInfoUrl = "https://openidconnect.googleapis.com/v1/userinfo"
 
 export { getSafeNextUrl }
 
@@ -178,4 +195,127 @@ export async function findOrCreatePlayer(db: D1Database, discordUser: DiscordUse
   }
 
   return player
+}
+
+export async function exchangeGoogleCodeForToken(code: string, redirectUri: string, clientId: string, clientSecret: string) {
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+  })
+
+  const response = await fetch(googleTokenUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "application/json",
+    },
+    body,
+  })
+
+  if (!response.ok) {
+    throw new Error("Google token exchange failed")
+  }
+
+  return response.json() as Promise<GoogleTokenResponse>
+}
+
+export async function getGoogleUser(accessToken: string, tokenType: string) {
+  const response = await fetch(googleUserInfoUrl, {
+    headers: {
+      authorization: `${tokenType} ${accessToken}`,
+      accept: "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error("Unable to load Google user")
+  }
+
+  return response.json() as Promise<GoogleUserResponse>
+}
+
+// Independent of findOrCreatePlayer on purpose: it must NOT fall back to a
+// direct `players.player_id = googleUser.sub` lookup the way the Discord
+// path does. That fallback exists only for player rows created before
+// oauth_accounts existed (real legacy Discord data) -- there is no
+// equivalent legacy Google data, and reusing that pattern here would risk
+// matching a Google sub against an unrelated player's player_id with no
+// oauth_accounts link to back it up. If you're tempted to merge this with
+// findOrCreatePlayer, keep this difference.
+export async function findOrCreateGooglePlayer(db: D1Database, googleUser: GoogleUserResponse) {
+  const linkedPlayer = await db.prepare(
+    `SELECT players.uuid, players.player_id, players.discord_avatar, players.discord_discriminator, players.player_name, players.score, players.permission
+     FROM oauth_accounts
+     JOIN players ON players.uuid = oauth_accounts.player_uuid
+     WHERE oauth_accounts.provider = 'google'
+       AND oauth_accounts.provider_account_id = ?
+       AND COALESCE(players.account_status, 'active') != 'deleted'`
+  )
+    .bind(googleUser.sub)
+    .first<PlayerAuthRow>()
+
+  const now = Math.floor(Date.now() / 1000)
+
+  const buildOauthAccountStatement = (playerUuid: string) =>
+    db.prepare(
+      `INSERT INTO oauth_accounts (
+        provider, provider_account_id, player_uuid, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(provider, provider_account_id) DO UPDATE SET
+        player_uuid = excluded.player_uuid,
+        updated_at = excluded.updated_at`
+    )
+      .bind("google", googleUser.sub, playerUuid, now, now)
+
+  if (!linkedPlayer) {
+    const basePlayerName = normalizeLoginPlayerName(googleUser.name || googleUser.given_name)
+    if (!basePlayerName) {
+      throw new Error("Google display name is not valid")
+    }
+    const playerName = await getAvailablePlayerName(db, basePlayerName)
+
+    const playerUuid = generateUUID()
+
+    await db.batch([
+      db.prepare(
+        `INSERT INTO players (
+          uuid, player_id, discord_avatar, discord_discriminator, player_name, date_joined, permission,
+          account_status, legal_terms_accepted_at, legal_privacy_accepted_at, legal_version, auth_provider
+        )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(playerUuid, googleUser.sub, null, null, playerName, now, 0, "active", now, now, legalVersion, "google"),
+      buildOauthAccountStatement(playerUuid),
+    ])
+
+    return {
+      uuid: playerUuid,
+      player_id: googleUser.sub,
+      discord_avatar: null,
+      discord_discriminator: null,
+      player_name: playerName,
+      score: 0,
+      permission: 0,
+    }
+  }
+
+  await db.batch([
+    db.prepare(
+      `UPDATE players
+       SET account_status = 'active',
+           deactivated_at = NULL,
+           deleted_at = NULL,
+           legal_terms_accepted_at = ?,
+           legal_privacy_accepted_at = ?,
+           legal_version = ?
+       WHERE uuid = ?`
+    )
+      .bind(now, now, legalVersion, linkedPlayer.uuid),
+    buildOauthAccountStatement(linkedPlayer.uuid),
+  ])
+
+  return linkedPlayer
 }

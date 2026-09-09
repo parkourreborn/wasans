@@ -5,6 +5,7 @@ export type ComboLeaderboardRow = {
   player_id: string
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   player_name: string
   combo_count: number | null
   submission_uuid: string | null
@@ -27,6 +28,7 @@ export async function listComboLeaderboard(db: D1Database, categorySlug: string,
               players.player_id,
               players.discord_avatar,
               players.discord_discriminator,
+              players.auth_provider,
               players.player_name,
               combo_pbs.combo_count,
               combo_pbs.submission_uuid,

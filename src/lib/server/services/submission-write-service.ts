@@ -312,7 +312,7 @@ export async function createSubmissionsFromRequest(db: D1Database, env: Cloudfla
           time,
           oldTime: personalBest,
           player_score: Number(player.score),
-          discordUserId: player.player_id,
+          discordUserId: player.auth_provider === "discord" ? player.player_id : undefined,
         })
 
         if (threadId) {
