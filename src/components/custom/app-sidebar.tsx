@@ -74,6 +74,7 @@ const primaryLinks = [
   { href: "/", label: "Overview", icon: HomeIcon },
   { href: "/rules", label: "Rules", icon: BookIcon },
   { href: "/information", label: "Information", icon: HelpCircleIcon },
+  { href: "/prizes", label: "Prizes", icon: GiftIcon }
 ]
 
 const toolLinks = [
@@ -106,7 +107,6 @@ const boardLinks: SidebarLinkGroup[] = [
   },
   { href: "/players", label: "Leaderboard", icon: TrophyIcon },
   { href: "/combos", label: "Combo Leaderboard", icon: FlameIcon },
-  { href: "/prizes", label: "Prizes", icon: GiftIcon },
 ]
 
 function SidebarNavItem({
