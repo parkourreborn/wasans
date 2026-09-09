@@ -33,6 +33,7 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   FlameIcon,
+  GiftIcon,
   HelpCircleIcon,
   HistoryIcon,
   HomeIcon,
@@ -105,6 +106,7 @@ const boardLinks: SidebarLinkGroup[] = [
   },
   { href: "/players", label: "Leaderboard", icon: TrophyIcon },
   { href: "/combos", label: "Combo Leaderboard", icon: FlameIcon },
+  { href: "/prizes", label: "Prizes", icon: GiftIcon },
 ]
 
 function SidebarNavItem({
@@ -223,6 +225,34 @@ export function AppSidebar() {
 
   const hasNewErrors = Boolean(latestErrorAt && (!lastSeenErrorAt || latestErrorAt > lastSeenErrorAt))
 
+  const [pendingPrizeCandidates, setPendingPrizeCandidates] = useState(0)
+
+  useEffect(() => {
+    // The badge only ever renders alongside the Admin nav item itself, which
+    // is already gated on this same permission check, so there's no need to
+    // reset the count here when it's below threshold.
+    if ((user?.permission ?? 0) < 4) {
+      return
+    }
+
+    const loadPendingCandidates = async () => {
+      try {
+        const response = await fetch(`${apiV2("/prize-candidates")}?count=1`, { cache: "no-store" })
+        const json = (await response.json()) as { data?: { count?: number } }
+        if (response.ok) {
+          setPendingPrizeCandidates(json.data?.count ?? 0)
+        }
+      } catch (err) {
+        console.error(err)
+      }
+    }
+
+    loadPendingCandidates()
+    const interval = window.setInterval(loadPendingCandidates, 60000)
+
+    return () => window.clearInterval(interval)
+  }, [user])
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border/70 px-3 py-3">
@@ -302,6 +332,16 @@ export function AppSidebar() {
               <SidebarNavItem
                 item={{ href: "/admin", label: "Admin", icon: ShieldIcon }}
                 pathname={pathname}
+                leading={
+                  <div className="relative">
+                    <ShieldIcon className="shrink-0" />
+                    {pendingPrizeCandidates > 0 && (
+                      <span className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-destructive ring-2 ring-sidebar">
+                        <OctagonAlertIcon className="size-2 text-destructive-foreground" />
+                      </span>
+                    )}
+                  </div>
+                }
               />
             )}
           </SidebarMenu>

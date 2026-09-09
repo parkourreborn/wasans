@@ -12,6 +12,14 @@ DROP TABLE IF EXISTS oauth_accounts;
 DROP TABLE IF EXISTS auth_sessions;
 DROP TABLE IF EXISTS refresh_tokens;
 DROP TABLE IF EXISTS player_ips;
+DROP TABLE IF EXISTS announcement_dismissals;
+DROP TABLE IF EXISTS announcements;
+DROP TABLE IF EXISTS prize_candidates;
+DROP TABLE IF EXISTS prize_winners;
+DROP TABLE IF EXISTS prizes;
+DROP TABLE IF EXISTS giveaway_winners;
+DROP TABLE IF EXISTS giveaway_entries;
+DROP TABLE IF EXISTS giveaways;
 DROP TABLE IF EXISTS players;
 DROP TABLE IF EXISTS trials;
 DROP TABLE IF EXISTS audit_logs;
@@ -235,6 +243,188 @@ CREATE TABLE combo_pbs (
 );
 
 CREATE INDEX idx_combo_pbs_category_slug ON combo_pbs(category_slug, combo_count DESC, date ASC);
+
+-- Owner-postable site-wide announcements, shown as a dismissible banner.
+-- Dismissal is tracked per-account so it stays dismissed across devices.
+CREATE TABLE announcements (
+  uuid TEXT PRIMARY KEY,
+  body TEXT NOT NULL,
+  link_url TEXT,
+  expires_at INTEGER,
+  created_at INTEGER NOT NULL,
+  created_by_uuid TEXT,
+  created_by_name TEXT,
+  FOREIGN KEY (created_by_uuid) REFERENCES players(uuid) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_announcements_created_at ON announcements(created_at DESC);
+
+CREATE TABLE announcement_dismissals (
+  announcement_uuid TEXT NOT NULL,
+  player_uuid TEXT NOT NULL,
+  dismissed_at INTEGER NOT NULL,
+  PRIMARY KEY (announcement_uuid, player_uuid),
+  FOREIGN KEY (announcement_uuid) REFERENCES announcements(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_announcement_dismissals_player ON announcement_dismissals(player_uuid);
+
+-- Prizes: a reward tied to a fixed criteria type. The system auto-detects a
+-- qualifying event and raises a prize_candidates row that the owner must
+-- confirm or reject before it becomes an official prize_winners row -- see
+-- src/lib/server/prize-candidate-checker.ts.
+CREATE TABLE prizes (
+  uuid TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+
+  criteria_type TEXT NOT NULL
+    CHECK (criteria_type IN ('trial_wr', 'combo_wr', 'rankup', 'score_reached')),
+  criteria_trial_name TEXT,
+  criteria_combo_category_slug TEXT,
+  criteria_target_role_id TEXT,
+  criteria_score_target REAL,
+
+  max_winners INTEGER,
+  ends_at INTEGER,
+
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'won', 'closed')),
+  closed_at INTEGER,
+  closed_by_uuid TEXT,
+  closed_by_name TEXT,
+
+  created_at INTEGER NOT NULL,
+  created_by_uuid TEXT,
+  created_by_name TEXT,
+
+  FOREIGN KEY (criteria_trial_name) REFERENCES trials(name) ON DELETE SET NULL,
+  FOREIGN KEY (criteria_combo_category_slug) REFERENCES combo_categories(slug) ON DELETE SET NULL,
+  FOREIGN KEY (closed_by_uuid) REFERENCES players(uuid) ON DELETE SET NULL,
+  FOREIGN KEY (created_by_uuid) REFERENCES players(uuid) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_prizes_status_created_at ON prizes(status, created_at DESC);
+CREATE INDEX idx_prizes_criteria_type_status ON prizes(criteria_type, status);
+
+CREATE TABLE prize_winners (
+  uuid TEXT PRIMARY KEY,
+  prize_uuid TEXT NOT NULL,
+  player_uuid TEXT NOT NULL,
+  player_name TEXT NOT NULL,
+
+  source TEXT NOT NULL CHECK (source IN ('auto', 'manual')),
+  candidate_uuid TEXT,
+
+  awarded_at INTEGER NOT NULL,
+  awarded_by_uuid TEXT,
+  awarded_by_name TEXT,
+
+  claimed INTEGER NOT NULL DEFAULT 0 CHECK (claimed IN (0, 1)),
+  claimed_at INTEGER,
+  claimed_by_uuid TEXT,
+  claimed_by_name TEXT,
+
+  UNIQUE (prize_uuid, player_uuid),
+
+  FOREIGN KEY (prize_uuid) REFERENCES prizes(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (awarded_by_uuid) REFERENCES players(uuid) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_prize_winners_prize_uuid ON prize_winners(prize_uuid);
+CREATE INDEX idx_prize_winners_player_uuid ON prize_winners(player_uuid);
+
+CREATE TABLE prize_candidates (
+  uuid TEXT PRIMARY KEY,
+  prize_uuid TEXT NOT NULL,
+  player_uuid TEXT NOT NULL,
+  player_name TEXT NOT NULL,
+
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'confirmed', 'rejected')),
+  event_details TEXT,
+
+  detected_at INTEGER NOT NULL,
+  reviewed_at INTEGER,
+  reviewed_by_uuid TEXT,
+  reviewed_by_name TEXT,
+  resulting_winner_uuid TEXT,
+
+  FOREIGN KEY (prize_uuid) REFERENCES prizes(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (reviewed_by_uuid) REFERENCES players(uuid) ON DELETE SET NULL,
+  FOREIGN KEY (resulting_winner_uuid) REFERENCES prize_winners(uuid) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_prize_candidates_status_detected_at ON prize_candidates(status, detected_at DESC);
+CREATE INDEX idx_prize_candidates_prize_player_status ON prize_candidates(prize_uuid, player_uuid, status);
+
+-- Giveaways: a raffle with a fixed winner count and a deadline. Any
+-- logged-in player can join once (giveaway_entries' PK is the
+-- one-entry-per-user enforcement). Drawing/rerolling is always a manual
+-- owner action.
+CREATE TABLE giveaways (
+  uuid TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+
+  max_winners INTEGER NOT NULL,
+  ends_at INTEGER NOT NULL,
+
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'won', 'closed')),
+  closed_at INTEGER,
+  closed_by_uuid TEXT,
+  closed_by_name TEXT,
+
+  created_at INTEGER NOT NULL,
+  created_by_uuid TEXT,
+  created_by_name TEXT,
+
+  FOREIGN KEY (closed_by_uuid) REFERENCES players(uuid) ON DELETE SET NULL,
+  FOREIGN KEY (created_by_uuid) REFERENCES players(uuid) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_giveaways_status_created_at ON giveaways(status, created_at DESC);
+
+CREATE TABLE giveaway_entries (
+  giveaway_uuid TEXT NOT NULL,
+  player_uuid TEXT NOT NULL,
+  player_name TEXT NOT NULL,
+  entered_at INTEGER NOT NULL,
+  PRIMARY KEY (giveaway_uuid, player_uuid),
+  FOREIGN KEY (giveaway_uuid) REFERENCES giveaways(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+);
+
+CREATE TABLE giveaway_winners (
+  uuid TEXT PRIMARY KEY,
+  giveaway_uuid TEXT NOT NULL,
+  player_uuid TEXT NOT NULL,
+  player_name TEXT NOT NULL,
+
+  round INTEGER NOT NULL,
+  is_current INTEGER NOT NULL DEFAULT 1 CHECK (is_current IN (0, 1)),
+
+  drawn_at INTEGER NOT NULL,
+  drawn_by_uuid TEXT,
+  drawn_by_name TEXT,
+
+  claimed INTEGER NOT NULL DEFAULT 0 CHECK (claimed IN (0, 1)),
+  claimed_at INTEGER,
+  claimed_by_uuid TEXT,
+  claimed_by_name TEXT,
+
+  UNIQUE (giveaway_uuid, player_uuid),
+
+  FOREIGN KEY (giveaway_uuid) REFERENCES giveaways(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
+  FOREIGN KEY (drawn_by_uuid) REFERENCES players(uuid) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_giveaway_winners_giveaway_current ON giveaway_winners(giveaway_uuid, is_current);
 
 -- Audit logs for submissions, WRs, moderation actions, and client/server errors
 CREATE TABLE audit_logs (
