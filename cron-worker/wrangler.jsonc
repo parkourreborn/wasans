@@ -3,7 +3,10 @@
 	"name": "wasans-trial-sweep",
 	"main": "src/index.js",
 	"compatibility_date": "2026-04-25",
+	// Daily maintenance (trial sweep, expired-state cleanup) plus a per-minute
+	// giveaway sweep -- see src/index.js's scheduled() handler, which
+	// branches on event.cron to tell them apart.
 	"triggers": {
-		"crons": ["0 6 * * *"]
+		"crons": ["0 6 * * *", "* * * * *"]
 	}
 }
