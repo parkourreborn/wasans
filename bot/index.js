@@ -1,6 +1,7 @@
 import { Events } from 'discord.js';
 import { server } from './src/api/server.js';
 import { handleAdminCommandMessage } from './src/commands/adminCommands.js';
+import { handleGiveawayInteraction } from './src/commands/giveaways.js';
 import { handleSlashCommandInteraction, registerSlashCommands } from './src/commands/slashCommands.js';
 import { handleSubmissionModerationInteraction } from './src/commands/submissionModeration.js';
 import { ALLOWED_USER_ID, BOT_TOKEN, PORT } from './src/config.js';
@@ -35,6 +36,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     try {
         const handled = await handleSubmissionModerationInteraction(interaction);
         if (handled) {
+            return;
+        }
+
+        const giveawayHandled = await handleGiveawayInteraction(interaction);
+        if (giveawayHandled) {
             return;
         }
 

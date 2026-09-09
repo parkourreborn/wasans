@@ -1,8 +1,10 @@
 import { executeDm, executeMemberSync, executeSubmissionDelete, executeSubmissionSync } from '../executors.js';
 import { createVersionRouter } from '../routerFactory.js';
+import { executeGiveawaySync } from '../../giveaways/sync.js';
 import {
     validateBatchBody,
     validateDmBody,
+    validateGiveawaySyncBody,
     validateMemberSyncBody,
     validateSubmissionDeleteBody,
     validateSubmissionSyncBody,
@@ -24,6 +26,10 @@ const routes = {
     '/v3/messages/dm': {
         validate: validateDmBody,
         execute: executeDm,
+    },
+    '/v3/giveaways/sync': {
+        validate: validateGiveawaySyncBody,
+        execute: executeGiveawaySync,
     },
 };
 

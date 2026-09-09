@@ -118,6 +118,20 @@ export async function sendMessageToChannel(channelId, content) {
     }
 }
 
+export async function editMessageInChannel(channelId, messageId, content) {
+    try {
+        const channel = await client.channels.fetch(channelId);
+        if (!channel || typeof channel.messages?.fetch !== 'function') {
+            throw new Error('Channel not found or is not text-based');
+        }
+
+        const message = await channel.messages.fetch(messageId);
+        return await message.edit(normalizeMessagePayload(content));
+    } catch (error) {
+        throw discordError(`Failed to edit channel message: ${error.message}`);
+    }
+}
+
 export async function deleteThread(thread) {
     try {
         await thread.delete();

@@ -21,7 +21,7 @@ import { renderSubmissionsCard } from '../render/templates/submissions.js';
 import { renderWrsCard } from '../render/templates/wrs.js';
 import { createRateLimiter } from '../rateLimit.js';
 import { resolveSubmissionUrl } from '../resolvers.js';
-import { apiGet, asArray, getTotal } from '../wasansApi.js';
+import { apiGet, asArray, fetchPlayerUuidByDiscordId, getTotal } from '../wasansApi.js';
 
 const PAGE_SIZE = 10;
 // The combo board front page shows this many holders per category.
@@ -175,10 +175,6 @@ function formatJoinDate(value) {
     return `Joined ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`;
 }
 
-function cleanNickname(value) {
-    return String(value || '').replace(/\s+\(\d+(?:\.\d+)?\)\s*$/, '').trim();
-}
-
 async function findPlayerByName(searchTerm) {
     const normalized = String(searchTerm || '').trim().toLowerCase();
     if (!normalized) return null;
@@ -200,39 +196,38 @@ async function findPlayerByName(searchTerm) {
     return players.find((player) => getPlayerName(player).toLowerCase().includes(normalized)) || null;
 }
 
+// Resolves either a plain player name (fuzzy search via findPlayerByName) or
+// a Discord mention. A mention is resolved by Discord id through the
+// account's linked oauth record (admin/players/by-discord on the wasans
+// side) rather than by guessing at their nickname/username and name-searching
+// for it -- that guess could silently match the wrong player, or miss
+// entirely, whenever their wasans display name differs from Discord.
 async function resolvePlayerFromInput(interaction, input) {
     const rawInput = String(input || '').trim();
-    if (!rawInput) return null;
+    if (!rawInput) return { player: null, error: 'Player not found.' };
 
     const mentionMatch = rawInput.match(/^<@!?(\d+)>$/);
-    const candidateNames = [];
-
-    if (mentionMatch) {
-        const discordId = mentionMatch[1];
-
-        if (interaction.inGuild() && interaction.guild) {
-            const member = await interaction.guild.members.fetch(discordId).catch(() => null);
-            if (member) {
-                const cleanedNickname = cleanNickname(member.nickname || member.displayName);
-                if (cleanedNickname) candidateNames.push(cleanedNickname);
-                if (member.user?.username) candidateNames.push(member.user.username);
-            }
-        }
-
-        const fallbackUser = await interaction.client.users.fetch(discordId).catch(() => null);
-        if (fallbackUser?.username) candidateNames.push(fallbackUser.username);
-    } else {
-        candidateNames.push(rawInput);
+    if (!mentionMatch) {
+        const player = await findPlayerByName(rawInput);
+        return { player, error: player ? null : 'Player not found.' };
     }
 
-    const deduped = [...new Set(candidateNames.map((value) => value.trim()).filter(Boolean))];
-
-    for (const candidate of deduped) {
-        const player = await findPlayerByName(candidate);
-        if (player) return player;
+    const discordId = mentionMatch[1];
+    let playerUuid;
+    try {
+        playerUuid = await fetchPlayerUuidByDiscordId(discordId);
+    } catch (error) {
+        console.error('Failed to resolve player by Discord id:', error);
+        return { player: null, error: 'Failed to look up that player. Please try again.' };
     }
 
-    return null;
+    if (!playerUuid) {
+        return { player: null, error: `<@${discordId}> hasn't linked their Discord account to a wasans account.` };
+    }
+
+    const detailPayload = await apiGet(`players/${encodeURIComponent(playerUuid)}`).catch(() => null);
+    const player = detailPayload?.data?.player || null;
+    return { player, error: player ? null : 'Player not found.' };
 }
 
 function buildCommandDefinitions() {
@@ -543,16 +538,18 @@ async function handleSubmissionsCommand(interaction) {
     let player = null;
 
     if (playerInput) {
-        player = await resolvePlayerFromInput(interaction, playerInput);
-        if (!player) {
-            await interaction.editReply('Player not found.');
+        const resolved = await resolvePlayerFromInput(interaction, playerInput);
+        if (!resolved.player) {
+            await interaction.editReply(resolved.error || 'Player not found.');
             return;
         }
 
-        if (!getPlayerUuid(player)) {
+        if (!getPlayerUuid(resolved.player)) {
             await interaction.editReply('Player found, but no UUID was returned by the API.');
             return;
         }
+
+        player = resolved.player;
     }
 
     const payload = await apiGet('submissions', {
@@ -604,9 +601,9 @@ function buildPbRows(pbs, worldRecordUuids) {
 
 async function handlePbsCommand(interaction) {
     const playerInput = interaction.options.getString('player', true);
-    const player = await resolvePlayerFromInput(interaction, playerInput);
+    const { player, error } = await resolvePlayerFromInput(interaction, playerInput);
     if (!player) {
-        await interaction.editReply('Player not found.');
+        await interaction.editReply(error || 'Player not found.');
         return;
     }
 
@@ -677,9 +674,9 @@ async function handleWrsCommand(interaction) {
 
 async function handleStatsCommand(interaction) {
     const playerInput = interaction.options.getString('player', true);
-    const player = await resolvePlayerFromInput(interaction, playerInput);
+    const { player, error } = await resolvePlayerFromInput(interaction, playerInput);
     if (!player) {
-        await interaction.editReply('Player not found.');
+        await interaction.editReply(error || 'Player not found.');
         return;
     }
 
@@ -875,9 +872,9 @@ function buildComboPbRows(categories, comboPbs) {
 
 async function handleComboPbsCommand(interaction) {
     const playerInput = interaction.options.getString('player', true);
-    const player = await resolvePlayerFromInput(interaction, playerInput);
+    const { player, error } = await resolvePlayerFromInput(interaction, playerInput);
     if (!player) {
-        await interaction.editReply('Player not found.');
+        await interaction.editReply(error || 'Player not found.');
         return;
     }
 
@@ -922,16 +919,18 @@ async function handleComboSubmissionsCommand(interaction) {
 
     let player = null;
     if (playerInput) {
-        player = await resolvePlayerFromInput(interaction, playerInput);
-        if (!player) {
-            await interaction.editReply('Player not found.');
+        const resolved = await resolvePlayerFromInput(interaction, playerInput);
+        if (!resolved.player) {
+            await interaction.editReply(resolved.error || 'Player not found.');
             return;
         }
 
-        if (!getPlayerUuid(player)) {
+        if (!getPlayerUuid(resolved.player)) {
             await interaction.editReply('Player found, but no UUID was returned by the API.');
             return;
         }
+
+        player = resolved.player;
     }
 
     let category = null;
