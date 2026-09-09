@@ -88,7 +88,7 @@ export function buildGiveawayComponents(giveaway) {
 
 export function buildGiveawayMessage(giveaway) {
     return {
-        content: "<@&1547071463012565034>",
+        content: "--1547071463012565034-",
         embeds: [buildGiveawayEmbed(giveaway)],
         components: buildGiveawayComponents(giveaway),
     };
