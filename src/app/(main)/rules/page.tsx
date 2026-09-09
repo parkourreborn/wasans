@@ -30,7 +30,8 @@ const submissionRules = [
 const comboRules = [
   "The full clip must be shown starting from 0 combo all the way to the recorded combo count.",
   "Username must be visible, and the final combo count must be shown in chat (or on the profile page if chat doesn't post it).",
-  "Combos under 100k score will not be accepted."
+  "Combos under 100k score will not be accepted.",
+  "Times above 25 minutes are not allowed to save moderator's dignity."
 ]
 
 const applicationRules = [
