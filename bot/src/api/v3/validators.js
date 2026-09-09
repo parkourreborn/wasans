@@ -1,5 +1,6 @@
 import { badRequest } from '../errors.js';
 import {
+    assertBoolean,
     assertObject,
     assertOptionalNumber,
     assertOptionalString,
@@ -38,6 +39,7 @@ export function validateGiveawaySyncBody(body) {
     for (const winner of body.winners) {
         assertObject(winner, 'winners[]');
         assertString(winner.player_name, 'winners[].player_name');
+        assertOptionalString(winner.discord_user_id, 'winners[].discord_user_id');
         if (typeof winner.claimed !== 'boolean') {
             throw badRequest('winners[].claimed must be a boolean');
         }
@@ -45,6 +47,7 @@ export function validateGiveawaySyncBody(body) {
 
     assertOptionalString(body.discord_channel_id, 'discord_channel_id');
     assertOptionalString(body.discord_message_id, 'discord_message_id');
+    assertBoolean(body.announce_winners, 'announce_winners');
 
     return body;
 }

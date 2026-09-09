@@ -33,6 +33,13 @@ export function parseGiveawayCustomId(customId) {
     return { action, giveawayUuid };
 }
 
+// Falls back to the player's wasans name on the rare winner with no linked
+// Discord account (see getDiscordIdsForPlayers in giveaway-notify-service.ts)
+// rather than dropping them from the list.
+export function formatWinnerMention(winner) {
+    return winner.discord_user_id ? `<@${winner.discord_user_id}>` : winner.player_name;
+}
+
 export function buildGiveawayEmbed(giveaway) {
     const embed = new EmbedBuilder()
         .setTitle(giveaway.title)
@@ -58,7 +65,7 @@ export function buildGiveawayEmbed(giveaway) {
         fields.push({
             name: 'Winners',
             value: winners
-                .map((winner) => `${winner.claimed ? '✅' : '⏳'} ${winner.player_name}`)
+                .map((winner) => `${winner.claimed ? '✅' : '⏳'} ${formatWinnerMention(winner)}`)
                 .join('\n'),
             inline: false,
         });
