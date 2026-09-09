@@ -519,3 +519,37 @@ export async function syncDiscordMembersOnScoreChange(players: Array<{ playerUui
 export async function updateDiscordUsernameOnScoreChange(playerUuid: string, oldScore = 0) {
   await syncDiscordMembersOnScoreChange([{ playerUuid, oldScore }])
 }
+
+export type GiveawaySyncPayload = {
+  uuid: string
+  title: string
+  description: string | null
+  max_winners: number
+  ends_at: number
+  status: "active" | "won" | "closed"
+  entry_count: number
+  winners: Array<{ player_name: string; claimed: boolean }>
+  discord_channel_id: string | null
+  discord_message_id: string | null
+}
+
+type GiveawaySyncResponse = BotApiResponse & {
+  channel_id?: string | null
+  message_id?: string | null
+}
+
+// Pushes a giveaway's current public state to the bot so it can post (first
+// time) or edit (every time after) the one live embed for it -- see
+// notifyGiveawayChanged, which calls this after every giveaway mutation, and
+// /v3/giveaways/sync in wasans-bot, which does the posting/editing.
+export async function syncGiveawayToDiscord(
+  payload: GiveawaySyncPayload
+): Promise<{ channelId: string | null; messageId: string | null }> {
+  try {
+    const response = await sendBotApiRequest("/v3/giveaways/sync", payload) as GiveawaySyncResponse
+    return { channelId: response.channel_id ?? null, messageId: response.message_id ?? null }
+  } catch (error) {
+    console.error("Failed to sync giveaway to Discord:", error)
+    return { channelId: null, messageId: null }
+  }
+}

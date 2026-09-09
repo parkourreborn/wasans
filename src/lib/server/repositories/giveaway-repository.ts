@@ -15,6 +15,8 @@ export type GiveawayRow = {
   created_at: number
   created_by_uuid: string | null
   created_by_name: string | null
+  discord_channel_id: string | null
+  discord_message_id: string | null
 }
 
 export type GiveawayEntryRow = {
@@ -50,7 +52,7 @@ export class GiveawayError extends Error {
 }
 
 const GIVEAWAY_COLUMNS = `uuid, title, description, max_winners, ends_at, status, closed_at, closed_by_uuid,
-  closed_by_name, created_at, created_by_uuid, created_by_name`
+  closed_by_name, created_at, created_by_uuid, created_by_name, discord_channel_id, discord_message_id`
 
 export async function listGiveaways(db: D1Database, filter: "active" | "history"): Promise<GiveawayRow[]> {
   const whereClause = filter === "active" ? `status = 'active'` : `status IN ('won', 'closed')`
@@ -63,6 +65,20 @@ export async function listGiveaways(db: D1Database, filter: "active" | "history"
 
 export async function getGiveaway(db: D1Database, uuid: string): Promise<GiveawayRow | null> {
   return db.prepare(`SELECT ${GIVEAWAY_COLUMNS} FROM giveaways WHERE uuid = ?`).bind(uuid).first<GiveawayRow>()
+}
+
+// Records which Discord message the bot posted/edited for this giveaway so
+// notifyGiveawayChanged knows to edit it in place on the next state change
+// instead of posting a duplicate. See migration 0014.
+export async function setGiveawayDiscordMessage(
+  db: D1Database,
+  uuid: string,
+  channelId: string,
+  messageId: string
+): Promise<void> {
+  await db.prepare(`UPDATE giveaways SET discord_channel_id = ?, discord_message_id = ? WHERE uuid = ?`)
+    .bind(channelId, messageId, uuid)
+    .run()
 }
 
 export async function createGiveaway(
