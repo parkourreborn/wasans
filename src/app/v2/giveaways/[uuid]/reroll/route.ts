@@ -16,7 +16,7 @@ export const POST = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
       details: { winner_count: winners.length },
     })
     await bumpCacheGeneration(ctx.cache)
-    ctx.ctx.waitUntil(notifyGiveawayChanged(ctx.db, uuid))
+    ctx.ctx.waitUntil(notifyGiveawayChanged(ctx.db, uuid, true))
 
     return jsonOk(winners, { requestId: ctx.requestId })
   } catch (error) {
