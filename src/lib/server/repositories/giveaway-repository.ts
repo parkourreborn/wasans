@@ -196,7 +196,11 @@ export async function joinGiveaway(
     throw new GiveawayError(`Giveaway "${giveawayUuid}" was not found`, "not_found")
   }
 
-  if (giveaway.status !== "active") {
+  // The deadline is checked here rather than relying solely on the periodic
+  // sweep (see autoConcludeExpiredGiveaways) closing/drawing it, so an entry
+  // can never sneak in during the window between the deadline passing and
+  // the next sweep run.
+  if (giveaway.status !== "active" || nowSeconds >= giveaway.ends_at) {
     throw new GiveawayError("This giveaway is no longer accepting entries", "not_active")
   }
 
@@ -281,6 +285,57 @@ export async function drawGiveawayWinners(
   await db.batch(statements)
 
   return listCurrentGiveawayWinners(db, giveawayUuid)
+}
+
+export type AutoConcludedGiveaway = { uuid: string; winnersDrawn: boolean }
+
+// System-driven counterpart to drawGiveawayWinners/closeGiveaway for
+// giveaways past their deadline that an owner hasn't drawn manually --
+// called by the sweep-expired route on a periodic cron (see cron-worker/)
+// so nobody has to remember to end one. Draws winners exactly like a manual
+// draw (recorded with a null drawn_by_uuid since there's no acting player),
+// or closes with no winners if nobody entered. Rerolling an auto-drawn
+// giveaway afterward still works normally -- this only replaces the initial
+// draw/close click, not reroll.
+export async function autoConcludeExpiredGiveaways(db: D1Database, nowSeconds: number): Promise<AutoConcludedGiveaway[]> {
+  const { results } = await db.prepare(
+    `SELECT uuid FROM giveaways WHERE status = 'active' AND ends_at <= ?`
+  ).bind(nowSeconds).all<{ uuid: string }>()
+
+  const concluded: AutoConcludedGiveaway[] = []
+
+  for (const row of results || []) {
+    // Re-checked per row (rather than trusting the query above) in case an
+    // owner manually drew/closed it in the moment between the query and now.
+    const giveaway = await getGiveaway(db, row.uuid)
+    if (!giveaway || giveaway.status !== "active") {
+      continue
+    }
+
+    const entries = await listGiveawayEntries(db, giveaway.uuid)
+
+    if (entries.length === 0) {
+      await db.prepare(
+        `UPDATE giveaways SET status = 'closed', closed_at = ?, closed_by_uuid = NULL, closed_by_name = ? WHERE uuid = ?`
+      ).bind(nowSeconds, "Automatic (deadline reached, no entrants)", giveaway.uuid).run()
+      concluded.push({ uuid: giveaway.uuid, winnersDrawn: false })
+      continue
+    }
+
+    const winners = pickRandom(entries, giveaway.max_winners)
+    const statements = winners.map((entry) =>
+      db.prepare(
+        `INSERT INTO giveaway_winners (uuid, giveaway_uuid, player_uuid, player_name, round, is_current, drawn_at, drawn_by_uuid, drawn_by_name)
+         VALUES (?, ?, ?, ?, 1, 1, ?, NULL, ?)`
+      ).bind(crypto.randomUUID(), giveaway.uuid, entry.player_uuid, entry.player_name, nowSeconds, "Automatic (deadline reached)")
+    )
+    statements.push(db.prepare(`UPDATE giveaways SET status = 'won' WHERE uuid = ?`).bind(giveaway.uuid))
+
+    await db.batch(statements)
+    concluded.push({ uuid: giveaway.uuid, winnersDrawn: true })
+  }
+
+  return concluded
 }
 
 export async function rerollGiveawayWinners(

@@ -4,8 +4,6 @@ import * as React from "react"
 import { apiV2 } from "@/lib/api"
 import { SUBMISSION_BAN_REASON_MAX_LENGTH } from "@/lib/submission-bans"
 import { AnnouncementsSection } from "@/components/custom/admin/announcements-section"
-import { GiveawaysSection } from "@/components/custom/admin/giveaways-section"
-import { PrizesSection } from "@/components/custom/admin/prizes-section"
 import { ErrorState, PageHeader, PageShell, SectionCard } from "@/components/custom/page-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1108,10 +1106,6 @@ export default function AdminPage() {
       </SectionCard>
 
       <AnnouncementsSection />
-
-      <PrizesSection />
-
-      <GiveawaysSection />
 
       <SectionCard title="Feature flags" description="Site-wide kill switches. Owners can still moderate while moderation is disabled for everyone else.">
         {loadingFlags ? (
