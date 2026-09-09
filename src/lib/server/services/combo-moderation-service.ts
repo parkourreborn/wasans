@@ -15,6 +15,7 @@ import {
   normalizeModeratorNote,
   normalizeState,
 } from "@/lib/server/moderation-normalization"
+import { checkComboWrPrizeCandidates } from "@/lib/server/prize-candidate-checker"
 
 // Mirrors patchSubmission/deleteSubmission in moderation-service.ts, stripped
 // of every bit of score/WR/Discord-thread machinery — combo submissions
@@ -94,6 +95,29 @@ export async function patchComboSubmission(
   // 'approved' can possibly move the PB.
   if (stateChanged && (previousState === "approved" || state === "approved")) {
     await refreshComboPb(env.wasans, submission.player_uuid, submission.category_slug)
+
+    // No "combo #1" concept persists anywhere (unlike trial WRs) -- this is
+    // computed fresh here, wrapped in waitUntil since it adds a query the
+    // moderation response shouldn't wait on.
+    context.ctx.waitUntil((async () => {
+      try {
+        const rank1 = await env.wasans.prepare(
+          `SELECT player_uuid FROM combo_pbs WHERE category_slug = ? ORDER BY combo_count DESC, date ASC, uuid ASC LIMIT 1`
+        ).bind(submission.category_slug).first<{ player_uuid: string }>()
+
+        if (rank1?.player_uuid === submission.player_uuid) {
+          await checkComboWrPrizeCandidates(env.wasans, {
+            categorySlug: submission.category_slug,
+            playerUuid: submission.player_uuid,
+            playerName: submission.player_name,
+            submissionUuid: uuid,
+            comboCount: submission.combo_count,
+          })
+        }
+      } catch (error) {
+        console.error("Combo WR prize candidate check failed:", error)
+      }
+    })())
   }
 
   return getComboSubmissionWithPlayer(env.wasans, uuid)

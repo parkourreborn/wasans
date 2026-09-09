@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { AnnouncementBanner } from "@/components/custom/announcement-banner"
 import { AppSidebar } from "@/components/custom/app-sidebar"
 import { SettingsProvider } from "@/components/custom/settings-provider"
 import { Button } from "@/components/ui/button"
@@ -22,6 +23,7 @@ export default function RootLayout({
             container (overflow-y computes to auto) and the sticky page headers
             inside it would scroll away instead of pinning. */}
         <main className="relative min-h-svh min-w-0 flex-1 overflow-x-clip bg-background">
+          <AnnouncementBanner />
           <div className="sticky top-0 z-40 border-b border-border/70 bg-background/95 backdrop-blur-sm md:hidden">
             {/* Exactly h-14, matching the top-14 offset every sticky page
                 header and search bar uses to clear this bar. */}
