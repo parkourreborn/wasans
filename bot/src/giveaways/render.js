@@ -95,7 +95,6 @@ export function buildGiveawayComponents(giveaway) {
 
 export function buildGiveawayMessage(giveaway) {
     return {
-        content: "<@&1398513332603850752>",
         embeds: [buildGiveawayEmbed(giveaway)],
         components: buildGiveawayComponents(giveaway),
     };
