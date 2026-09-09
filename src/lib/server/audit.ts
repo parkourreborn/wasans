@@ -30,6 +30,22 @@ export type AuditAction =
   | "combo_submission_deleted"
   | "combo_category_created"
   | "combo_category_updated"
+  | "announcement_created"
+  | "announcement_deleted"
+  | "prize_created"
+  | "prize_closed"
+  | "prize_deadline_extended"
+  | "prize_winner_added"
+  | "prize_winner_removed"
+  | "prize_winner_claimed"
+  | "prize_candidate_confirmed"
+  | "prize_candidate_rejected"
+  | "giveaway_created"
+  | "giveaway_closed"
+  | "giveaway_deadline_extended"
+  | "giveaway_drawn"
+  | "giveaway_rerolled"
+  | "giveaway_winner_claimed"
 
 // Split out from insertAuditLog so callers writing several audit rows at
 // once (e.g. the deduplicate sweep) can send them as one db.batch() instead

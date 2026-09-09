@@ -9,6 +9,7 @@ import type { AuditAction } from "@/lib/server/audit"
 import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
+import { checkTrialWrPrizeCandidates } from "@/lib/server/prize-candidate-checker"
 import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
 import { averageScoreChangeForWrChange, RANKED_PLAYER_MIN_SCORE } from "@/lib/server/average-score-change"
 import {
@@ -476,6 +477,17 @@ export async function patchSubmission(
       }
 
       const submissionIsWr = wrRow?.submission_uuid === uuid
+
+      if (submissionIsWr && wrRow) {
+        await checkTrialWrPrizeCandidates(db, {
+          trialName: submission.trial_name,
+          playerUuid: wrRow.player_uuid,
+          playerName: wrRow.player_name,
+          submissionUuid: uuid,
+          time: Number(wrRow.time),
+        })
+      }
+
       const afterWrTimes = new Map(beforeWrTimes)
       if (wrRow) {
         afterWrTimes.set(wrRow.trial_name, Number(wrRow.time))
@@ -670,6 +682,24 @@ export async function deleteSubmission(
       await refreshPlayerPbs(env.wasans, submission.player_uuid)
       if (isWr && wrTrialName) {
         await refreshWorldRecords(env.wasans, wrTrialName, user)
+
+        // Deleting the WR submission can promote a different player to new
+        // WR holder -- refreshWorldRecords doesn't return that row, so it's
+        // re-read here to fire a trial_wr prize check for them too.
+        const newWr = await env.wasans.prepare(
+          `SELECT submission_uuid, player_uuid, player_name, time FROM wrs WHERE trial_name = ?`
+        ).bind(wrTrialName).first<{ submission_uuid: string; player_uuid: string; player_name: string; time: number }>()
+
+        if (newWr && newWr.submission_uuid !== uuid) {
+          await checkTrialWrPrizeCandidates(env.wasans, {
+            trialName: wrTrialName,
+            playerUuid: newWr.player_uuid,
+            playerName: newWr.player_name,
+            submissionUuid: newWr.submission_uuid,
+            time: Number(newWr.time),
+          })
+        }
+
         // Only players with a PB on the affected trial can have had their
         // score change, so only refresh those instead of every player.
         await refreshScoresForTrial(env.wasans, wrTrialName, { discordUpdateMode: "all" })
