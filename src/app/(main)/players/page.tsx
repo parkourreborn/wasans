@@ -25,6 +25,7 @@ type OverallPlayer = {
   player_id: string
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   player_name: string
   score: number
 }
@@ -34,6 +35,7 @@ type TrialPlayer = {
   player_id: string
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   player_name: string
   time: number | null
   submission_uuid: string | null
@@ -52,6 +54,7 @@ type DisplayRow = {
   playerId?: string
   playerAvatar?: string | null
   playerDiscriminator?: string | null
+  playerAuthProvider?: string | null
   overallScore?: number
   trialTime?: number | null
   trialScore?: number
@@ -109,6 +112,7 @@ export default function PlayersPage() {
             playerId: row.player_id,
             playerAvatar: row.discord_avatar,
             playerDiscriminator: row.discord_discriminator,
+            playerAuthProvider: row.auth_provider,
             overallScore: Number(row.score),
             rank: index + 1,
           }))
@@ -132,6 +136,7 @@ export default function PlayersPage() {
           playerId: row.player_id,
           playerAvatar: row.discord_avatar,
           playerDiscriminator: row.discord_discriminator,
+          playerAuthProvider: row.auth_provider,
           playerName: row.player_name,
           trialTime: row.time,
           trialScore: Number(row.score || 0),
@@ -271,6 +276,7 @@ export default function PlayersPage() {
                     discordId={row.playerId}
                     discordAvatar={row.playerAvatar}
                     discordDiscriminator={row.playerDiscriminator}
+                    authProvider={row.playerAuthProvider}
                   />
                   <div className="min-w-0">
                     <Link

@@ -1,3 +1,3 @@
 export const legalContactEmail = "tully@tully.sh"
-export const legalVersion = "2026-09-08"
-export const legalUpdatedLabel = "September 8, 2026"
+export const legalVersion = "2026-09-09"
+export const legalUpdatedLabel = "September 9, 2026"

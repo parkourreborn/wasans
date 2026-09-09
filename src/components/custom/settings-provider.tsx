@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, createContext, useContext } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { CheckIcon, LogOutIcon, Settings2Icon, Trash2Icon, UserPenIcon, UserXIcon, XIcon } from "lucide-react"
+import { CheckIcon, DownloadIcon, LogOutIcon, Settings2Icon, Trash2Icon, UserPenIcon, UserXIcon, XIcon } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +42,7 @@ type SettingsUser = {
   player_id: string
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   player_name: string
   score: number
   permission: number
@@ -151,6 +152,7 @@ export function FloatingSettingsModal({
   const [deleting, setDeleting] = useState(false)
   const [deleteText, setDeleteText] = useState("")
   const [accountError, setAccountError] = useState<string | null>(null)
+  const [exportingData, setExportingData] = useState(false)
 
   if (!settings) {
     return null
@@ -269,6 +271,38 @@ export function FloatingSettingsModal({
     } catch (err) {
       setAccountError(err instanceof Error ? err.message : "Logout failed")
       setLoggingOut(false)
+    }
+  }
+
+  const downloadData = async () => {
+    if (exportingData) {
+      return
+    }
+
+    setExportingData(true)
+    setAccountError(null)
+
+    try {
+      const response = await fetch(apiV2("/account/export"), { cache: "no-store" })
+
+      if (!response.ok) {
+        const json = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
+        throw new Error(json?.error?.message || "Data export failed")
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `wasans-data-${(user?.uuid || "export").slice(0, 8)}.json`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : "Data export failed")
+    } finally {
+      setExportingData(false)
     }
   }
 
@@ -409,6 +443,17 @@ export function FloatingSettingsModal({
                   <Button type="button" variant="outline" size="sm" disabled={savingName || loggingOut || deactivating || deleting} onClick={logout}>
                     <LogOutIcon />
                     {loggingOut ? "Logging out..." : "Log out"}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={exportingData || savingName || loggingOut || deactivating || deleting}
+                    onClick={downloadData}
+                  >
+                    <DownloadIcon />
+                    {exportingData ? "Preparing..." : "Download my data"}
                   </Button>
 
                   <AlertDialog>

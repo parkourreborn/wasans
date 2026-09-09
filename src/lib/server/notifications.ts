@@ -314,7 +314,7 @@ export type PendingSubmissionPost = {
 
 export async function postPendingRun(submission: PendingSubmissionPost): Promise<{ threadId: string | null }> {
   try {
-    if (!Number.isFinite(submission.player_score)) {
+    if (!Number.isFinite(submission.player_score) || !submission.discordUserId) {
       return { threadId: null }
     }
 
@@ -345,6 +345,10 @@ export async function postPendingRun(submission: PendingSubmissionPost): Promise
 
 export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ threadId: string | null }> {
   try {
+    if (!run.discordUserId) {
+      return { threadId: null }
+    }
+
     const response = await syncSubmissionThread({
       submission_id: run.submission_uuid,
       state: "approved",
@@ -437,10 +441,10 @@ export async function syncDiscordMembersOnScoreChange(players: Array<{ playerUui
 
     const placeholders = uniquePlayers.map(() => "?").join(",")
     const { results } = await env.wasans.prepare(
-      `SELECT uuid, player_id, score, player_name, account_status FROM players WHERE uuid IN (${placeholders})`
+      `SELECT uuid, player_id, score, player_name, account_status, auth_provider FROM players WHERE uuid IN (${placeholders})`
     )
       .bind(...uniquePlayers.map((entry) => entry.playerUuid))
-      .all<{ uuid: string; player_id: string; score: number; player_name: string; account_status?: string | null }>()
+      .all<{ uuid: string; player_id: string; score: number; player_name: string; account_status?: string | null; auth_provider?: string | null }>()
 
     const rowByUuid = new Map((results || []).map((row) => [row.uuid, row]))
     const items: BatchRequestItem[] = []
@@ -448,7 +452,9 @@ export async function syncDiscordMembersOnScoreChange(players: Array<{ playerUui
 
     for (const { playerUuid, oldScore } of uniquePlayers) {
       const row = rowByUuid.get(playerUuid)
-      if (!row || (row.account_status || "active") !== "active") {
+      // Google-only players have no Discord identity to sync a nickname/role
+      // for or DM -- there is nothing meaningful to send the bot.
+      if (!row || (row.account_status || "active") !== "active" || row.auth_provider !== "discord") {
         continue
       }
 

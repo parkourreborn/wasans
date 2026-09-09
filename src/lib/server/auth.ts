@@ -6,6 +6,7 @@ export type AuthUser = {
   player_id: string
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   player_name: string
   score: number
   permission: number
@@ -31,6 +32,7 @@ export async function loadAuthUserByUuid(
             COALESCE(oauth_accounts.provider_account_id, players.player_id) AS player_id,
             players.discord_avatar,
             players.discord_discriminator,
+            players.auth_provider,
             players.player_name,
             players.score,
             players.permission

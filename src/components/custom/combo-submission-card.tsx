@@ -16,6 +16,7 @@ type ComboSubmissionCardProps = {
   playerId?: string | null
   playerDiscordAvatar?: string | null
   playerDiscordDiscriminator?: string | null
+  playerAuthProvider?: string | null
   dateText: string
   state: string
   moderatorNote?: string | null
@@ -35,6 +36,7 @@ export function ComboSubmissionCard({
   playerId,
   playerDiscordAvatar,
   playerDiscordDiscriminator,
+  playerAuthProvider,
   dateText,
   state,
   moderatorNote,
@@ -94,6 +96,7 @@ export function ComboSubmissionCard({
                   discordId={playerId}
                   discordAvatar={playerDiscordAvatar}
                   discordDiscriminator={playerDiscordDiscriminator}
+                  authProvider={playerAuthProvider}
                 />
               </Link>
               <Link

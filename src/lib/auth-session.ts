@@ -21,6 +21,7 @@ export type AuthSessionUser = {
   permission: number
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
 }
 
 export type AuthStatus =
