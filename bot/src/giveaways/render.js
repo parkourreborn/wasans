@@ -15,12 +15,6 @@ const COLOR_BY_STATUS = {
     closed: 0x99aaab,
 };
 
-const STATUS_LABEL = {
-    active: '🟢 Active',
-    won: '🏆 Winners drawn',
-    closed: '🔒 Closed',
-};
-
 export function buildGiveawayJoinCustomId(giveawayUuid) {
     return `${CUSTOM_ID_PREFIX}:${ACTION_JOIN}:${giveawayUuid}`;
 }
@@ -50,7 +44,6 @@ export function buildGiveawayEmbed(giveaway) {
 
     const endsTimestamp = Math.floor(Number(giveaway.ends_at) || 0);
     const fields = [
-        { name: 'Status', value: STATUS_LABEL[giveaway.status] ?? giveaway.status, inline: true },
         { name: 'Entries', value: String(giveaway.entry_count ?? 0), inline: true },
         { name: 'Winner slots', value: String(giveaway.max_winners ?? 1), inline: true },
         {
@@ -95,6 +88,7 @@ export function buildGiveawayComponents(giveaway) {
 
 export function buildGiveawayMessage(giveaway) {
     return {
+        content: "<@&1547071463012565034>",
         embeds: [buildGiveawayEmbed(giveaway)],
         components: buildGiveawayComponents(giveaway),
     };
