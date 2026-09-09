@@ -528,9 +528,13 @@ export type GiveawaySyncPayload = {
   ends_at: number
   status: "active" | "won" | "closed"
   entry_count: number
-  winners: Array<{ player_name: string; claimed: boolean }>
+  winners: Array<{ player_name: string; discord_user_id: string | null; claimed: boolean }>
   discord_channel_id: string | null
   discord_message_id: string | null
+  // True only when this sync follows a fresh draw or reroll -- tells the bot
+  // to post a "Congratulations" reply to the embed announcing the winners,
+  // rather than just updating the embed silently (every other mutation).
+  announce_winners: boolean
 }
 
 type GiveawaySyncResponse = BotApiResponse & {
