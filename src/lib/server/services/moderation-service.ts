@@ -3,7 +3,7 @@ import calculateScore from "@/lib/calc-score"
 import type { TrialName } from "@/lib/trials"
 import type { AuthUser } from "@/lib/server/auth"
 import { canDeleteTrialSubmission, canModerate, PERMISSION_JUNIOR_MODERATOR } from "@/lib/server/auth"
-import { secretsMatch } from "@/lib/constant-time"
+import { isBotApiRequest } from "@/lib/server/bot-auth"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
 import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
@@ -107,31 +107,6 @@ function withSubmittedPb(pbs: ScorePbRow[], trialName: string, time: number) {
   rowsByTrial.set(trial, { trial_name: trial, time })
 
   return [...rowsByTrial.values()]
-}
-
-function getBotApiKeyFromRequest(request: Request) {
-  const authorization = request.headers.get("authorization")
-
-  if (authorization?.startsWith("Bearer ")) {
-    return authorization.slice("Bearer ".length).trim()
-  }
-
-  return request.headers.get("x-api-key")?.trim()
-    || request.headers.get("x-bot-api-key")?.trim()
-    || null
-}
-
-function isBotApiRequest(request: Request, env: CloudflareEnv) {
-  const providedKey = getBotApiKeyFromRequest(request)
-  const expectedKey = String(
-    (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).botApiKey
-    || (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).BOT_API_KEY
-    || process.env.botApiKey
-    || process.env.BOT_API_KEY
-    || ""
-  ).trim()
-
-  return secretsMatch(providedKey || "", expectedKey)
 }
 
 function normalizeDiscordId(value: unknown) {
