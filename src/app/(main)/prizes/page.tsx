@@ -4,6 +4,8 @@ import * as React from "react"
 import Link from "next/link"
 import { apiV2 } from "@/lib/api"
 import { useAuthSession } from "@/components/custom/use-auth-session"
+import { GiveawaysSection } from "@/components/custom/giveaways-section"
+import { PrizesSection } from "@/components/custom/prizes-section"
 import { ErrorState, PageHeader, PageShell, SectionCard } from "@/components/custom/page-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -126,7 +128,8 @@ function WinnerList({ winners }: { winners: Array<{ uuid: string; player_uuid: s
 }
 
 export default function PrizesPage() {
-  const { status } = useAuthSession()
+  const { status, user } = useAuthSession()
+  const isOwner = (user?.permission ?? 0) >= 4
   const [filter, setFilter] = React.useState<"active" | "history">("active")
   const [prizes, setPrizes] = React.useState<PrizeWithWinners[]>([])
   const [giveaways, setGiveaways] = React.useState<GiveawayWithDetails[]>([])
@@ -341,6 +344,17 @@ export default function PrizesPage() {
               </div>
             )}
           </SectionCard>
+
+          {isOwner ? (
+            <>
+              <div className="space-y-1 pt-4">
+                <h2 className="text-lg font-semibold tracking-tight">Manage</h2>
+                <p className="text-sm text-muted-foreground">Owner-only controls for prizes and giveaways.</p>
+              </div>
+              <PrizesSection />
+              <GiveawaysSection />
+            </>
+          ) : null}
         </>
       )}
     </PageShell>
