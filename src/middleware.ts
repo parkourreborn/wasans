@@ -47,7 +47,7 @@ const cspDirectives = [
   // else, and nothing may post a form off-site.
   "frame-src 'none'",
   "frame-ancestors 'none'",
-  "form-action 'self' https://discord.com",
+  "form-action 'self' https://discord.com https://accounts.google.com",
   "base-uri 'self'",
   "object-src 'none'",
   "upgrade-insecure-requests",

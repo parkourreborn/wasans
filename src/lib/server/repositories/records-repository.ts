@@ -8,6 +8,7 @@ export async function listWorldRecords(db: D1Database) {
        players.player_id,
        players.discord_avatar,
        players.discord_discriminator,
+       players.auth_provider,
        submissions.moderator_note,
        submissions.moderator_username
      FROM wrs
@@ -27,7 +28,8 @@ export async function getWorldRecordHistory(db: D1Database, trialName: string) {
        players.score AS player_score,
        players.player_id,
        players.discord_avatar,
-       players.discord_discriminator
+       players.discord_discriminator,
+       players.auth_provider
      FROM submissions s
      LEFT JOIN players ON players.uuid = s.player_uuid
      WHERE s.trial_name = ?
@@ -63,7 +65,8 @@ export async function getWorldRecordHistoryAll(db: D1Database) {
        players.score AS player_score,
        players.player_id,
        players.discord_avatar,
-       players.discord_discriminator
+       players.discord_discriminator,
+       players.auth_provider
      FROM submissions s
      LEFT JOIN players ON players.uuid = s.player_uuid
      WHERE s.state = 'approved'
@@ -92,6 +95,7 @@ export async function getWorldRecordByTrial(db: D1Database, trialName: string) {
        players.player_id,
        players.discord_avatar,
        players.discord_discriminator,
+       players.auth_provider,
        submissions.moderator_note,
        submissions.moderator_username
      FROM wrs

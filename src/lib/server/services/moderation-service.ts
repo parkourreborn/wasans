@@ -485,7 +485,7 @@ export async function patchSubmission(
       const newRankName = getRankLabel(newPlayerScore)
       const rankChanged = oldRankName !== null && newRankName !== null && oldRankName !== newRankName
 
-      const notificationPlayerId = oldPlayer?.player_id ?? null
+      const notificationPlayerId = oldPlayer?.auth_provider === "discord" ? oldPlayer.player_id : null
 
       if (shouldNotifyModeratorOfChange({
         oldPlayerId: notificationPlayerId,
@@ -558,7 +558,7 @@ export async function patchSubmission(
           player_score: newPlayerScore,
           oldPlayerScore: playerScoreBefore,
           oldTime: updateOldTime,
-          discordUserId: String(oldPlayer?.player_id),
+          discordUserId: oldPlayer?.auth_provider === "discord" ? String(oldPlayer.player_id) : undefined,
           averageScoreChange,
           is_wr: submissionIsWr,
           previous_wr_submission_uuid: previousToShow?.submission_uuid,
@@ -592,13 +592,20 @@ export async function patchSubmission(
         player_score: newPlayerScore,
         oldPlayerScore: playerScoreBefore,
         oldTime: oldPb?.time,
-        discordUserId: String(oldPlayer?.player_id),
+        discordUserId: oldPlayer?.auth_provider === "discord" ? String(oldPlayer.player_id) : undefined,
         averageScoreChange,
         is_wr: submissionIsWr,
         previous_wr_submission_uuid: previousWrRow?.submission_uuid,
         previous_wr_time: previousWrRow?.time,
         previous_wr_player_name: previousWrRow?.player_name,
         previous_wr_thread_id: previousWrRow?.previous_thread_id ?? undefined,
+      }
+
+      if (!approvedRun.discordUserId) {
+        // No Discord identity to post a thread for (Google-only player) --
+        // expected, not a bot failure, so skip silently rather than raising
+        // reportMissingApprovedThread's "manual thread creation required" alarm.
+        return
       }
 
       const { threadId } = await postApprovedRun(approvedRun)
