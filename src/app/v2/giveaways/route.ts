@@ -1,6 +1,7 @@
 import { jsonError, validationError } from "@/lib/server/http"
 import { insertAuditLog } from "@/lib/server/audit"
 import { createGiveaway, GiveawayError, listGiveaways } from "@/lib/server/repositories/giveaway-repository"
+import { notifyGiveawayChanged } from "@/lib/server/services/giveaway-notify-service"
 import { bumpCacheGeneration, cacheKey, readThroughCache } from "@/lib/server/v2/cache"
 import { jsonOk, requireV2Owner, withV2Context } from "@/lib/server/v2/http"
 
@@ -45,6 +46,7 @@ export const POST = withV2Context(async (ctx) => {
       details: { title, max_winners: maxWinners, ends_at: endsAt },
     })
     await bumpCacheGeneration(ctx.cache)
+    ctx.ctx.waitUntil(notifyGiveawayChanged(ctx.db, giveaway.uuid))
 
     return jsonOk(giveaway, { status: 201, requestId: ctx.requestId })
   } catch (error) {

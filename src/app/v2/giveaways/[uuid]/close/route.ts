@@ -1,6 +1,7 @@
 import { jsonError } from "@/lib/server/http"
 import { insertAuditLog } from "@/lib/server/audit"
 import { closeGiveaway, GiveawayError } from "@/lib/server/repositories/giveaway-repository"
+import { notifyGiveawayChanged } from "@/lib/server/services/giveaway-notify-service"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 import { jsonOk, requireV2Owner, withV2Params } from "@/lib/server/v2/http"
 
@@ -12,6 +13,7 @@ export const POST = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
 
     await insertAuditLog(ctx.db, "giveaway_closed", "giveaway", uuid, { actor: user })
     await bumpCacheGeneration(ctx.cache)
+    ctx.ctx.waitUntil(notifyGiveawayChanged(ctx.db, uuid))
 
     return jsonOk(giveaway, { requestId: ctx.requestId })
   } catch (error) {
