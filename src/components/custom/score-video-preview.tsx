@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useSettings } from "@/components/custom/settings-provider"
+import { apiV2 } from "@/lib/api"
+import { captureVideoFrameFromUrl } from "@/lib/video-thumbnail"
 
 type ScoreVideoPreviewProps = {
   submissionUuid: string
@@ -13,6 +15,35 @@ type ScoreVideoPreviewProps = {
 // the video permanently for the lifetime of this component; retrying a
 // couple times with a short delay covers that window without polling forever.
 const previewRetryDelaysMs = [2000, 5000]
+
+// Submissions occasionally never get a preview at all (the upload-time
+// capture can miss — closed tab, flaky network, an undecodable frame — see
+// the comment on the preview route). Nothing used to retry that, so those
+// submissions stayed thumbnail-less forever. Once retries above are
+// exhausted and we're genuinely falling back to the raw <video>, take the
+// chance to re-capture a frame from it and PUT it back — the preview route
+// accepts this from any signed-in viewer as long as no preview exists yet.
+// Deduped per submission per session so many instances of the same
+// submission (e.g. across lists) don't all attempt it at once.
+const repairAttempted = new Set<string>()
+
+async function repairMissingPreview(submissionUuid: string) {
+  if (repairAttempted.has(submissionUuid)) {
+    return
+  }
+  repairAttempted.add(submissionUuid)
+
+  const blob = await captureVideoFrameFromUrl(`https://assets.wasans.tully.sh/scores/${submissionUuid}.mp4`)
+  if (!blob) {
+    return
+  }
+
+  await fetch(apiV2(`/submissions/${submissionUuid}/preview`), {
+    method: "PUT",
+    headers: { "content-type": "image/jpeg" },
+    body: blob,
+  }).catch(() => {})
+}
 
 export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -36,6 +67,12 @@ export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
     observer.observe(container)
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    if (previewFailed) {
+      void repairMissingPreview(submissionUuid)
+    }
+  }, [previewFailed, submissionUuid])
 
   const handlePreviewError = () => {
     if (retryCount >= previewRetryDelaysMs.length) {

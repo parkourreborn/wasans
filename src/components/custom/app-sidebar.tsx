@@ -61,6 +61,7 @@ type AuditSummaryResponse = {
 
 const discordInviteUrl = "https://discord.gg/9pnRYDU6wg"
 const lastSeenErrorStorageKey = "wasans:last-seen-error-at"
+const lastSeenPrizeStorageKey = "wasans:last-seen-prize-at"
 
 function isRouteActive(pathname: string, href: string) {
   if (href === "/") {
@@ -181,6 +182,10 @@ export function AppSidebar() {
   const [lastSeenErrorAt, setLastSeenErrorAt] = useState<string | null>(() =>
     typeof window === "undefined" ? null : window.localStorage.getItem(lastSeenErrorStorageKey)
   )
+  const [latestPrizeAt, setLatestPrizeAt] = useState<string | null>(null)
+  const [lastSeenPrizeAt, setLastSeenPrizeAt] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : window.localStorage.getItem(lastSeenPrizeStorageKey)
+  )
 
   useEffect(() => {
     const updateLastSeen = () => {
@@ -194,6 +199,54 @@ export function AppSidebar() {
       window.removeEventListener("storage", updateLastSeen)
       window.removeEventListener("wasans:last-seen-error-updated", updateLastSeen)
     }
+  }, [])
+
+  useEffect(() => {
+    const updateLastSeen = () => {
+      setLastSeenPrizeAt(window.localStorage.getItem(lastSeenPrizeStorageKey))
+    }
+
+    window.addEventListener("storage", updateLastSeen)
+    window.addEventListener("wasans:last-seen-prize-updated", updateLastSeen)
+
+    return () => {
+      window.removeEventListener("storage", updateLastSeen)
+      window.removeEventListener("wasans:last-seen-prize-updated", updateLastSeen)
+    }
+  }, [])
+
+  useEffect(() => {
+    // Prizes/giveaways are public, unlike the audit log summary above, so
+    // this runs for every visitor regardless of login state.
+    const loadLatestPrizeActivity = async () => {
+      try {
+        const [prizesResponse, giveawaysResponse] = await Promise.all([
+          fetch(`${apiV2("/prizes")}?filter=active`, { cache: "no-store" }),
+          fetch(`${apiV2("/giveaways")}?filter=active`, { cache: "no-store" }),
+        ])
+        const prizesJson = (await prizesResponse.json()) as { data?: Array<{ created_at: number }> }
+        const giveawaysJson = (await giveawaysResponse.json()) as { data?: Array<{ created_at: number }> }
+
+        if (!prizesResponse.ok || !giveawaysResponse.ok) {
+          return
+        }
+
+        const createdTimestamps = [...(prizesJson.data || []), ...(giveawaysJson.data || [])].map(
+          (item) => item.created_at
+        )
+
+        if (createdTimestamps.length > 0) {
+          setLatestPrizeAt(String(Math.max(...createdTimestamps)))
+        }
+      } catch (err) {
+        console.error(err)
+      }
+    }
+
+    loadLatestPrizeActivity()
+    const interval = window.setInterval(loadLatestPrizeActivity, 60000)
+
+    return () => window.clearInterval(interval)
   }, [])
 
   useEffect(() => {
@@ -224,6 +277,7 @@ export function AppSidebar() {
   }, [user])
 
   const hasNewErrors = Boolean(latestErrorAt && (!lastSeenErrorAt || latestErrorAt > lastSeenErrorAt))
+  const hasNewPrizes = Boolean(latestPrizeAt && (!lastSeenPrizeAt || latestPrizeAt > lastSeenPrizeAt))
 
   const [pendingPrizeCandidates, setPendingPrizeCandidates] = useState(0)
 
@@ -266,7 +320,23 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarMenu>
             {primaryLinks.map((item) => (
-              <SidebarNavItem key={item.href} item={item} pathname={pathname} />
+              <SidebarNavItem
+                key={item.href}
+                item={item}
+                pathname={pathname}
+                leading={
+                  item.href === "/prizes" ? (
+                    <div className="relative">
+                      <GiftIcon className="shrink-0" />
+                      {hasNewPrizes && (
+                        <span className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-destructive ring-2 ring-sidebar">
+                          <OctagonAlertIcon className="size-2 text-destructive-foreground" />
+                        </span>
+                      )}
+                    </div>
+                  ) : undefined
+                }
+              />
             ))}
 
             <SidebarSeparator />
