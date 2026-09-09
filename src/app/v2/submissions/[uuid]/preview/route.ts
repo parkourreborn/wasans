@@ -17,6 +17,14 @@ function isValidSubmissionUuid(uuid: string) {
 // grab a frame from during that request — the client re-fetches the
 // now-hosted video right after the submission is created and PUTs the
 // captured frame here instead.
+//
+// That initial capture sometimes never lands (closed tab, flaky network, a
+// video the browser can't decode in time) and nothing used to retry it, so
+// affected submissions stayed thumbnail-less forever. score-video-preview.tsx
+// now opportunistically re-captures a frame from the hosted video and PUTs
+// it here whenever *any* signed-in viewer's browser renders the no-preview
+// fallback — so below, a non-owner/non-moderator is allowed through too, but
+// only to fill in a preview that doesn't exist yet, never to overwrite one.
 export const PUT = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   if (!isValidSubmissionUuid(uuid)) {
     return validationError("Invalid submission uuid", ctx.requestId)
@@ -36,9 +44,7 @@ export const PUT = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
     return jsonError("Submission was not found", 404, { code: "not_found", requestId: ctx.requestId })
   }
 
-  if (submission.player_uuid !== user.uuid && !canModerate(user)) {
-    return jsonError("You can only set a preview for your own submission", 403, { code: "forbidden", requestId: ctx.requestId })
-  }
+  const isOwnerOrModerator = submission.player_uuid === user.uuid || canModerate(user)
 
   const writeRate = await enforceRateLimit(ctx.db, getRateLimitKey(ctx.request, "v2:submissions:preview", user.uuid), {
     limit: 20,
@@ -56,6 +62,13 @@ export const PUT = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
 
   if (!ctx.env.SUBMISSION_VIDEOS) {
     return jsonError("Submission video bucket is not available", 500, { code: "internal_error", requestId: ctx.requestId })
+  }
+
+  if (!isOwnerOrModerator) {
+    const existingPreview = await ctx.env.SUBMISSION_VIDEOS.head(`scores/${uuid}-preview.jpg`)
+    if (existingPreview) {
+      return jsonError("You can only set a preview for your own submission", 403, { code: "forbidden", requestId: ctx.requestId })
+    }
   }
 
   const contentType = ctx.request.headers.get("content-type") || ""
