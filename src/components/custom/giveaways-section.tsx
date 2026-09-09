@@ -180,7 +180,7 @@ export function GiveawaysSection() {
   return (
     <SectionCard
       title="Giveaways"
-      description="A raffle with a fixed winner count and deadline. Any logged-in player can join once; drawing and rerolling are manual."
+      description="A raffle with a fixed winner count and deadline. Any logged-in player can join until the deadline, at which point winners are drawn automatically -- or you can draw early. Rerolling unclaimed winners is always manual."
     >
       <div className="space-y-3 rounded-lg border border-border p-3">
         <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
