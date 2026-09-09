@@ -12,6 +12,7 @@ const runRules = [
   "Alternative accounts are allowed ONLY if you are not ban evading.",
   "World-record runs must be submitted within an acceptable time after being recorded. Normal life delays (vacation, sleep) are acceptable. Gatekeeping or intentionally delaying submission is not acceptable.",
   "If a run is technically within the rules, but its trying to exploit a loophole, it may still be rejected.",
+  "Moderators can reject a score for any reason they want, without explanation."
 
 ]
 
@@ -29,6 +30,7 @@ const submissionRules = [
 const comboRules = [
   "The full clip must be shown starting from 0 combo all the way to the recorded combo count.",
   "Username must be visible, and the final combo count must be shown in chat (or on the profile page if chat doesn't post it).",
+  "Combos under 100k score will not be accepted."
 ]
 
 const applicationRules = [
