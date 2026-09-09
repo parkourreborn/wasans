@@ -14,6 +14,11 @@ const discordData = [
   "Your Discord avatar hash and discriminator, when Discord gives them to us",
 ]
 
+const googleData = [
+  "Your Google account ID",
+  "A display name we seed your player name from at signup, taken from your Google profile name",
+]
+
 const accountData = [
   "An internal player UUID we generate for you",
   "Your player name, score, permission level, and the date you joined",
@@ -24,7 +29,7 @@ const accountData = [
 
 const publicData = [
   "Your player profile: name, avatar, score, rank, and join date",
-  "Your Discord user ID, which the public API returns so the site can build your avatar image",
+  "Your account ID (your Discord user ID, or your Google account ID for a Google login), which the public API returns so the site can build your avatar image",
   "Your submissions: trial, time, state, and the moderator note and moderator name attached to them",
   "Your personal bests, any world records you hold, and the proof video for each run",
   "The link to the Discord thread for a submission, where one exists",
@@ -58,7 +63,7 @@ const userRights = [
 ]
 
 const localStorageItems = [
-  "Two cookies that keep you logged in, plus a couple of short-lived ones during the Discord login handshake",
+  "Two cookies that keep you logged in, plus a couple of short-lived ones during the Discord or Google login handshake",
   "Your sidebar and interface preferences",
   "Calculator inputs, cached leaderboard data, and the submission IDs you looked at recently, so the next/previous arrows work",
 ]
@@ -78,7 +83,7 @@ export default function PrivacyPage() {
             This site is run by <span className="font-medium text-foreground">the Wasans website operators and project maintainers</span> — a small group of people, not a company. There is no legal entity behind it yet, so this page will change if that ever changes.
           </p>
           <p>
-            For anything privacy-related — a question, a deletion request, or a copy of your data — email{" "}
+            For a copy of your data, use the <span className="font-medium text-foreground">Download my data</span> button in Settings — it is instant and does not require asking us. For anything else privacy-related — a question, a deletion request — email{" "}
             <a href={`mailto:${legalContactEmail}`} className="text-primary underline underline-offset-4">{legalContactEmail}</a>.
           </p>
         </div>
@@ -86,7 +91,7 @@ export default function PrivacyPage() {
 
       <SectionCard title="What Discord tells us">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
-          <p>When you log in, we ask Discord for its <span className="font-medium text-foreground">identify</span> scope and keep:</p>
+          <p>If you log in with Discord, we ask it for its <span className="font-medium text-foreground">identify</span> scope and keep:</p>
           <ul className="list-disc space-y-2 pl-5">
             {discordData.map((item) => (
               <li key={item}>{item}</li>
@@ -97,6 +102,25 @@ export default function PrivacyPage() {
           </p>
           <p>
             <span className="font-medium text-foreground">We do not store Discord&apos;s access or refresh tokens.</span> We use them once during login to ask Discord who you are, and then throw them away. Keeping them would mean holding credentials to your Discord account that we have no use for, so we do not.
+          </p>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="What Google tells us">
+        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            You can also log in with Google. If you do, we ask it for the <span className="font-medium text-foreground">openid</span> and <span className="font-medium text-foreground">profile</span> scopes only — we do not request, receive, or store your email address, and a Google login is its own independent account, not linked to any Discord account. We keep:
+          </p>
+          <ul className="list-disc space-y-2 pl-5">
+            {googleData.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <p>
+            <span className="font-medium text-foreground">We do not store Google&apos;s access or refresh tokens either</span>, for the same reason as Discord&apos;s: we use them once during login and then throw them away.
+          </p>
+          <p>
+            Because a Google-only account has no linked Discord account, the Discord-specific features described below — the submission thread post, moderation DMs, and rank-role/nickname sync — do not apply to it. There is nothing on the Discord side for us to post, DM, or sync.
           </p>
         </div>
       </SectionCard>
@@ -135,7 +159,7 @@ export default function PrivacyPage() {
             ))}
           </ul>
           <p>
-            Two things worth calling out, because they surprise people. Your <span className="font-medium text-foreground">Discord user ID is public</span> — anyone can read it from the API and look you up on Discord. And a proof video is reachable by its link from the moment it is uploaded, which means <span className="font-medium text-foreground">runs that are still pending, or that were denied, can still be watched by anyone with the link</span>. If you would rather a run not be seen at all, do not submit it.
+            Two things worth calling out, because they surprise people. Your <span className="font-medium text-foreground">account ID is public</span> — the API returns it for everyone, and for a Discord account that means anyone can look you up on Discord from it. And a proof video is reachable by its link from the moment it is uploaded, which means <span className="font-medium text-foreground">runs that are still pending, or that were denied, can still be watched by anyone with the link</span>. If you would rather a run not be seen at all, do not submit it.
           </p>
           <p>
             Public submissions, scores, and videos can stay up after you delete your account. They show as Deleted Account.
@@ -164,6 +188,9 @@ export default function PrivacyPage() {
 
       <SectionCard title="What we send to Discord">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            This section only applies if you logged in with Discord — a Google-only account has none of this happen.
+          </p>
           <p>
             Submitting a run posts it to our Discord server automatically, in a thread for that submission. The post includes your player name, your Discord user ID, the trial, and the time — so anyone who can see that channel can see your run before a moderator has touched it.
           </p>
@@ -209,7 +236,7 @@ export default function PrivacyPage() {
       <SectionCard title="Who else is involved">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">Discord</span> handles login and our community features. <span className="font-medium text-foreground">Cloudflare</span> hosts the site, the database, and the video storage. <span className="font-medium text-foreground">Medal</span> and similar proof providers are involved when you submit a link and we fetch the video from them.</p>
+            <span className="font-medium text-foreground">Discord</span> handles login and our community features. <span className="font-medium text-foreground">Google</span> handles login for accounts that choose to sign in that way. <span className="font-medium text-foreground">Cloudflare</span> hosts the site, the database, and the video storage. <span className="font-medium text-foreground">Medal</span> and similar proof providers are involved when you submit a link and we fetch the video from them.</p>
           <p>
             That is the complete list. We do not run ads, we do not use an analytics service, and we do not sell or share your data with anyone else.
           </p>
@@ -221,7 +248,7 @@ export default function PrivacyPage() {
 
       <SectionCard title="Where your data goes">
         <p className="text-sm leading-6 text-muted-foreground">
-          Discord, Cloudflare, and the proof providers all operate outside the EU and EEA, so your data leaves it. We rely on the transfer terms those companies publish for their own services; we are not in a position to negotiate our own with them.
+          Discord, Google, Cloudflare, and the proof providers all operate outside the EU and EEA, so your data leaves it. We rely on the transfer terms those companies publish for their own services; we are not in a position to negotiate our own with them.
         </p>
       </SectionCard>
 
@@ -233,7 +260,7 @@ export default function PrivacyPage() {
           <p>
             <span className="font-medium text-foreground">Deleting</span> is not reversible. You can do it in Settings, or email{" "}
             <a href={`mailto:${legalContactEmail}`} className="text-primary underline underline-offset-4">{legalContactEmail}</a>{" "}
-            and we will do it for you. It removes your Discord ID and avatar, the link to your Discord account, your IP records, and every login token you have, and it renames your public profile to Deleted Account.
+            and we will do it for you. It removes your account ID and avatar, the link to your Discord or Google account, your IP records, and every login token you have, and it renames your public profile to Deleted Account.
           </p>
           <p>
             What stays: your submissions, scores, PBs, WRs, proof videos, and the audit log entries about them, all attributed to Deleted Account. We keep those because pulling one player&apos;s runs out of a leaderboard rewrites everyone else&apos;s history too.
@@ -243,14 +270,14 @@ export default function PrivacyPage() {
 
       <SectionCard title="Age">
         <p className="text-sm leading-6 text-muted-foreground">
-          This site is not meant for children under 13. By logging in with Discord you are confirming you meet Discord&apos;s minimum age for your country, which is 13 in most places and higher in some.
+          This site is not meant for children under 13. By logging in with Discord or Google you are confirming you meet that provider&apos;s minimum age for your country, which is 13 in most places and higher in some.
         </p>
       </SectionCard>
 
       <SectionCard title="Your rights">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            You can browse the whole public site without logging in. If you do have an account, deactivation and deletion are both in Settings. Beyond that, email{" "}
+            You can browse the whole public site without logging in. If you do have an account, deactivation, deletion, and downloading a copy of your data are all in Settings. Beyond that, email{" "}
             <a href={`mailto:${legalContactEmail}`} className="text-primary underline underline-offset-4">{legalContactEmail}</a>{" "}
             and you can ask us to:
           </p>

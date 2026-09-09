@@ -8,6 +8,7 @@ type PlayerAvatarProps = {
   discordId?: string | null
   discordAvatar?: string | null
   discordDiscriminator?: string | null
+  authProvider?: string | null
   size?: "sm" | "default" | "lg"
   className?: string
 }
@@ -17,6 +18,7 @@ export function PlayerAvatar({
   discordId,
   discordAvatar,
   discordDiscriminator,
+  authProvider,
   size = "default",
   className,
 }: PlayerAvatarProps) {
@@ -24,6 +26,7 @@ export function PlayerAvatar({
     discordId,
     avatarHash: discordAvatar,
     discriminator: discordDiscriminator,
+    authProvider,
     size: 128,
   })
   const fallback = getNameInitials(playerName)

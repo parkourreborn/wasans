@@ -37,6 +37,7 @@ type ComboLeaderboardEntry = {
   player_id: string
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   player_name: string
   combo_count: number | null
   submission_uuid: string | null
@@ -267,6 +268,7 @@ export default function CombosLeaderboardPage() {
                         discordId={row.player_id}
                         discordAvatar={row.discord_avatar}
                         discordDiscriminator={row.discord_discriminator}
+                        authProvider={row.auth_provider}
                       />
                       <div className="min-w-0">
                         <Link

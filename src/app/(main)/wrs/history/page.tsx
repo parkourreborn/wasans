@@ -17,6 +17,7 @@ type Submission = {
   player_id?: string | null
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   trial_name: string
   player_name: string
   player_score: number
@@ -203,6 +204,7 @@ export default function WorldRecordHistoryPage() {
               playerId={record.player_id}
               playerDiscordAvatar={record.discord_avatar}
               playerDiscordDiscriminator={record.discord_discriminator}
+              playerAuthProvider={record.auth_provider}
               dateText={formatDate(record.date)}
               state="approved"
               moderatorNote={record.moderator_note}

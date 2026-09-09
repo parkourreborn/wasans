@@ -12,6 +12,7 @@ export type PlayerWithRankRow = {
   player_id: string
   discord_avatar?: string | null
   discord_discriminator?: string | null
+  auth_provider?: string | null
   player_name: string
   score: number
   permission: number
@@ -35,7 +36,7 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
     .first<{ count: number }>()
 
   const rows = await db.prepare(
-    `SELECT uuid, player_id, discord_avatar, discord_discriminator, player_name, score, permission, date_joined
+    `SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider, player_name, score, permission, date_joined
      FROM players
      ${whereSql}
      ORDER BY score DESC, player_name ASC
@@ -52,7 +53,7 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
 
 export async function getPlayerByUuid(db: D1Database, uuid: string) {
   return db.prepare(
-    `SELECT uuid, player_id, discord_avatar, discord_discriminator, player_name, score, permission, date_joined
+    `SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider, player_name, score, permission, date_joined
      FROM players
      WHERE uuid = ?
        AND COALESCE(account_status, 'active') != 'deactivated'`
@@ -63,6 +64,7 @@ export async function getPlayerByUuid(db: D1Database, uuid: string) {
       player_id: string
       discord_avatar?: string | null
       discord_discriminator?: string | null
+      auth_provider?: string | null
       player_name: string
       score: number
       permission: number

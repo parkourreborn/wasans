@@ -38,6 +38,7 @@ type ComboSubmission = {
   player_id: string | null
   discord_avatar: string | null
   discord_discriminator: string | null
+  auth_provider: string | null
 }
 
 type ComboSubmissionsResponse = {
@@ -306,6 +307,7 @@ function ComboSubmissionsPage() {
                   playerId={submission.player_id}
                   playerDiscordAvatar={submission.discord_avatar}
                   playerDiscordDiscriminator={submission.discord_discriminator}
+                  playerAuthProvider={submission.auth_provider}
                   dateText={formatDate(submission.date)}
                   state={submission.state}
                   moderatorNote={submission.moderator_note}

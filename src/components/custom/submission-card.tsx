@@ -15,6 +15,7 @@ type SubmissionCardProps = {
   playerId?: string | null
   playerDiscordAvatar?: string | null
   playerDiscordDiscriminator?: string | null
+  playerAuthProvider?: string | null
   dateText: string
   state: string
   isWr?: boolean
@@ -35,6 +36,7 @@ export function SubmissionCard({
   playerId,
   playerDiscordAvatar,
   playerDiscordDiscriminator,
+  playerAuthProvider,
   dateText,
   state,
   isWr = false,
@@ -88,6 +90,7 @@ export function SubmissionCard({
                     discordId={playerId}
                     discordAvatar={playerDiscordAvatar}
                     discordDiscriminator={playerDiscordDiscriminator}
+                    authProvider={playerAuthProvider}
                   />
                 </Link>
                 <Link
