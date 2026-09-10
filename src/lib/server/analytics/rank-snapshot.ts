@@ -24,22 +24,39 @@ export async function snapshotPlayerRanks(db: D1Database, snapshotDate: string =
     return 0
   }
 
-  const statements = rows.map((row) =>
+  await recordRankSnapshots(
+    db,
+    rows.map((row) => ({ playerUuid: row.player_uuid, rank: row.rank, score: row.score, snapshotDate }))
+  )
+
+  return rows.length
+}
+
+export type RankSnapshotEntry = { playerUuid: string; rank: number; score: number; snapshotDate: string }
+
+// Upserts an arbitrary batch of (player, date) rank rows -- used both for a
+// single day's live snapshot and for the backfill job's many historical
+// days at once. Upsert (rather than delete-then-insert) makes this
+// idempotent to re-run: a repeat backfill just overwrites the same dates.
+export async function recordRankSnapshots(db: D1Database, entries: RankSnapshotEntry[]) {
+  if (!entries.length) {
+    return
+  }
+
+  const statements = entries.map((entry) =>
     db
       .prepare(
         `INSERT INTO player_rank_snapshots (player_uuid, rank, score, snapshot_date)
          VALUES (?, ?, ?, ?)
          ON CONFLICT (player_uuid, snapshot_date) DO UPDATE SET rank = excluded.rank, score = excluded.score`
       )
-      .bind(row.player_uuid, row.rank, row.score, snapshotDate)
+      .bind(entry.playerUuid, entry.rank, entry.score, entry.snapshotDate)
   )
 
   const CHUNK_SIZE = 50
   for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
     await db.batch(statements.slice(i, i + CHUNK_SIZE))
   }
-
-  return rows.length
 }
 
 function todayUtc() {

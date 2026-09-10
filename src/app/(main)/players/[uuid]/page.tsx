@@ -344,6 +344,19 @@ export default function PlayerProfilePage() {
     window.localStorage.setItem(submissionUuidListKey, JSON.stringify(visibleSubmissionUuids))
   }, [filteredCombos, filteredPbs, filteredSubmissions, loading, mode, player])
 
+  // Activity heatmap day click: jump to the Submissions tab with that day's
+  // date pre-filled in the search box -- reuses the date substring search
+  // that tab already has, so it works the same whether the day had one
+  // submission or several. Pure string reformat (no Date object) to avoid
+  // any timezone drift between the heatmap's UTC day bucket and this page's
+  // local-time date search.
+  const handleSelectActivityDate = React.useCallback((isoDate: string) => {
+    const [year, month, day] = isoDate.split("-")
+    setMode("submissions")
+    setSearch(`${month}-${day}-${year}`)
+    document.getElementById("submissions-search")?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [])
+
   if (loading) {
     return (
       <PageShell>
@@ -458,9 +471,9 @@ export default function PlayerProfilePage() {
         </div>
       </div>
 
-      <PlayerAnalyticsSection playerUuid={player.uuid} />
+      <PlayerAnalyticsSection playerUuid={player.uuid} onSelectActivityDate={handleSelectActivityDate} />
 
-      <div className="sticky top-14 z-30 space-y-4 rounded-lg border border-border bg-background p-4 md:top-0">
+      <div id="submissions-search" className="sticky top-14 z-30 space-y-4 rounded-lg border border-border bg-background p-4 md:top-0">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <Input
             type="search"
