@@ -29,7 +29,7 @@ export const POST = withV2Context(async (ctx) => {
   for (const trial of trials) {
     await refreshWorldRecords(ctx.db, trial.name)
     await refreshPbsForTrial(ctx.db, trial.name)
-    await refreshScoresForTrial(ctx.db, trial.name, { discordUpdateMode: "changed" })
+    await refreshScoresForTrial(ctx.db, trial.name, { discordUpdateMode: "changed", historyReason: "trial_lifecycle" })
   }
 
   await bumpCacheGeneration(ctx.cache)

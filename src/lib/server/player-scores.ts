@@ -5,6 +5,7 @@ import { getRoleForScore, getRoleIndex, syncDiscordMembersOnScoreChange } from "
 import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
 import { validSubmissionSql } from "@/lib/server/trial-lifecycle"
 import { checkRankupPrizeCandidates, checkScoreReachedPrizeCandidates } from "@/lib/server/prize-candidate-checker"
+import { recordScoreHistory, type ScoreHistoryReason } from "@/lib/server/analytics/score-history"
 
 type BestSubmissionRow = {
   trial_name: TrialName
@@ -24,6 +25,7 @@ type DiscordUpdateMode = "none" | "changed" | "all"
 
 type RefreshPlayerScoreOptions = {
   discordUpdateMode?: DiscordUpdateMode
+  historyReason?: ScoreHistoryReason
 }
 
 type PlayerScoreRow = {
@@ -42,6 +44,7 @@ export async function refreshPlayerScores(
   options: RefreshPlayerScoreOptions = {}
 ) {
     const discordUpdateMode = options.discordUpdateMode ?? "changed"
+  const historyReason = options.historyReason ?? "manual_refresh"
 
   const uniquePlayerUuids = [...new Set(playerUuids.filter(Boolean))]
 
@@ -142,6 +145,14 @@ export async function refreshPlayerScores(
 
   if (updates.length > 0) {
     await db.batch(updates)
+  }
+
+  if (scoreChanges.length > 0) {
+    await recordScoreHistory(
+      db,
+      scoreChanges.map(({ playerUuid, newScore }) => ({ playerUuid, score: newScore })),
+      historyReason
+    )
   }
 
   // Runs for every score change this function makes, regardless of
