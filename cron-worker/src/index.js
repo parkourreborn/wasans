@@ -14,6 +14,7 @@
 const SWEEP_URL = "https://wasans.tully.sh/v2/admin/trials/sweep"
 const CLEANUP_URL = "https://wasans.tully.sh/v2/admin/maintenance/cleanup-expired"
 const GIVEAWAY_SWEEP_URL = "https://wasans.tully.sh/v2/admin/giveaways/sweep-expired"
+const RANK_SNAPSHOT_URL = "https://wasans.tully.sh/v2/admin/analytics/snapshot-ranks"
 
 // The per-minute "* * * * *" trigger only runs the giveaway sweep -- an
 // active giveaway needs to end within a minute of its deadline, not once a
@@ -27,6 +28,7 @@ export default {
 
     ctx.waitUntil(runSweep(env))
     ctx.waitUntil(runCleanup(env))
+    ctx.waitUntil(runRankSnapshot(env))
   },
 }
 
@@ -63,6 +65,24 @@ async function runCleanup(env) {
     }
   } catch (error) {
     console.error("Expired API state cleanup request failed:", error)
+  }
+}
+
+async function runRankSnapshot(env) {
+  try {
+    const response = await fetch(RANK_SNAPSHOT_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.CRON_SECRET}`,
+      },
+    })
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "")
+      console.error(`Rank snapshot failed: ${response.status} ${body}`)
+    }
+  } catch (error) {
+    console.error("Rank snapshot request failed:", error)
   }
 }
 

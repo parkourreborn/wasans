@@ -26,6 +26,8 @@ DROP TABLE IF EXISTS audit_logs;
 DROP TABLE IF EXISTS feature_flags;
 DROP TABLE IF EXISTS api_idempotency_keys;
 DROP TABLE IF EXISTS api_rate_limits;
+DROP TABLE IF EXISTS player_score_history;
+DROP TABLE IF EXISTS player_rank_snapshots;
 
 -- Players
 CREATE TABLE players (
@@ -497,3 +499,30 @@ CREATE TABLE api_rate_limits (
 );
 
 CREATE INDEX idx_api_rate_limits_window_start ON api_rate_limits(window_start);
+
+-- Analytics: one row per score-affecting event, written by
+-- refreshPlayerScores (src/lib/server/player-scores.ts).
+CREATE TABLE player_score_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  player_uuid TEXT NOT NULL,
+  score REAL NOT NULL,
+  reason TEXT NOT NULL,
+  recorded_at INTEGER NOT NULL,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_player_score_history_player_recorded ON player_score_history(player_uuid, recorded_at);
+
+-- Analytics: daily overall-rank snapshot, written once a day by a Cron
+-- Trigger job (src/app/v2/admin/analytics/snapshot-ranks/route.ts).
+CREATE TABLE player_rank_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  player_uuid TEXT NOT NULL,
+  rank INTEGER NOT NULL,
+  score REAL NOT NULL,
+  snapshot_date TEXT NOT NULL,
+  UNIQUE (player_uuid, snapshot_date),
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_player_rank_snapshots_player_date ON player_rank_snapshots(player_uuid, snapshot_date);

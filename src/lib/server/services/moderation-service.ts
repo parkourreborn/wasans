@@ -573,9 +573,9 @@ export async function patchSubmission(
       if (scoreRecalculationNeeded) {
         await refreshPlayerPbs(db, submission.player_uuid)
         if (shouldRefreshEveryone) {
-          await refreshScoresForTrial(db, submission.trial_name, { discordUpdateMode: "all" })
+          await refreshScoresForTrial(db, submission.trial_name, { discordUpdateMode: "all", historyReason: "wr_changed" })
         } else if (wasApproved || isApproved) {
-          await refreshPlayerScore(db, submission.player_uuid)
+          await refreshPlayerScore(db, submission.player_uuid, { historyReason: "submission" })
         }
       }
 
@@ -684,10 +684,10 @@ export async function deleteSubmission(
 
         // Only players with a PB on the affected trial can have had their
         // score change, so only refresh those instead of every player.
-        await refreshScoresForTrial(env.wasans, wrTrialName, { discordUpdateMode: "all" })
+        await refreshScoresForTrial(env.wasans, wrTrialName, { discordUpdateMode: "all", historyReason: "wr_changed" })
       } else {
         // For non-WR deletions, only refresh the deleting player's score
-        await refreshPlayerScore(env.wasans, submission.player_uuid)
+        await refreshPlayerScore(env.wasans, submission.player_uuid, { historyReason: "submission" })
       }
     } catch (error) {
       console.error("Background submission delete post-processing failed:", error)

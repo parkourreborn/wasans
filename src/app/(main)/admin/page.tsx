@@ -4,6 +4,7 @@ import * as React from "react"
 import { apiV2 } from "@/lib/api"
 import { SUBMISSION_BAN_REASON_MAX_LENGTH } from "@/lib/submission-bans"
 import { AnnouncementsSection } from "@/components/custom/admin/announcements-section"
+import { AdminAnalyticsOverview } from "@/components/custom/analytics/admin-analytics-overview"
 import { ErrorState, PageHeader, PageShell, SectionCard } from "@/components/custom/page-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -128,7 +129,7 @@ export default function AdminPage() {
   const [editingCategoryLabel, setEditingCategoryLabel] = React.useState("")
   const [draggedCategorySlug, setDraggedCategorySlug] = React.useState<string | null>(null)
 
-  const [maintenanceBusy, setMaintenanceBusy] = React.useState<"refresh" | "deduplicate" | null>(null)
+  const [maintenanceBusy, setMaintenanceBusy] = React.useState<"refresh" | "deduplicate" | "analytics-backfill" | null>(null)
 
   React.useEffect(() => {
     const loadAuth = async () => {
@@ -629,6 +630,22 @@ export default function AdminPage() {
       toast.success(`Removed ${json?.data?.deletedCount ?? 0} duplicate submission(s)`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to deduplicate submissions")
+    } finally {
+      setMaintenanceBusy(null)
+    }
+  }
+
+  const runAnalyticsBackfill = async () => {
+    setMaintenanceBusy("analytics-backfill")
+    try {
+      const response = await fetch(apiV2("/admin/analytics/backfill"), { method: "POST" })
+      const json = (await response.json().catch(() => null)) as { data?: { history_rows_written?: number } } | null
+      if (!response.ok) {
+        throw new Error(jsonErrorMessage(json, "Unable to backfill analytics history"))
+      }
+      toast.success(`Backfilled ${json?.data?.history_rows_written ?? 0} score history row(s)`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to backfill analytics history")
     } finally {
       setMaintenanceBusy(null)
     }
@@ -1135,6 +1152,8 @@ export default function AdminPage() {
         )}
       </SectionCard>
 
+      <AdminAnalyticsOverview />
+
       <SectionCard title="Maintenance" description="One-off tools for fixing data drift. Safe to run any time, but not something you'll need often.">
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button
@@ -1154,6 +1173,15 @@ export default function AdminPage() {
           >
             {maintenanceBusy === "deduplicate" ? <Spinner className="size-4" /> : null}
             Remove duplicate submissions
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={maintenanceBusy !== null}
+            onClick={runAnalyticsBackfill}
+          >
+            {maintenanceBusy === "analytics-backfill" ? <Spinner className="size-4" /> : null}
+            Backfill analytics history
           </Button>
         </div>
       </SectionCard>

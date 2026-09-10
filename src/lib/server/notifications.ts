@@ -98,6 +98,25 @@ export function getRoleIndex(roleId: string) {
   return sortedRankRoles.findIndex((rank) => rank.roleId === roleId)
 }
 
+// Used by the private player-analytics view to show "X score away from
+// [next rank]" -- reads the same thresholds getRoleForScore uses rather than
+// duplicating them, so the two can never drift apart.
+export function getNextRoleProgress(score: number) {
+  if (!Number.isFinite(score)) {
+    return null
+  }
+
+  const next = sortedRankRoles.find((rank) => rank.score > score)
+  if (!next) {
+    return null
+  }
+
+  return {
+    nextRoleName: roleNames[next.roleId] ?? next.roleId,
+    scoreNeeded: Number((next.score - score).toFixed(3)),
+  }
+}
+
 type SubmissionSyncPayload = {
   submission_id: string
   state: "pending" | "approved" | "denied"

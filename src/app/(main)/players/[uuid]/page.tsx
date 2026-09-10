@@ -9,6 +9,7 @@ import { TrialName, trials } from "@/lib/trials"
 import { formatPlayerScore } from "@/lib/player-score"
 import { SubmissionCard } from "@/components/custom/submission-card"
 import { ComboSubmissionCard } from "@/components/custom/combo-submission-card"
+import { PlayerAnalyticsSection } from "@/components/custom/analytics/player-analytics-section"
 import { ErrorState, PageShell, SubmissionList } from "@/components/custom/page-shell"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { Card, CardContent } from "@/components/ui/card"
@@ -456,6 +457,8 @@ export default function PlayerProfilePage() {
           </div>
         </div>
       </div>
+
+      <PlayerAnalyticsSection playerUuid={player.uuid} />
 
       <div className="sticky top-14 z-30 space-y-4 rounded-lg border border-border bg-background p-4 md:top-0">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
