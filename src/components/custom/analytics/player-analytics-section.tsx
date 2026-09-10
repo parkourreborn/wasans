@@ -49,7 +49,13 @@ function formatScoreDelta(value: number | null) {
   return `${sign}${value.toFixed(3)}`
 }
 
-export function PlayerAnalyticsSection({ playerUuid }: { playerUuid: string }) {
+export function PlayerAnalyticsSection({
+  playerUuid,
+  onSelectActivityDate,
+}: {
+  playerUuid: string
+  onSelectActivityDate?: (isoDate: string) => void
+}) {
   const session = useAuthSession()
   const [analytics, setAnalytics] = React.useState<AnalyticsResponse["data"] | null>(null)
   const [insights, setInsights] = React.useState<PrivateInsights | null>(null)
@@ -169,8 +175,8 @@ export function PlayerAnalyticsSection({ playerUuid }: { playerUuid: string }) {
         <RankHistoryChart rows={analytics.rank_history} />
       </SectionCard>
 
-      <SectionCard title="Activity" description="Approved submissions over the last 12 weeks">
-        <ActivityHeatmap days={analytics.activity_heatmap} />
+      <SectionCard title="Activity" description="Approved submissions over the last 12 weeks — click a day to see what was submitted">
+        <ActivityHeatmap days={analytics.activity_heatmap} onSelectDate={onSelectActivityDate} />
       </SectionCard>
 
       {analytics.trial_distributions.length > 0 && (

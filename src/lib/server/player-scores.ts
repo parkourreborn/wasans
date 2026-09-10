@@ -23,9 +23,19 @@ type PlayerRow = {
 
 type DiscordUpdateMode = "none" | "changed" | "all"
 
+// Per-player exception to the batch's default historyReason/submission --
+// used when one refreshPlayerScores call covers players whose score moved
+// for different reasons (e.g. a WR change: the new record holder gets
+// "wr_gained" with their own submission_uuid, everyone else gets the
+// batch's default "wr_affected").
+export type HistoryOverride = { reason: ScoreHistoryReason; submissionUuid?: string | null }
+
 type RefreshPlayerScoreOptions = {
   discordUpdateMode?: DiscordUpdateMode
   historyReason?: ScoreHistoryReason
+  historyTrialName?: string | null
+  historySubmissionUuid?: string | null
+  historyOverrides?: Map<string, HistoryOverride>
 }
 
 type PlayerScoreRow = {
@@ -45,6 +55,9 @@ export async function refreshPlayerScores(
 ) {
     const discordUpdateMode = options.discordUpdateMode ?? "changed"
   const historyReason = options.historyReason ?? "manual_refresh"
+  const historyTrialName = options.historyTrialName ?? null
+  const historySubmissionUuid = options.historySubmissionUuid ?? null
+  const historyOverrides = options.historyOverrides
 
   const uniquePlayerUuids = [...new Set(playerUuids.filter(Boolean))]
 
@@ -150,7 +163,16 @@ export async function refreshPlayerScores(
   if (scoreChanges.length > 0) {
     await recordScoreHistory(
       db,
-      scoreChanges.map(({ playerUuid, newScore }) => ({ playerUuid, score: newScore })),
+      scoreChanges.map(({ playerUuid, newScore }) => {
+        const override = historyOverrides?.get(playerUuid)
+        return {
+          playerUuid,
+          score: newScore,
+          reason: override?.reason ?? historyReason,
+          trialName: historyTrialName,
+          submissionUuid: override?.submissionUuid ?? historySubmissionUuid,
+        }
+      }),
       historyReason
     )
   }
@@ -241,5 +263,7 @@ export async function refreshScoresForTrial(
     return
   }
 
-  await refreshPlayerScores(db, playerUuids, options)
+  // Every caller already knows which trial triggered this batch -- default
+  // historyTrialName to it so call sites don't have to repeat themselves.
+  await refreshPlayerScores(db, playerUuids, { ...options, historyTrialName: options.historyTrialName ?? trialName })
 }

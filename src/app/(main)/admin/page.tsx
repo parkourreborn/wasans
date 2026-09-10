@@ -639,11 +639,15 @@ export default function AdminPage() {
     setMaintenanceBusy("analytics-backfill")
     try {
       const response = await fetch(apiV2("/admin/analytics/backfill"), { method: "POST" })
-      const json = (await response.json().catch(() => null)) as { data?: { history_rows_written?: number } } | null
+      const json = (await response.json().catch(() => null)) as {
+        data?: { history_rows_written?: number; rank_snapshot_days?: number }
+      } | null
       if (!response.ok) {
         throw new Error(jsonErrorMessage(json, "Unable to backfill analytics history"))
       }
-      toast.success(`Backfilled ${json?.data?.history_rows_written ?? 0} score history row(s)`)
+      const historyRows = json?.data?.history_rows_written ?? 0
+      const rankDays = json?.data?.rank_snapshot_days ?? 0
+      toast.success(`Backfilled ${historyRows} score history row(s) across ${rankDays} day(s) of rank history`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to backfill analytics history")
     } finally {
