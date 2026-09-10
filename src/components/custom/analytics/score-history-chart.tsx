@@ -2,8 +2,10 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { CartesianGrid, ComposedChart, Line, Scatter, XAxis, YAxis } from "recharts"
+import { CartesianGrid, ComposedChart, Line, ReferenceArea, Scatter, XAxis, YAxis } from "recharts"
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
+import { Button } from "@/components/ui/button"
+import { useChartZoom } from "@/components/custom/analytics/use-chart-zoom"
 
 export type ScoreHistoryReason = "pb" | "wr_gained" | "wr_affected" | "trial_lifecycle" | "manual_refresh" | "backfill"
 
@@ -107,6 +109,13 @@ export function ScoreHistoryChart({ rows }: { rows: ScoreHistoryRow[] }) {
       .filter((event) => DOT_REASONS.has(event.reason))
   }, [rows])
 
+  const lineData = React.useMemo<ScoreHistoryPoint[]>(
+    () => rows.map((row) => ({ date: row.recorded_at, score: row.score })),
+    [rows]
+  )
+
+  const zoom = useChartZoom(lineData)
+
   if (rows.length < 2) {
     return (
       <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
@@ -115,15 +124,24 @@ export function ScoreHistoryChart({ rows }: { rows: ScoreHistoryRow[] }) {
     )
   }
 
-  const lineData: ScoreHistoryPoint[] = rows.map((row) => ({ date: row.recorded_at, score: row.score }))
+  const visibleData = zoom.visibleData
+  const firstDate = visibleData[0].date
+  const lastDate = visibleData[visibleData.length - 1].date
 
   // Recharts clips scatter markers to the plot area; a point sitting exactly
   // on dataMin/dataMax renders half-clipped, which also makes its hit
   // target unreliable. Padding the domain keeps the first/last marker's
   // full circle (and click target) inside the plot.
-  const dateRange = lineData[lineData.length - 1].date - lineData[0].date
+  const dateRange = lastDate - firstDate
   const datePadding = Math.max(dateRange * 0.03, 3600)
-  const xDomain: [number, number] = [lineData[0].date - datePadding, lineData[lineData.length - 1].date + datePadding]
+  const xDomain: [number, number] = [firstDate - datePadding, lastDate + datePadding]
+
+  const visibleEvents = events.filter((event) => event.date >= firstDate && event.date <= lastDate)
+
+  const dragArea =
+    zoom.dragSelection && visibleData[zoom.dragSelection[0]] && visibleData[zoom.dragSelection[1]]
+      ? { x1: visibleData[zoom.dragSelection[0]].date, x2: visibleData[zoom.dragSelection[1]].date }
+      : null
 
   const handleEnter = (event: ScoreHistoryEvent, _index: number, mouseEvent: React.MouseEvent) => {
     const bounds = containerRef.current?.getBoundingClientRect()
@@ -139,8 +157,24 @@ export function ScoreHistoryChart({ rows }: { rows: ScoreHistoryRow[] }) {
 
   return (
     <div ref={containerRef} className="relative">
-      <ChartContainer config={chartConfig} className="aspect-auto h-40 w-full">
-        <ComposedChart data={lineData} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+      <div className="absolute top-0 right-0 z-10">
+        {zoom.isZoomed ? (
+          <Button type="button" variant="ghost" size="xs" onClick={zoom.resetZoom}>
+            Reset zoom
+          </Button>
+        ) : (
+          <span className="px-2.5 py-1 text-xs text-muted-foreground">Drag to zoom</span>
+        )}
+      </div>
+      <ChartContainer config={chartConfig} className="aspect-auto h-40 w-full select-none">
+        <ComposedChart
+          data={visibleData}
+          margin={{ top: 12, right: 8, left: 0, bottom: 0 }}
+          onMouseDown={zoom.handlers.onMouseDown}
+          onMouseMove={zoom.handlers.onMouseMove}
+          onMouseUp={zoom.handlers.onMouseUp}
+          onMouseLeave={zoom.handlers.onMouseLeave}
+        >
           <CartesianGrid vertical={false} strokeDasharray="3 3" />
           <XAxis
             dataKey="date"
@@ -151,6 +185,7 @@ export function ScoreHistoryChart({ rows }: { rows: ScoreHistoryRow[] }) {
             tickLine={false}
             axisLine={false}
             minTickGap={32}
+            allowDataOverflow
           />
           <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={36} domain={[0, "auto"]} />
           <Line
@@ -162,7 +197,7 @@ export function ScoreHistoryChart({ rows }: { rows: ScoreHistoryRow[] }) {
             isAnimationActive={false}
           />
           <Scatter
-            data={events}
+            data={visibleEvents}
             dataKey="score"
             shape={(props: unknown) => {
               const { cx, cy, payload } = props as { cx: number; cy: number; payload: ScoreHistoryEvent }
@@ -180,6 +215,9 @@ export function ScoreHistoryChart({ rows }: { rows: ScoreHistoryRow[] }) {
             }}
             isAnimationActive={false}
           />
+          {dragArea && (
+            <ReferenceArea x1={dragArea.x1} x2={dragArea.x2} fill="var(--chart-1)" fillOpacity={0.1} stroke="var(--chart-1)" strokeOpacity={0.3} />
+          )}
         </ComposedChart>
       </ChartContainer>
 
