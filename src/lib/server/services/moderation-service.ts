@@ -6,7 +6,7 @@ import { canDeleteTrialSubmission, canModerate, PERMISSION_JUNIOR_MODERATOR } fr
 import { isBotApiRequest } from "@/lib/server/bot-auth"
 import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
-import { refreshPlayerScore, refreshScoresForTrial } from "@/lib/server/player-scores"
+import { refreshPlayerScore, refreshScoresForTrial, type HistoryOverride } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
 import { refreshWorldRecords } from "@/lib/server/wrs"
 import { checkTrialWrPrizeCandidates } from "@/lib/server/prize-candidate-checker"
@@ -573,9 +573,25 @@ export async function patchSubmission(
       if (scoreRecalculationNeeded) {
         await refreshPlayerPbs(db, submission.player_uuid)
         if (shouldRefreshEveryone) {
-          await refreshScoresForTrial(db, submission.trial_name, { discordUpdateMode: "all", historyReason: "wr_changed" })
+          // Whoever currently holds the trial's WR (which may or may not be
+          // this submission -- a moderator edit/denial can demote it in
+          // favor of an existing submission) gets tagged "wr_gained"; every
+          // other player refreshed here just had their relative score moved
+          // by someone else's WR change, tagged "wr_affected".
+          const overrides: Map<string, HistoryOverride> | undefined = wrRow
+            ? new Map([[wrRow.player_uuid, { reason: "wr_gained", submissionUuid: wrRow.submission_uuid }]])
+            : undefined
+          await refreshScoresForTrial(db, submission.trial_name, {
+            discordUpdateMode: "all",
+            historyReason: "wr_affected",
+            historyOverrides: overrides,
+          })
         } else if (wasApproved || isApproved) {
-          await refreshPlayerScore(db, submission.player_uuid, { historyReason: "submission" })
+          await refreshPlayerScore(db, submission.player_uuid, {
+            historyReason: "pb",
+            historyTrialName: submission.trial_name,
+            historySubmissionUuid: updatedSubmission.uuid,
+          })
         }
       }
 
@@ -684,10 +700,24 @@ export async function deleteSubmission(
 
         // Only players with a PB on the affected trial can have had their
         // score change, so only refresh those instead of every player.
-        await refreshScoresForTrial(env.wasans, wrTrialName, { discordUpdateMode: "all", historyReason: "wr_changed" })
+        // Whoever now holds the trial's WR (possibly nobody) gets tagged
+        // "wr_gained"; everyone else refreshed here gets "wr_affected".
+        const overrides: Map<string, HistoryOverride> | undefined = newWr
+          ? new Map([[newWr.player_uuid, { reason: "wr_gained", submissionUuid: newWr.submission_uuid }]])
+          : undefined
+        await refreshScoresForTrial(env.wasans, wrTrialName, {
+          discordUpdateMode: "all",
+          historyReason: "wr_affected",
+          historyOverrides: overrides,
+        })
       } else {
-        // For non-WR deletions, only refresh the deleting player's score
-        await refreshPlayerScore(env.wasans, submission.player_uuid, { historyReason: "submission" })
+        // For non-WR deletions, only refresh the deleting player's score --
+        // no submission_uuid to link to since the triggering submission was
+        // just deleted.
+        await refreshPlayerScore(env.wasans, submission.player_uuid, {
+          historyReason: "pb",
+          historyTrialName: submission.trial_name,
+        })
       }
     } catch (error) {
       console.error("Background submission delete post-processing failed:", error)

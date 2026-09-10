@@ -501,17 +501,24 @@ CREATE TABLE api_rate_limits (
 CREATE INDEX idx_api_rate_limits_window_start ON api_rate_limits(window_start);
 
 -- Analytics: one row per score-affecting event, written by
--- refreshPlayerScores (src/lib/server/player-scores.ts).
+-- refreshPlayerScores (src/lib/server/player-scores.ts). trial_name +
+-- submission_uuid identify what caused the change (for score-chart dots and
+-- linking back to the submission); source distinguishes rows written by the
+-- backfill job from rows written by live tracking, independent of reason.
 CREATE TABLE player_score_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   player_uuid TEXT NOT NULL,
   score REAL NOT NULL,
   reason TEXT NOT NULL,
   recorded_at INTEGER NOT NULL,
+  trial_name TEXT,
+  submission_uuid TEXT,
+  source TEXT NOT NULL DEFAULT 'live',
   FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_player_score_history_player_recorded ON player_score_history(player_uuid, recorded_at);
+CREATE INDEX idx_player_score_history_source ON player_score_history(source);
 
 -- Analytics: daily overall-rank snapshot, written once a day by a Cron
 -- Trigger job (src/app/v2/admin/analytics/snapshot-ranks/route.ts).
