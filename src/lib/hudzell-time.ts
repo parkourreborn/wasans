@@ -4,8 +4,10 @@ const SCALE = 1000
 const DECIMAL_PATTERN = /^([+-]?)(\d*)(?:\.(\d*))?$/
 
 // "down" rounds toward negative infinity, "up" toward positive infinity, so
-// -0.0035 rounds up to -0.003 and down to -0.004.
-export type RoundingMode = "down" | "up"
+// -0.0035 rounds up to -0.003 and down to -0.004. "nearest" rounds to the
+// closest thousandth, ties going away from zero (0.0005 -> 0.001, -0.0005
+// -> -0.001).
+export type RoundingMode = "down" | "up" | "nearest"
 
 // Times arrive as decimal strings and are rounded as strings, because scaling
 // by 1000 in binary floating point misplaces values that look exact: 1.005 *
@@ -41,6 +43,14 @@ export function roundToThousandths(raw: string, mode: RoundingMode): number | nu
     return truncated
   }
 
+  if (mode === "nearest") {
+    const roundsAway = Number(dropped[0]) >= 5
+    if (!roundsAway) {
+      return truncated
+    }
+    return negative ? truncated - 1 : truncated + 1
+  }
+
   if (mode === "down" && negative) {
     return truncated - 1
   }
@@ -66,13 +76,14 @@ export type HudzellCalculation = {
   final: number | null
 }
 
-// The finish time rounds down and the pain rounds up, so the final time is
-// never flattered by rounding. A blank pain field counts as zero, which keeps
-// the calculator useful the moment a finish time is typed; a blank or
-// malformed finish time yields no result at all.
+// The finish time rounds down, so it's never flattered by rounding; the pain
+// rounds to the nearest thousandth, since it's read off the console as-is
+// rather than rounded in the runner's favor. A blank pain field counts as
+// zero, which keeps the calculator useful the moment a finish time is typed;
+// a blank or malformed finish time yields no result at all.
 export function calculateFinalTime(finishInput: string, painInput: string): HudzellCalculation {
   const finish = roundToThousandths(finishInput, "down")
-  const pain = painInput.trim() === "" ? 0 : roundToThousandths(painInput, "up")
+  const pain = painInput.trim() === "" ? 0 : roundToThousandths(painInput, "nearest")
 
   return {
     finish,
