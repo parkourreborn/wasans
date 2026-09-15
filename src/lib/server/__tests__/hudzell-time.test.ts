@@ -19,12 +19,13 @@ test("a finish time rounds down to three decimals", () => {
   assert.equal(roundToThousandths("7.1", "down"), 7100)
 })
 
-test("hudzell pain rounds up to three decimals, toward positive infinity on both signs", () => {
-  assert.equal(roundToThousandths("0.0019", "up"), 2)
-  assert.equal(roundToThousandths("0.0011", "up"), 2)
-  assert.equal(roundToThousandths("-0.0035", "up"), -3)
-  assert.equal(roundToThousandths("-0.0039", "up"), -3)
-  assert.equal(roundToThousandths("0.002", "up"), 2)
+test("hudzell pain rounds to the nearest thousandth, ties away from zero on both signs", () => {
+  assert.equal(roundToThousandths("0.0019", "nearest"), 2)
+  assert.equal(roundToThousandths("0.0011", "nearest"), 1)
+  assert.equal(roundToThousandths("0.0015", "nearest"), 2)
+  assert.equal(roundToThousandths("-0.0035", "nearest"), -4)
+  assert.equal(roundToThousandths("-0.0031", "nearest"), -3)
+  assert.equal(roundToThousandths("0.002", "nearest"), 2)
 })
 
 test("rounding down goes the other way on negatives", () => {
@@ -55,10 +56,10 @@ test("thousandths format back to a padded three-decimal string", () => {
   assert.equal(formatThousandths(0), "0.000")
 })
 
-test("the final time is the rounded-down finish minus the rounded-up pain", () => {
+test("the final time is the rounded-down finish minus the nearest-rounded pain", () => {
   assert.equal(finalTimeOf("7.1234", "0.0019"), "7.121")
   assert.equal(finalTimeOf("12.9999", "0.5"), "12.499")
-  assert.equal(finalTimeOf("7.1234", "-0.0035"), "7.126")
+  assert.equal(finalTimeOf("7.1234", "-0.0035"), "7.127")
 })
 
 test("a blank pain field subtracts nothing", () => {

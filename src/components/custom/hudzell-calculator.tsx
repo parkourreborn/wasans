@@ -80,9 +80,9 @@ function Operator({ children }: { children: React.ReactNode }) {
 // Recreates the in-game correction from the rules FAQ: when a run does not
 // beat its personal best the final time never appears on screen, so players
 // read the timer and the "hudzell's great pain reduced your time by" console
-// line and work out the real time themselves. Rounding is deliberately
-// asymmetric — the finish time down, the pain up — so the arithmetic can
-// never round a run into looking faster than it was.
+// line and work out the real time themselves. The finish time rounds down
+// so the arithmetic never rounds a run into looking faster than it was; the
+// pain rounds to the nearest thousandth, matching what the console reports.
 export function HudzellCalculator({ className }: { className?: string }) {
   const [finishTime, setFinishTime] = React.useState("")
   const [hudzellPain, setHudzellPain] = React.useState("")
@@ -100,7 +100,7 @@ export function HudzellCalculator({ className }: { className?: string }) {
           Hudzell calculator
         </h2>
         <p className="text-xs text-muted-foreground">
-          Finish time rounds down, pain rounds up
+          Finish time rounds down, pain rounds to the nearest thousandth
         </p>
       </div>
 
@@ -120,10 +120,10 @@ export function HudzellCalculator({ className }: { className?: string }) {
         <TimeField
           id="hudzell-pain"
           label="Hudzell Pain"
-          hint="The value from the hudzell's great pain console line. Rounded up to three decimals."
+          hint="The value from the hudzell's great pain console line. Rounded to three decimals."
           value={hudzellPain}
           draftPattern={PAIN_DRAFT}
-          mode="up"
+          mode="nearest"
           onChange={setHudzellPain}
         />
 
