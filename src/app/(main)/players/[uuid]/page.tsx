@@ -471,8 +471,6 @@ export default function PlayerProfilePage() {
         </div>
       </div>
 
-      <PlayerAnalyticsSection playerUuid={player.uuid} onSelectActivityDate={handleSelectActivityDate} />
-
       <div id="submissions-search" className="sticky top-14 z-30 space-y-4 rounded-lg border border-border bg-background p-4 md:top-0">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <Input
@@ -585,6 +583,8 @@ export default function PlayerProfilePage() {
           </div>
         )}
       </SubmissionList>
+
+      <PlayerAnalyticsSection playerUuid={player.uuid} onSelectActivityDate={handleSelectActivityDate} />
     </PageShell>
   )
 }
