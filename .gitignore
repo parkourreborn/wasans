@@ -52,3 +52,6 @@ next-env.d.ts
 .dev.vars*
 !.dev.vars.example
 !.env.example
+
+# Claude Code per-machine settings
+.claude/settings.local.json
