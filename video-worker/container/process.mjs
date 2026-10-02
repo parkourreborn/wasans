@@ -52,7 +52,11 @@ async function probe(file) {
 
   const info = JSON.parse(output)
   const streams = info.streams || []
-  const video = streams.find((stream) => stream.codec_type === "video" && stream.width && stream.height)
+  // Cover art ("attached picture") is a still image some muxers list as a
+  // video stream, sometimes before the real one.
+  const video = streams.find(
+    (stream) => stream.codec_type === "video" && stream.width && stream.height && !stream.disposition?.attached_pic
+  )
   if (!video) {
     throw new PermanentError("The file has no video track.")
   }
@@ -70,6 +74,14 @@ async function probe(file) {
   const duration = Number(video.duration) || Number(info.format?.duration) || 0
   const videoBitrate = Number(video.bit_rate) || Number(info.format?.bit_rate) || 0
 
+  // ffmpeg only shifts timestamps by the file's earliest stream, so a video
+  // track that starts after its audio (or after an empty edit) keeps that
+  // offset. Players then show black until it "starts", and filters that
+  // work on timestamps misbehave. See transcode().
+  const formatStart = Number(info.format?.start_time) || 0
+  const videoStart = Number(video.start_time) || formatStart
+  const audioStart = audio ? Number(audio.start_time) || formatStart : null
+
   return {
     formatName: String(info.format?.format_name || ""),
     videoCodec: video.codec_name,
@@ -81,6 +93,10 @@ async function probe(file) {
     duration,
     videoBitrate,
     audioCodec: audio?.codec_name ?? null,
+    videoIndex: video.index,
+    audioIndex: audio?.index ?? null,
+    videoOffset: Math.max(0, videoStart - formatStart),
+    audioSkew: audioStart === null ? 0 : Math.abs(audioStart - videoStart),
   }
 }
 
@@ -107,15 +123,20 @@ function canRemux(info) {
     info.fps > 0 &&
     info.fps <= MAX_FPS + 0.5 &&
     (info.videoBitrate === 0 || info.videoBitrate <= MAX_REMUX_VIDEO_BITRATE) &&
-    (info.audioCodec === null || info.audioCodec === "aac")
+    (info.audioCodec === null || info.audioCodec === "aac") &&
+    // A copy keeps the original timestamps, so only remux when the video
+    // already starts at the beginning, with audio alongside it.
+    info.videoOffset <= 0.1 &&
+    info.audioSkew <= 0.1
   )
 }
 
-async function remux(source, output) {
+async function remux(source, info, output) {
   await run("ffmpeg", [
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", source,
-    "-map", "0:v:0", "-map", "0:a:0?",
+    "-map", `0:${info.videoIndex}`,
+    ...(info.audioIndex === null ? [] : ["-map", `0:${info.audioIndex}`]),
     "-c", "copy",
     "-movflags", "+faststart",
     output,
@@ -124,17 +145,26 @@ async function remux(source, output) {
 
 async function transcode(source, info, output) {
   const target = targetSize(info.width, info.height)
-  const filters = [`scale=${target.width}:${target.height}:flags=lanczos`, "format=yuv420p"]
+  // Re-base to 0 (see probe); audio is shifted by the same amount so it
+  // stays in sync, trimmed before the video starts and padded with
+  // silence if it starts later.
+  const filters = ["setpts=PTS-STARTPTS", `scale=${target.width}:${target.height}:flags=lanczos`, "format=yuv420p"]
   // Keep the source frame rate; only high-refresh recordings get capped.
   if (info.fps > MAX_FPS + 0.5) {
-    filters.unshift(`fps=${MAX_FPS}`)
+    filters.splice(1, 0, `fps=${MAX_FPS}`)
   }
   const gop = Math.round(Math.min(info.fps || MAX_FPS, MAX_FPS) * 2)
 
   await run("ffmpeg", [
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", source,
-    "-map", "0:v:0", "-map", "0:a:0?",
+    "-map", `0:${info.videoIndex}`,
+    ...(info.audioIndex === null
+      ? []
+      : [
+          "-map", `0:${info.audioIndex}`,
+          "-af", `asetpts=PTS-${info.videoOffset.toFixed(6)}/TB,atrim=start=0,aresample=48000:async=1:first_pts=0`,
+        ]),
     "-vf", filters.join(","),
     "-c:v", "libx264",
     "-preset", process.env.X264_PRESET || "medium",
@@ -307,7 +337,7 @@ async function main(job) {
   }
 
   if (mode === "remux") {
-    await remux(source, output)
+    await remux(source, info, output)
   } else {
     await transcode(source, info, output)
   }
