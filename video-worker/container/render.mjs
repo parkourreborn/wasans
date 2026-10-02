@@ -65,19 +65,30 @@ async function reportStatus(jobId, update) {
 }
 
 async function probe(file) {
-  const output = await run("ffprobe", [
-    "-v", "error",
-    "-show_entries", "stream=codec_type,duration:format=duration",
-    "-of", "json",
-    file,
-  ])
+  const output = await run("ffprobe", ["-v", "error", "-show_streams", "-show_format", "-of", "json", file])
   const info = JSON.parse(output)
   const streams = info.streams || []
-  const video = streams.find((stream) => stream.codec_type === "video")
-  const hasAudio = streams.some((stream) => stream.codec_type === "audio")
+  // Skip cover art ("attached picture" streams): a still image that some
+  // muxers list as a video stream, sometimes before the real one.
+  const video = streams.find((stream) => stream.codec_type === "video" && !stream.disposition?.attached_pic)
+  const audio = streams.find((stream) => stream.codec_type === "audio")
   const duration = Number(video?.duration) || Number(info.format?.duration) || 0
 
-  return { hasVideo: Boolean(video), hasAudio, duration }
+  // ffmpeg only shifts timestamps by the file's *earliest* stream, so a
+  // video track that starts after its audio (or after an empty edit) keeps
+  // that offset into the filtergraph. Measured here so the clip can be
+  // re-based to 0 with audio kept in sync (see renderClip).
+  const formatStart = Number(info.format?.start_time) || 0
+  const videoOffset = Math.max(0, (Number(video?.start_time) || formatStart) - formatStart)
+
+  return {
+    hasVideo: Boolean(video),
+    hasAudio: Boolean(audio),
+    videoIndex: video?.index ?? null,
+    audioIndex: audio?.index ?? null,
+    duration,
+    videoOffset,
+  }
 }
 
 // Geist (the site font) has no Hangul/CJK glyphs, and drawtext has no font
@@ -158,7 +169,11 @@ async function renderClip(index, source, label, heldFor, output) {
   const labelFile = await writeTextFile(`label-${index}`, label)
   const heldForFile = heldFor ? await writeTextFile(`held-${index}`, heldFor) : null
 
+  // The fades work on frame timestamps, so they must start at 0. A video
+  // track that started late used to keep its offset here, which put every
+  // frame past the fade-out: the whole clip rendered black.
   const videoFilter = [
+    "setpts=PTS-STARTPTS",
     `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease:flags=lanczos`,
     `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black`,
     "setsar=1",
@@ -171,7 +186,12 @@ async function renderClip(index, source, label, heldFor, output) {
   ].join(",")
 
   const audioFilter = [
-    `aresample=${AUDIO_RATE}`,
+    // Shift audio by the same offset the video was re-based by, so they
+    // stay in sync; drop audio from before the video starts, and pad
+    // silence if the audio starts after it.
+    `asetpts=PTS-${info.videoOffset.toFixed(6)}/TB`,
+    "atrim=start=0",
+    `aresample=${AUDIO_RATE}:async=1:first_pts=0`,
     "aformat=sample_fmts=s16:channel_layouts=stereo",
     `afade=t=in:st=0:d=${CLIP_FADE_SECONDS}`,
     `afade=t=out:st=${fadeOutStart}:d=${CLIP_FADE_SECONDS}`,
@@ -181,9 +201,9 @@ async function renderClip(index, source, label, heldFor, output) {
   ].join(",")
 
   const inputs = ["-i", source]
-  let filterComplex = `[0:v]${videoFilter}[v]`
+  let filterComplex = `[0:${info.videoIndex}]${videoFilter}[v]`
   if (info.hasAudio) {
-    filterComplex += `;[0:a:0]${audioFilter}[a]`
+    filterComplex += `;[0:${info.audioIndex}]${audioFilter}[a]`
   } else {
     inputs.push("-f", "lavfi", "-i", `anullsrc=r=${AUDIO_RATE}:cl=stereo`)
     filterComplex += `;[1:a]anull[a]`
