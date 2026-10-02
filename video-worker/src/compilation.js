@@ -187,9 +187,19 @@ export class CompilationRenderer extends Container {
     this.startingJob = true
 
     try {
+      // The main app decides whether this render should go to YouTube and
+      // with what title/description; this Worker adds whether it can (the
+      // OAuth secrets are set) and the privacy setting.
+      const requested = job.youtube?.requested === true
       const fullJob = {
         ...job,
-        youtube: { enabled: youtubeConfigured(this.env), privacy: this.env.YOUTUBE_PRIVACY || "unlisted" },
+        youtube: {
+          requested,
+          enabled: requested && youtubeConfigured(this.env),
+          privacy: this.env.YOUTUBE_PRIVACY || "public",
+          title: String(job.youtube?.title || job.title),
+          description: String(job.youtube?.description || ""),
+        },
       }
 
       await this.ctx.storage.put("job", { id: job.id, objectKey: job.objectKey })
