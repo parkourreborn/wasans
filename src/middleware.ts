@@ -42,7 +42,9 @@ const cspDirectives = [
   "img-src 'self' data: blob: https://cdn.discordapp.com https://assets.wasans.tully.sh",
   "media-src 'self' blob: https://assets.wasans.tully.sh",
   "font-src 'self' data:",
-  "connect-src 'self' https://assets.wasans.tully.sh",
+  // R2 S3 endpoint: browsers PUT videos straight to the private uploads
+  // bucket with presigned URLs (see /v2/uploads).
+  "connect-src 'self' https://assets.wasans.tully.sh https://*.r2.cloudflarestorage.com",
   // Nothing here is meant to be framed, nothing needs to frame anything
   // else, and nothing may post a form off-site.
   "frame-src 'none'",

@@ -6,6 +6,9 @@ type TrialSubmissionMetadataRow = {
   trial_name: string
   player_name: string
   time: number | string
+  video_status: "processing" | "ready" | "failed" | null
+  video_width: number | null
+  video_height: number | null
 }
 
 type ComboSubmissionMetadataRow = {
@@ -37,7 +40,7 @@ function formatTime(rawTime: string) {
 
 async function getTrialSubmissionMetadata(db: D1Database, uuid: string) {
   return db.prepare(
-    `SELECT trial_name, player_name, time
+    `SELECT trial_name, player_name, time, video_status, video_width, video_height
      FROM submissions
      WHERE uuid = ?`
   )
@@ -77,6 +80,20 @@ export async function generateMetadata({ params }: SubmissionLayoutProps): Promi
     const title = `${trialSubmission.trial_name} ${time} | ${trialSubmission.player_name}`
     const description = `${trialSubmission.player_name}'s ${trialSubmission.trial_name} submission in ${time}.`
     const videoUrl = `${videoBaseUrl}/scores/${uuid}.mp4`
+    const previewUrl = `${videoBaseUrl}/scores/${uuid}-preview.jpg`
+    // Processed videos have their real size recorded; older ones keep the
+    // previous 720p guess. A video that isn't ready yet isn't embedded.
+    const width = trialSubmission.video_width || 1280
+    const height = trialSubmission.video_height || 720
+
+    if (trialSubmission.video_status && trialSubmission.video_status !== "ready") {
+      return {
+        title,
+        description,
+        alternates: { canonical: pageUrl },
+        openGraph: { type: "website", title, description, siteName: "wasans", url: pageUrl },
+      }
+    }
 
     return {
       title,
@@ -90,13 +107,14 @@ export async function generateMetadata({ params }: SubmissionLayoutProps): Promi
         description,
         siteName: "wasans",
         url: pageUrl,
+        images: [{ url: previewUrl }],
         videos: [
           {
             url: videoUrl,
             secureUrl: videoUrl,
             type: "video/mp4",
-            width: 1280,
-            height: 720,
+            width,
+            height,
           },
         ],
       },
@@ -108,8 +126,8 @@ export async function generateMetadata({ params }: SubmissionLayoutProps): Promi
           {
             playerUrl: pageUrl,
             streamUrl: videoUrl,
-            width: 1280,
-            height: 720,
+            width,
+            height,
           },
         ],
       },

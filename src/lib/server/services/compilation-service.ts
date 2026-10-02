@@ -21,8 +21,8 @@ const MAX_TITLE_LENGTH = 100
 
 type Requester = { uuid: string; player_name: string }
 
-// Queues a WR compilation and hands it to the wasans-wr-compilations Worker
-// (video-worker/) through the COMPILATION_RENDERER service binding. Returns
+// Queues a WR compilation and hands it to the wasans-video Worker
+// (video-worker/) through the VIDEO_SERVICE service binding. Returns
 // as soon as the container has been started; the render itself takes
 // minutes and reports progress into the wr_compilations row.
 export async function startCompilation(
@@ -30,7 +30,7 @@ export async function startCompilation(
   env: CloudflareEnv,
   options: { trigger: CompilationTrigger; requester?: Requester | null; title?: string | null }
 ) {
-  if (!env.COMPILATION_RENDERER) {
+  if (!env.VIDEO_SERVICE) {
     throw new ApiError("The compilation renderer isn't configured", 503, "internal_error")
   }
 
@@ -66,7 +66,7 @@ export async function startCompilation(
   })
 
   try {
-    const response = await env.COMPILATION_RENDERER.fetch("https://renderer/jobs", {
+    const response = await env.VIDEO_SERVICE.fetch("https://wasans-video/compilations", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

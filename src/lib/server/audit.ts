@@ -47,6 +47,8 @@ export type AuditAction =
   | "giveaway_rerolled"
   | "giveaway_winner_claimed"
   | "wr_compilation_started"
+  | "submission_original_downloaded"
+  | "video_backfill_started"
 
 // Split out from insertAuditLog so callers writing several audit rows at
 // once (e.g. the deduplicate sweep) can send them as one db.batch() instead

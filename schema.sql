@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS combo_pbs;
 DROP TABLE IF EXISTS combo_submissions;
 DROP TABLE IF EXISTS combo_categories;
 DROP TABLE IF EXISTS submission_bans;
+DROP TABLE IF EXISTS video_uploads;
 DROP TABLE IF EXISTS submissions;
 DROP TABLE IF EXISTS oauth_accounts;
 DROP TABLE IF EXISTS auth_sessions;
@@ -139,10 +140,29 @@ CREATE TABLE submissions (
   state TEXT NOT NULL DEFAULT 'pending'
     CHECK (state IN ('approved', 'denied', 'pending')),
 
+  -- Server-side video processing (wasans-video Worker, see
+  -- video-worker/README.md). 'processing' submissions can't be approved and
+  -- aren't posted to Discord until their video is ready.
+  video_status TEXT NOT NULL DEFAULT 'ready'
+    CHECK (video_status IN ('processing', 'ready', 'failed')),
+  video_error TEXT,
+  video_source_type TEXT,
+  video_source_ref TEXT,
+  video_width INTEGER,
+  video_height INTEGER,
+  video_fps REAL,
+  video_duration REAL,
+  original_key TEXT,
+  video_updated_at INTEGER,
+  video_processed_at INTEGER,
+  video_backfill_claimed_at INTEGER,
+
   FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
   FOREIGN KEY (trial_name) REFERENCES trials(name) ON DELETE CASCADE
 );
 
+CREATE INDEX idx_submissions_video_status ON submissions(video_status, video_updated_at);
+CREATE INDEX idx_submissions_video_backfill ON submissions(video_processed_at, video_backfill_claimed_at);
 CREATE INDEX idx_submissions_player_state_trial_date ON submissions(player_uuid, state, trial_name, date);
 CREATE INDEX idx_submissions_state_trial_time_date ON submissions(state, trial_name, time, date);
 CREATE INDEX idx_submissions_trial_state_date_uuid ON submissions(trial_name, state, date, uuid);
@@ -565,3 +585,19 @@ CREATE TABLE wr_compilations (
 
 CREATE INDEX idx_wr_compilations_created ON wr_compilations(created_at);
 CREATE INDEX idx_wr_compilations_status ON wr_compilations(status);
+
+-- Presigned direct-upload URLs handed out to players (one row per URL),
+-- consumed once when a submission is created from it.
+CREATE TABLE video_uploads (
+  id TEXT PRIMARY KEY,
+  player_uuid TEXT NOT NULL,
+  object_key TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  consumed_at INTEGER,
+  submission_uuid TEXT,
+  FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_video_uploads_player_created ON video_uploads(player_uuid, created_at);

@@ -11,6 +11,7 @@ export type SubmissionRow = {
   moderator_note: string | null
   moderator_username: string | null
   thread_id: string | null
+  video_status?: "processing" | "ready" | "failed"
 }
 
 export type SubmissionWithScoreRow = SubmissionRow & {
@@ -167,7 +168,7 @@ export async function getSubmissionWithScore(db: D1Database, uuid: string) {
 
 export async function getSubmissionBase(db: D1Database, uuid: string) {
   return db.prepare(
-    `SELECT uuid, player_uuid, trial_name, player_name, state, time, date, moderator_note, moderator_username, thread_id
+    `SELECT uuid, player_uuid, trial_name, player_name, state, time, date, moderator_note, moderator_username, thread_id, video_status
      FROM submissions
      WHERE uuid = ?`
   )

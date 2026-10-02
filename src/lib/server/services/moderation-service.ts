@@ -327,6 +327,16 @@ export async function patchSubmission(
   }
 
   const previousState = normalizeState(submission.state) || submission.state
+
+  // A run can't be approved on a video nobody has been able to watch yet.
+  if (state === "approved" && previousState !== "approved" && submission.video_status && submission.video_status !== "ready") {
+    throw new Error(
+      submission.video_status === "processing"
+        ? "This submission's video is still processing"
+        : "This submission's video failed to process, so it can't be approved"
+    )
+  }
+
   const updates: Array<{ field: "state" | "moderator_note" | "time" | "moderator_username"; value: string | number | null }> = []
 
   if (state) {
@@ -669,7 +679,10 @@ export async function deleteSubmission(
   await deleteSubmissionCascade(env.wasans, uuid)
 
   if (env.SUBMISSION_VIDEOS) {
-    ctx.waitUntil(env.SUBMISSION_VIDEOS.delete(`scores/${uuid}.mp4`))
+    ctx.waitUntil(env.SUBMISSION_VIDEOS.delete([`scores/${uuid}.mp4`, `scores/${uuid}-preview.jpg`]))
+  }
+  if (env.UPLOADS) {
+    ctx.waitUntil(env.UPLOADS.delete(`originals/${uuid}`))
   }
 
   const isWr = submission.wr_trial !== null
