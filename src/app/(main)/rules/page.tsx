@@ -9,10 +9,11 @@ const runRules = [
   "The clip must clearly show: the timer, player's username, and the game build number at the bottom of the screen.",
   "No overlays of any kind may cover the video. Images, PNGs, videos, stream layouts, text, and any other element drawn over the footage are not allowed (Exlcuding handcams and keyboard overlays) (Up to moderator discretion).",
   "If you are permanently banned from the game, you are ineligible to submit runs. This is done to comply with the main game rule.",
+  "Practice mode is not allowed.",
   "Alternative accounts are allowed ONLY if you are not ban evading.",
   "World-record runs must be submitted within an acceptable time after being recorded. Normal life delays (vacation, sleep) are acceptable. Gatekeeping or intentionally delaying submission is not acceptable.",
   "If a run is technically within the rules, but its trying to exploit a loophole, it may still be rejected.",
-  "Moderators can reject a score for any reason they want, without explanation."
+  "Moderators can reject a score for any reason they want, without explanation.",
 
 ]
 
