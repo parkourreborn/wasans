@@ -60,6 +60,8 @@ admin trial order. The video is built like this:
    - letterboxed to 1080p60
    - fades in and out from black
    - "player (score)" in the bottom left
+   - how long it has been the WR ("259 days") in the bottom right, in
+     whole days from the run's submission date to the render
 
 The finished MP4 goes to `assets.wasans.tully.sh/compilations/…`. See
 "Posting a compilation to YouTube" below.
