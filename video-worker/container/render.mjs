@@ -1,13 +1,12 @@
 // Runs inside the compilation container (see ../src/index.js). Renders one
 // WR compilation end to end, then exits:
 //
-//   intro card -> [title card -> clip] x N -> upload to R2 -> (YouTube)
+//   intro card -> [title card -> clip] x N -> upload to R2
 //
 // The container has no R2 or D1 credentials of its own. It talks to them
 // through plain-HTTP virtual hosts that the Worker intercepts with
-// outboundByHost handlers (r2.internal, status.internal, youtube.internal),
-// so the only secret the container ever sees is a short-lived YouTube
-// access token, and only when YouTube uploads are configured.
+// outboundByHost handlers (r2.internal, status.internal), and it has no
+// other network access.
 //
 // Each segment is encoded to identical H.264 settings with uncompressed PCM
 // audio, then the segments are joined with ffmpeg's concat demuxer (video
@@ -16,9 +15,7 @@
 // every file, which would otherwise drift the audio out of sync a little
 // more with each of the ~50 joins.
 
-import { createReadStream } from "node:fs"
-import { mkdir, rm, stat, writeFile } from "node:fs/promises"
-import { Readable } from "node:stream"
+import { mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { readJob, run, saveResponse, uploadMultipart } from "./lib.mjs"
 
@@ -34,8 +31,6 @@ const CLIP_FADE_SECONDS = 0.5
 
 const R2_BASE = process.env.R2_BASE || "http://r2.internal"
 const STATUS_URL = process.env.STATUS_URL || "http://status.internal/"
-const YOUTUBE_TOKEN_URL = process.env.YOUTUBE_TOKEN_URL || "http://youtube.internal/token"
-const YOUTUBE_UPLOAD_URL = process.env.YOUTUBE_UPLOAD_URL || "https://www.googleapis.com/upload/youtube/v3/videos"
 const WORK_DIR = process.env.WORK_DIR || "/work"
 const FONT_LATIN = process.env.FONT_LATIN || "/usr/share/fonts/geist/Geist-Bold.ttf"
 const FONT_LATIN_LABEL = process.env.FONT_LATIN_LABEL || "/usr/share/fonts/geist/Geist-SemiBold.ttf"
@@ -212,78 +207,6 @@ async function downloadObject(key, destination) {
   return true
 }
 
-function formatTimestamp(seconds) {
-  const whole = Math.floor(seconds)
-  const hours = Math.floor(whole / 3600)
-  const minutes = Math.floor((whole % 3600) / 60)
-  const secs = String(whole % 60).padStart(2, "0")
-  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${secs}` : `${minutes}:${secs}`
-}
-
-// The main app's fixed description, then one timestamp per trial for
-// YouTube chapters. YouTube drops chapters entirely unless the first is at
-// 0:00, there are at least three, and each runs at least 10s, so the 3s intro
-// isn't a chapter of its own: the first trial's chapter starts at 0:00.
-function buildYouTubeDescription(job, chapters) {
-  const trials = chapters.filter((chapter) => chapter.label !== "Intro")
-  const lines = trials.map((chapter, index) => `${formatTimestamp(index === 0 ? 0 : chapter.start)} ${chapter.label}`)
-  const description = job.youtube.description || ""
-  if (lines.length < 3) {
-    return description
-  }
-  return description ? `${description}\n\n${lines.join("\n")}` : lines.join("\n")
-}
-
-// Resumable upload straight from the container to YouTube. The access token
-// comes from the Worker (which holds the OAuth client secret and refresh
-// token), so the long-lived credentials never enter the container.
-async function uploadToYouTube(job, file, chapters) {
-  const tokenResponse = await fetch(YOUTUBE_TOKEN_URL, { method: "POST" })
-  if (!tokenResponse.ok) {
-    throw new Error(`could not get a YouTube access token (${tokenResponse.status}): ${await tokenResponse.text().catch(() => "")}`)
-  }
-  const { access_token: accessToken } = await tokenResponse.json()
-  const { size } = await stat(file)
-
-  const session = await fetch(`${YOUTUBE_UPLOAD_URL}?uploadType=resumable&part=snippet,status`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${accessToken}`,
-      "content-type": "application/json; charset=UTF-8",
-      "x-upload-content-length": String(size),
-      "x-upload-content-type": "video/mp4",
-    },
-    body: JSON.stringify({
-      snippet: {
-        title: job.youtube.title.slice(0, 100),
-        description: buildYouTubeDescription(job, chapters).slice(0, 5000),
-        categoryId: "20", // Gaming
-      },
-      status: {
-        privacyStatus: job.youtube.privacy,
-        selfDeclaredMadeForKids: false,
-      },
-    }),
-  })
-  const uploadUrl = session.headers.get("location")
-  if (!session.ok || !uploadUrl) {
-    throw new Error(`YouTube rejected the upload session (${session.status}): ${await session.text().catch(() => "")}`)
-  }
-
-  const upload = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "content-type": "video/mp4", "content-length": String(size) },
-    body: Readable.toWeb(createReadStream(file)),
-    duplex: "half",
-  })
-  if (!upload.ok) {
-    throw new Error(`YouTube upload failed (${upload.status}): ${await upload.text().catch(() => "")}`)
-  }
-
-  const video = await upload.json()
-  return { id: video.id, url: `https://www.youtube.com/watch?v=${video.id}` }
-}
-
 async function main() {
   const job = readJob()
   const total = job.entries.length
@@ -365,21 +288,6 @@ async function main() {
     contentDisposition: `attachment; filename="${job.downloadFilename}"`,
   })
 
-  let youtube = null
-  let youtubeError = null
-  if (job.youtube?.requested && !job.youtube.enabled) {
-    youtubeError = "Not uploaded: YouTube isn't configured (see video-worker/README.md)."
-  } else if (job.youtube?.enabled) {
-    try {
-      youtube = await uploadToYouTube(job, finalFile, chapters)
-    } catch (error) {
-      // The R2 copy is already safe; a YouTube failure is reported but
-      // doesn't fail the whole job.
-      console.error("YouTube upload failed:", error)
-      youtubeError = String(error?.message || error).slice(0, 1000)
-    }
-  }
-
   await reportStatus(job.id, {
     status: "done",
     progress_done: total,
@@ -388,9 +296,6 @@ async function main() {
     duration_seconds: finalInfo.duration,
     size_bytes: sizeBytes,
     chapters,
-    youtube_video_id: youtube?.id ?? null,
-    youtube_url: youtube?.url ?? null,
-    youtube_error: youtubeError,
   })
 }
 
