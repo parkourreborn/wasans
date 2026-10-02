@@ -1,14 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon, ExternalLinkIcon } from "lucide-react"
+import { CopyIcon, DownloadIcon, ExternalLinkIcon } from "lucide-react"
 import { toast } from "sonner"
 import { apiV2 } from "@/lib/api"
 import { useApiGet } from "@/hooks/use-api"
 import { SectionCard } from "@/components/custom/page-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
@@ -28,8 +27,8 @@ type CompilationRow = {
   duration_seconds: number | null
   size_bytes: number | null
   download_url: string | null
-  youtube_url: string | null
-  youtube_error: string | null
+  youtube_title: string
+  youtube_description: string | null
   error: string | null
   created_at: number
   finished_at: number | null
@@ -74,6 +73,15 @@ function defaultManualTitle() {
   return `World Records — ${MONTHS[now.getUTCMonth()]} ${now.getUTCFullYear()}`
 }
 
+async function copyText(text: string, what: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.success(`${what} copied`)
+  } catch {
+    toast.error(`Couldn't copy the ${what.toLowerCase()}`)
+  }
+}
+
 function statusLabel(row: CompilationRow) {
   switch (row.status) {
     case "queued":
@@ -92,9 +100,6 @@ function statusLabel(row: CompilationRow) {
 export function CompilationsSection() {
   const { data, loading, error, refetch } = useApiGet<CompilationsResponse>(apiV2("/admin/compilations"))
   const [title, setTitle] = React.useState("")
-  // Off by default so test renders don't land on the channel; the monthly
-  // run always uploads.
-  const [uploadToYouTube, setUploadToYouTube] = React.useState(false)
   const [starting, setStarting] = React.useState(false)
 
   const compilations = data?.data || []
@@ -113,14 +118,13 @@ export function CompilationsSection() {
       const response = await fetch(apiV2("/admin/compilations"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: title.trim() || null, upload_to_youtube: uploadToYouTube }),
+        body: JSON.stringify({ title: title.trim() || null }),
       })
       const json = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(jsonErrorMessage(json, "Unable to start the compilation"))
       }
       setTitle("")
-      setUploadToYouTube(false)
       toast.success("Compilation started. It takes a few minutes to render.")
       refetch()
     } catch (err) {
@@ -133,7 +137,7 @@ export function CompilationsSection() {
   return (
     <SectionCard
       title="WR compilations"
-      description="Every active trial's world record in one video, in trial order. Renders automatically at 00:00 UTC on the 1st of each month and uploads to YouTube, or generate one now."
+      description="Every active trial's world record in one video, in trial order. Renders automatically at 00:00 UTC on the 1st of each month, or generate one now. To post one, download it and upload it in YouTube Studio with the copied title and description."
     >
       <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -149,13 +153,6 @@ export function CompilationsSection() {
             Generate now
           </Button>
         </div>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Checkbox
-            checked={uploadToYouTube}
-            onCheckedChange={(checked) => setUploadToYouTube(checked === true)}
-          />
-          Also upload to YouTube (as last month&apos;s compilation)
-        </label>
       </div>
 
       {loading && !data ? (
@@ -190,13 +187,28 @@ export function CompilationsSection() {
                     </div>
                     <p className="text-xs text-muted-foreground">{meta.join(" · ")}</p>
                   </div>
-                  <div className="flex shrink-0 gap-2">
-                    {row.youtube_url ? (
-                      <Button asChild variant="outline" size="sm">
-                        <a href={row.youtube_url} target="_blank" rel="noreferrer">
-                          <ExternalLinkIcon className="size-4" /> YouTube
-                        </a>
-                      </Button>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {row.download_url ? (
+                      <>
+                        <Button type="button" variant="outline" size="sm" onClick={() => copyText(row.youtube_title, "Title")}>
+                          <CopyIcon className="size-4" /> Title
+                        </Button>
+                        {row.youtube_description ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copyText(row.youtube_description as string, "Description")}
+                          >
+                            <CopyIcon className="size-4" /> Description
+                          </Button>
+                        ) : null}
+                        <Button asChild variant="outline" size="sm">
+                          <a href="https://www.youtube.com/upload" target="_blank" rel="noreferrer">
+                            <ExternalLinkIcon className="size-4" /> YouTube Studio
+                          </a>
+                        </Button>
+                      </>
                     ) : null}
                     {row.download_url ? (
                       <Button asChild size="sm">
@@ -218,9 +230,6 @@ export function CompilationsSection() {
                   </p>
                 ) : null}
                 {row.error ? <p className="text-xs text-destructive">{row.error}</p> : null}
-                {row.youtube_error ? (
-                  <p className="text-xs text-destructive">YouTube upload failed: {row.youtube_error}</p>
-                ) : null}
               </div>
             )
           })}

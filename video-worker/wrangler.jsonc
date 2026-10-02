@@ -98,14 +98,7 @@
 		// Where processing results are reported (POST
 		// /v2/internal/submission-videos/{uuid}, authenticated with the
 		// VIDEO_CALLBACK_SECRET secret, which the main app must share).
-		"APP_URL": "https://wasans.tully.sh",
-		// YouTube upload of the compilation only happens once
-		// YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET and YOUTUBE_REFRESH_TOKEN
-		// secrets are all set. Set YOUTUBE_UPLOAD to "off" to skip it even then.
-		"YOUTUBE_UPLOAD": "on",
-		// "private", "unlisted" or "public". Google forces "private" anyway
-		// until the Cloud project passes its YouTube API audit.
-		"YOUTUBE_PRIVACY": "public"
+		"APP_URL": "https://wasans.tully.sh"
 	},
 	"observability": {
 		"enabled": true
