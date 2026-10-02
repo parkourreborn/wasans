@@ -1,45 +1,40 @@
 import "server-only"
 import { insertAuditLog } from "@/lib/server/audit"
-import { postPendingRun } from "@/lib/server/notifications"
 import { trials } from "@/lib/trials"
 import { generateShortId } from "@/lib/utils"
 import {
   createSubmission,
   findPersonalBestByTrials,
   findPlayerByUuid,
-  setSubmissionThreadId,
 } from "@/lib/server/repositories/submission-repository"
 import { getTrialLifecycle, type TrialLifecycleRow } from "@/lib/server/repositories/trial-repository"
+import {
+  consumeVideoUpload,
+  findVideoUpload,
+  markSubmissionVideoQueued,
+} from "@/lib/server/repositories/video-repository"
+import { enqueueVideoJobs } from "@/lib/server/services/video-processing-service"
 import { canAcceptNewSubmissions } from "@/lib/server/trial-lifecycle"
+import { MAX_UPLOAD_BYTES, isUploadConsumable, type VideoJobMessage } from "@/lib/server/video-processing"
 
 export type IncomingSubmission = {
   trial_name?: unknown
   time?: unknown
   proof_url?: unknown
+  upload_id?: unknown
 }
 
 const allowedLinkHosts = ["medal.tv", "www.medal.tv"]
 
 // One request may cover at most one run per trial; anything beyond that is
-// not a player filling in the form. Without a cap, a single accepted request
-// could fan out into an unbounded number of R2 writes and Medal fetches,
-// multiplied again by the per-minute submission limit.
+// not a player filling in the form.
 const maxSubmissionsPerRequest = 32
-
-// Generous for a trial run, and well inside the request body limit — the
-// point is that there was previously no server-side ceiling at all, so a
-// single account could push arbitrary volume into the bucket.
-const maxVideoBytes = 150 * 1024 * 1024
-const publicVideoBaseUrl = "https://assets.wasans.tully.sh"
-const scoreVideoContentType = "video/mp4"
-const scorePreviewContentType = "image/jpeg"
-const maxPreviewBytes = 2 * 1024 * 1024
 
 function isAllowedTrial(value: unknown): value is (typeof trials)[number] {
   return typeof value === "string" && trials.includes(value as (typeof trials)[number])
 }
 
-function parseProofLink(value: unknown) {
+function parseMedalLink(value: unknown) {
   if (typeof value !== "string" || value.trim() === "") {
     return null
   }
@@ -48,7 +43,7 @@ function parseProofLink(value: unknown) {
     const url = new URL(value.trim())
     const host = url.hostname.toLowerCase()
 
-    if (url.protocol !== "https:" || !allowedLinkHosts.includes(host)) {
+    if (url.protocol !== "https:" || !allowedLinkHosts.includes(host) || !/\/clips\/[^/?]+/.test(url.pathname)) {
       return null
     }
 
@@ -58,273 +53,175 @@ function parseProofLink(value: unknown) {
   }
 }
 
-function getMedalContentApiUrl(link: string) {
-  const match = link.match(/clips\/([^?]+)/)
-  return match ? `https://medal.tv/api/content/${match[1]}/socialVideoUrl` : null
+type PreparedSubmission = {
+  uuid: string
+  trialName: (typeof trials)[number]
+  time: number
+  trialVersion: number
+  source: { type: "upload"; uploadId: string; objectKey: string } | { type: "medal"; url: string }
 }
 
-function isMedalLink(link: string) {
-  const host = new URL(link).hostname.toLowerCase()
-  return host === "medal.tv" || host === "www.medal.tv"
-}
-
-async function fetchMedalVideo(link: string) {
-  const contentApiUrl = getMedalContentApiUrl(link)
-
-  if (!contentApiUrl) {
-    throw new Error("Unable to read the Medal clip id")
-  }
-
-  const response = await fetch(contentApiUrl, {
-    headers: {
-      accept: "application/json, text/plain;q=0.9",
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error("Unable to resolve the Medal video URL")
-  }
-
-  const contentType = response.headers.get("content-type") || ""
-
-  if (contentType.startsWith("video/") || contentType === "application/octet-stream") {
-    return response
-  }
-
-  const body = await response.text()
-  let videoUrl: unknown = body.trim()
-
-  if (contentType.includes("application/json") || body.startsWith("{") || body.startsWith("[")) {
-    videoUrl = JSON.parse(body) as unknown
-  }
-
-  if (typeof videoUrl === "object" && videoUrl && "url" in videoUrl) {
-    videoUrl = (videoUrl as { url?: unknown }).url
-  } else if (typeof videoUrl === "object" && videoUrl && "socialVideoUrl" in videoUrl) {
-    videoUrl = (videoUrl as { socialVideoUrl?: unknown }).socialVideoUrl
-  }
-
-  if (typeof videoUrl !== "string") {
-    throw new Error("Medal did not return a video URL")
-  }
-
-  const parsedVideoUrl = new URL(videoUrl)
-  if (parsedVideoUrl.protocol !== "https:") {
-    throw new Error("Medal returned an invalid video URL")
-  }
-
-  return fetch(parsedVideoUrl.toString())
-}
-
-async function uploadVideo(
-  bucket: R2Bucket,
-  objectKey: string,
-  value: Blob | ReadableStream | ArrayBuffer,
-  contentType: string
+// Videos are no longer sent to this endpoint at all. A file is uploaded
+// straight to the private R2 bucket with a presigned URL from
+// /v2/uploads, and only its upload_id comes here. A Medal link is
+// downloaded by the processing container rather than by this Worker. Either
+// way the submission is created immediately with video_status
+// 'processing', and the wasans-video Worker takes it from there (see
+// video-processing-service.ts for what happens when it finishes).
+//
+// Everything is validated before anything is written, so a bad entry
+// anywhere in the batch can't leave the earlier ones half-created.
+export async function createSubmissions(
+  db: D1Database,
+  env: CloudflareEnv,
+  user: { uuid: string },
+  incomingSubmissions: unknown
 ) {
-  await bucket.put(objectKey, value, {
-    httpMetadata: {
-      contentType,
-    },
-  })
-
-  const uploadedObject = await bucket.head(objectKey)
-  return Boolean(uploadedObject)
-}
-
-export async function createSubmissionsFromRequest(db: D1Database, env: CloudflareEnv, user: { uuid: string }) {
-  const now = Math.floor(Date.now() / 1000)
-
-  return async (formData: FormData) => {
-    const rawSubmissions = String(formData.get("submissions") || "")
-    let incomingSubmissions: IncomingSubmission[]
-
-    try {
-      incomingSubmissions = JSON.parse(rawSubmissions)
-    } catch {
-      throw new Error("Submissions payload is invalid")
-    }
-
-    if (!Array.isArray(incomingSubmissions) || incomingSubmissions.length === 0) {
-      throw new Error("Add at least one submission")
-    }
-
-    if (incomingSubmissions.length > maxSubmissionsPerRequest) {
-      throw new Error(`A single request can hold at most ${maxSubmissionsPerRequest} submissions`)
-    }
-
-    const player = await findPlayerByUuid(db, user.uuid)
-    if (!player) {
-      throw new Error("Player was not found")
-    }
-
-    const requestedTrials = [...new Set(incomingSubmissions.map((submission) => String(submission?.trial_name || "")).filter(Boolean))]
-    const personalBestMap = await findPersonalBestByTrials(db, user.uuid, requestedTrials)
-    const trialLifecycleEntries = await Promise.all(
-      requestedTrials.map(async (name) => [name, await getTrialLifecycle(db, name)] as const)
-    )
-    const trialLifecycleMap = new Map<string, TrialLifecycleRow | null>(trialLifecycleEntries)
-
-    const created: Array<{ uuid: string; trial_name: string; proof_url: string; object_key?: string }> = []
-
-    for (let index = 0; index < incomingSubmissions.length; index += 1) {
-      const submission = incomingSubmissions[index]
-      const trialName = submission?.trial_name
-      const rawTime = String(submission?.time ?? "")
-      const time = Number(submission?.time)
-      const link = parseProofLink(submission?.proof_url)
-      const file = formData.get(`proof_file_${index}`)
-
-      if (!isAllowedTrial(trialName)) {
-        throw new Error(`Submission ${index + 1} has an invalid trial`)
-      }
-
-      const trialLifecycle = trialLifecycleMap.get(trialName)
-      if (!trialLifecycle) {
-        throw new Error(`Submission ${index + 1}'s trial isn't accepting submissions yet`)
-      }
-      if (!canAcceptNewSubmissions(trialLifecycle)) {
-        throw new Error(`Submission ${index + 1}'s trial has been removed and no longer accepts submissions`)
-      }
-
-      if (!Number.isFinite(time) || time <= 0) {
-        throw new Error(`Submission ${index + 1} needs a valid time`)
-      }
-
-      if (!/^\d+(\.\d{1,3})?$/.test(rawTime)) {
-        throw new Error(`Submission ${index + 1} can only use three decimal places`)
-      }
-
-      const personalBest = personalBestMap.get(trialName)
-      if (personalBest && time > personalBest) {
-        throw new Error(`Submission ${index + 1} is slower than the current personal best for ${trialName}`)
-      }
-
-      const uuid = generateShortId()
-      let proofUrl = link || ""
-      let objectKey: string | undefined
-      let source: "upload" | "medal" | "link" = "link"
-
-      if (file instanceof File && file.size > 0) {
-        source = "upload"
-        if (!(file.type === "" || file.type.startsWith("video/"))) {
-          throw new Error(`Submission ${index + 1} must use a video file`)
-        }
-
-        if (file.size > maxVideoBytes) {
-          throw new Error(`Submission ${index + 1}'s video is too large`)
-        }
-
-        if (!env.SUBMISSION_VIDEOS) {
-          throw new Error("Submission video bucket is not available")
-        }
-
-        objectKey = `scores/${uuid}.mp4`
-        proofUrl = `${publicVideoBaseUrl}/scores/${uuid}.mp4`
-        const uploaded = await uploadVideo(env.SUBMISSION_VIDEOS, objectKey, file, scoreVideoContentType)
-
-        if (!uploaded) {
-          await env.SUBMISSION_VIDEOS.delete(objectKey).catch(() => {})
-          throw new Error(`Unable to verify uploaded video for submission ${index + 1}`)
-        }
-
-        const preview = formData.get(`preview_file_${index}`)
-        if (preview instanceof File && preview.size > 0 && preview.size <= maxPreviewBytes) {
-          const previewKey = `scores/${uuid}-preview.jpg`
-          const uploadedPreview = await uploadVideo(env.SUBMISSION_VIDEOS, previewKey, preview, scorePreviewContentType)
-          if (!uploadedPreview) {
-            await env.SUBMISSION_VIDEOS.delete(previewKey).catch(() => {})
-          }
-        }
-      } else if (link && isMedalLink(link)) {
-        source = "medal"
-        if (!env.SUBMISSION_VIDEOS) {
-          throw new Error("Submission video bucket is not available")
-        }
-
-        objectKey = `scores/${uuid}.mp4`
-        proofUrl = `${publicVideoBaseUrl}/scores/${uuid}.mp4`
-        const medalVideoResponse = await fetchMedalVideo(link)
-        if (!medalVideoResponse.ok || !medalVideoResponse.body) {
-          throw new Error(`Unable to download Medal video for submission ${index + 1}`)
-        }
-
-        const medalVideoType = medalVideoResponse.headers.get("content-type") || scoreVideoContentType
-        if (!medalVideoType.startsWith("video/") && medalVideoType !== "application/octet-stream") {
-          throw new Error(`Medal did not return a video file for submission ${index + 1}`)
-        }
-
-        // The response is buffered whole, so its size is our memory use —
-        // and it is a remote host's number, not ours. Refuse an oversized
-        // one on the declared length where there is one, and again on what
-        // actually arrived where there isn't.
-        const declaredLength = Number(medalVideoResponse.headers.get("content-length") || "0")
-        if (Number.isFinite(declaredLength) && declaredLength > maxVideoBytes) {
-          throw new Error(`Submission ${index + 1}'s video is too large`)
-        }
-
-        const medalVideoBytes = await medalVideoResponse.arrayBuffer()
-        if (medalVideoBytes.byteLength > maxVideoBytes) {
-          throw new Error(`Submission ${index + 1}'s video is too large`)
-        }
-
-        const uploaded = await uploadVideo(
-          env.SUBMISSION_VIDEOS,
-          objectKey,
-          medalVideoBytes,
-          medalVideoType.startsWith("video/") ? medalVideoType : scoreVideoContentType
-        )
-
-        if (!uploaded) {
-          await env.SUBMISSION_VIDEOS.delete(objectKey).catch(() => {})
-          throw new Error(`Unable to verify downloaded video for submission ${index + 1}`)
-        }
-      } else if (!link) {
-        throw new Error(`Submission ${index + 1} needs a Medal link, or a video file`)
-      }
-
-      await createSubmission(db, {
-        uuid,
-        playerUuid: player.uuid,
-        trialName,
-        playerName: player.player_name,
-        time,
-        now,
-        trialVersion: trialLifecycle.version,
-      })
-
-      await insertAuditLog(db, "submission_created", "submission", uuid, {
-        actor: { uuid: player.uuid, player_name: player.player_name },
-        details: {
-          trial_name: trialName,
-          time,
-          proof_url: proofUrl,
-          source,
-        },
-      })
-
-      try {
-        const { threadId } = await postPendingRun({
-          submission_uuid: uuid,
-          player_uuid: player.uuid,
-          player_name: player.player_name,
-          trial_name: trialName,
-          time,
-          oldTime: personalBest,
-          player_score: Number(player.score),
-          discordUserId: player.auth_provider === "discord" ? player.player_id : undefined,
-        })
-
-        if (threadId) {
-          await setSubmissionThreadId(db, uuid, threadId)
-        }
-      } catch (error) {
-        console.error("Failed to post pending run:", error)
-      }
-
-      created.push({ uuid, trial_name: trialName, proof_url: proofUrl, ...(objectKey ? { object_key: objectKey } : {}) })
-    }
-
-    return created
+  if (!Array.isArray(incomingSubmissions) || incomingSubmissions.length === 0) {
+    throw new Error("Add at least one submission")
   }
+
+  if (incomingSubmissions.length > maxSubmissionsPerRequest) {
+    throw new Error(`A single request can hold at most ${maxSubmissionsPerRequest} submissions`)
+  }
+
+  const player = await findPlayerByUuid(db, user.uuid)
+  if (!player) {
+    throw new Error("Player was not found")
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  const entries = incomingSubmissions as IncomingSubmission[]
+  const requestedTrials = [...new Set(entries.map((submission) => String(submission?.trial_name || "")).filter(Boolean))]
+  const personalBestMap = await findPersonalBestByTrials(db, user.uuid, requestedTrials)
+  const trialLifecycleEntries = await Promise.all(
+    requestedTrials.map(async (name) => [name, await getTrialLifecycle(db, name)] as const)
+  )
+  const trialLifecycleMap = new Map<string, TrialLifecycleRow | null>(trialLifecycleEntries)
+  const usedUploadIds = new Set<string>()
+
+  const prepared: PreparedSubmission[] = []
+  for (let index = 0; index < entries.length; index += 1) {
+    const submission = entries[index]
+    const trialName = submission?.trial_name
+    const rawTime = String(submission?.time ?? "")
+    const time = Number(submission?.time)
+
+    if (!isAllowedTrial(trialName)) {
+      throw new Error(`Submission ${index + 1} has an invalid trial`)
+    }
+
+    const trialLifecycle = trialLifecycleMap.get(trialName)
+    if (!trialLifecycle) {
+      throw new Error(`Submission ${index + 1}'s trial isn't accepting submissions yet`)
+    }
+    if (!canAcceptNewSubmissions(trialLifecycle)) {
+      throw new Error(`Submission ${index + 1}'s trial has been removed and no longer accepts submissions`)
+    }
+
+    if (!Number.isFinite(time) || time <= 0) {
+      throw new Error(`Submission ${index + 1} needs a valid time`)
+    }
+
+    if (!/^\d+(\.\d{1,3})?$/.test(rawTime)) {
+      throw new Error(`Submission ${index + 1} can only use three decimal places`)
+    }
+
+    const personalBest = personalBestMap.get(trialName)
+    if (personalBest && time > personalBest) {
+      throw new Error(`Submission ${index + 1} is slower than the current personal best for ${trialName}`)
+    }
+
+    const base = { uuid: generateShortId(), trialName, time, trialVersion: trialLifecycle.version }
+    const uploadId = typeof submission?.upload_id === "string" ? submission.upload_id.trim() : ""
+
+    if (uploadId) {
+      const upload = await findVideoUpload(db, uploadId)
+      if (!upload || usedUploadIds.has(uploadId) || !isUploadConsumable(upload, user.uuid, now)) {
+        throw new Error(`Submission ${index + 1}'s upload has expired or was already used. Please upload the video again.`)
+      }
+
+      // The presigned URL pins the size, but check what actually landed
+      // before accepting it.
+      const object = env.UPLOADS ? await env.UPLOADS.head(upload.object_key) : null
+      if (!object) {
+        throw new Error(`Submission ${index + 1}'s video upload didn't finish. Please upload it again.`)
+      }
+      if (object.size > MAX_UPLOAD_BYTES) {
+        throw new Error(`Submission ${index + 1}'s video is too large`)
+      }
+
+      usedUploadIds.add(uploadId)
+      prepared.push({ ...base, source: { type: "upload", uploadId, objectKey: upload.object_key } })
+      continue
+    }
+
+    const medalUrl = parseMedalLink(submission?.proof_url)
+    if (medalUrl) {
+      prepared.push({ ...base, source: { type: "medal", url: medalUrl } })
+      continue
+    }
+
+    throw new Error(`Submission ${index + 1} needs a Medal clip link, or a video file`)
+  }
+
+  const created: Array<{ uuid: string; trial_name: string; video_status: "processing" }> = []
+  const jobs: VideoJobMessage[] = []
+
+  for (const submission of prepared) {
+    if (submission.source.type === "upload") {
+      const consumed = await consumeVideoUpload(db, {
+        id: submission.source.uploadId,
+        playerUuid: user.uuid,
+        submissionUuid: submission.uuid,
+        now,
+      })
+      if (!consumed) {
+        throw new Error("That upload was already used. Please upload the video again.")
+      }
+    }
+
+    await createSubmission(db, {
+      uuid: submission.uuid,
+      playerUuid: player.uuid,
+      trialName: submission.trialName,
+      playerName: player.player_name,
+      time: submission.time,
+      now,
+      trialVersion: submission.trialVersion,
+    })
+
+    const source =
+      submission.source.type === "upload"
+        ? { type: "upload" as const, ref: submission.source.objectKey }
+        : { type: "medal" as const, ref: submission.source.url }
+    await markSubmissionVideoQueued(db, submission.uuid, source, now)
+    jobs.push(
+      submission.source.type === "upload"
+        ? { submissionUuid: submission.uuid, reason: "upload", incomingKey: submission.source.objectKey, attempt: 1 }
+        : { submissionUuid: submission.uuid, reason: "medal", medalUrl: submission.source.url, attempt: 1 }
+    )
+
+    await insertAuditLog(db, "submission_created", "submission", submission.uuid, {
+      actor: { uuid: player.uuid, player_name: player.player_name },
+      details: {
+        trial_name: submission.trialName,
+        time: submission.time,
+        source: submission.source.type,
+        ...(submission.source.type === "medal" ? { proof_url: submission.source.url } : { upload_id: submission.source.uploadId }),
+      },
+    })
+
+    created.push({ uuid: submission.uuid, trial_name: submission.trialName, video_status: "processing" })
+  }
+
+  // If this fails the submissions still exist as "processing", and the
+  // daily maintenance sweep re-queues them from their stored source.
+  try {
+    await enqueueVideoJobs(env, jobs)
+  } catch (error) {
+    console.error("Failed to queue video processing:", error)
+  }
+
+  return created
 }

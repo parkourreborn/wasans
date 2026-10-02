@@ -4,7 +4,8 @@ import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { apiV2 } from "@/lib/api"
-import { captureVideoFrame } from "@/lib/video-thumbnail"
+import { isVideoFile, uploadVideoFile, validateVideoFile } from "@/lib/direct-upload"
+import { getSubmissionErrorMessage } from "@/lib/submission-errors"
 import { SubmissionCard } from "@/components/custom/submission-card"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -45,6 +46,7 @@ type Submission = {
   state: string
   moderator_note?: string | null
   moderator_username?: string | null
+  video_status?: "processing" | "ready" | "failed"
 }
 
 type WorldRecord = {
@@ -281,7 +283,7 @@ function SubmissionsPage() {
     setIsDragOver(false)
 
     const files = Array.from(event.dataTransfer.files)
-    const videoFile = files.find(file => file.type.startsWith('video/'))
+    const videoFile = files.find(isVideoFile)
 
     if (videoFile) {
       const parsed = parseFilename(videoFile.name)
@@ -306,89 +308,55 @@ function SubmissionsPage() {
     setUploadProgress(0)
     setUploadStatus("Preparing upload...")
 
-    const previewBlob = await captureVideoFrame(parsedFileData.file).catch(() => null)
-
-    return new Promise<void>((resolve, reject) => {
-      const formData = new FormData()
-      formData.append("submissions", JSON.stringify([{
-        trial_name: editedTrialName || trials[0],
-        time: editedTime || "",
-        proof_url: ""
-      }]))
-      formData.append("proof_file_0", parsedFileData.file)
-      if (previewBlob) {
-        formData.append("preview_file_0", previewBlob, "preview.jpg")
-      }
-
-      const request = new XMLHttpRequest()
-
-      request.upload.onprogress = (event) => {
-        if (!event.lengthComputable) {
-          setUploadProgress(50)
-          setUploadStatus("Uploading...")
-          return
-        }
-
-        const progress = Math.min(Math.round((event.loaded / event.total) * 90), 90)
-        setUploadProgress(progress)
-        setUploadStatus(`Uploading... ${progress}%`)
-      }
-
-      request.upload.onload = () => {
-        setUploadProgress(90)
-        setUploadStatus("Processing submission...")
-      }
-
-      request.onload = () => {
-        let json: { error?: { message?: string } } | null = null
-
-        try {
-          json = JSON.parse(request.responseText || "null") as { error?: { message?: string } } | null
-        } catch {
-          json = null
-        }
-
-        if (request.status >= 200 && request.status < 300) {
-          setUploadProgress(100)
-          setUploadStatus("Upload complete!")
-          setTimeout(() => {
-            setUploadingDragFile(false)
-            setUploadProgress(0)
-            setUploadStatus("")
-            setParsedFileData(null)
-            setEditedTrialName("")
-            setEditedTime("")
-            window.location.reload()
-          }, 1000)
-          resolve()
-          return
-        }
-
-        reject(new Error(json?.error?.message || "Unable to create submission"))
-      }
-
-      request.onerror = () => {
-        reject(new Error("Unable to create submission"))
-      }
-
-      request.onabort = () => {
-        reject(new Error("Upload was cancelled"))
-      }
-
-      setUploadProgress(0)
-      setUploadStatus("Starting upload...")
-      request.open("POST", apiV2("/submissions"))
-      request.send(formData)
-    }).catch((err) => {
-      console.error("Upload error:", err)
-      setError(err instanceof Error ? err.message : "Failed to upload submission")
+    const resetDragUpload = () => {
       setUploadingDragFile(false)
       setUploadProgress(0)
       setUploadStatus("")
       setParsedFileData(null)
       setEditedTrialName("")
       setEditedTime("")
-    })
+    }
+
+    try {
+      const fileError = validateVideoFile(parsedFileData.file)
+      if (fileError) {
+        throw new Error(fileError)
+      }
+
+      // Straight to R2 (see lib/direct-upload.ts); only the upload id goes
+      // with the submission. The server makes the thumbnail afterwards.
+      const uploadId = await uploadVideoFile(parsedFileData.file, (loaded, total) => {
+        const progress = Math.min(Math.round((loaded / total) * 90), 90)
+        setUploadProgress(progress)
+        setUploadStatus(`Uploading... ${progress}%`)
+      })
+
+      setUploadProgress(92)
+      setUploadStatus("Creating submission...")
+
+      const response = await fetch(apiV2("/submissions"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          submissions: [{ trial_name: editedTrialName || trials[0], time: editedTime || "", upload_id: uploadId }],
+        }),
+      })
+      const json = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
+      if (!response.ok) {
+        throw new Error(getSubmissionErrorMessage(json?.error, "Unable to create submission"))
+      }
+
+      setUploadProgress(100)
+      setUploadStatus("Submitted! The video is processing.")
+      setTimeout(() => {
+        resetDragUpload()
+        window.location.reload()
+      }, 1000)
+    } catch (err) {
+      console.error("Upload error:", err)
+      setError(err instanceof Error ? err.message : "Failed to upload submission")
+      resetDragUpload()
+    }
   }
 
   useEffect(() => {
@@ -654,6 +622,7 @@ function SubmissionsPage() {
                   scoreText={scoreFor(worldRecordTimes[submission.trial_name], submission.time, submission.trial_name as TrialName)}
                   moderatorNote={submission.moderator_note}
                   moderatorUsername={submission.moderator_username}
+                  videoStatus={submission.video_status}
                   className="h-full overflow-hidden transition-colors hover:border-foreground/30"
                   onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
                 />

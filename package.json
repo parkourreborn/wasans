@@ -17,6 +17,7 @@
   "dependencies": {
     "@base-ui/react": "^1.4.1",
     "@opennextjs/cloudflare": "^1.19.4",
+    "aws4fetch": "^1.0.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -24,7 +25,6 @@
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^1.11.0",
-    "mp4box": "^2.3.0",
     "next": "16.2.4",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.4.3",
