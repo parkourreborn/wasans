@@ -28,10 +28,12 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
+  DownloadIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
 import { apiV2 } from "@/lib/api"
+import { Spinner } from "@/components/ui/spinner"
 
 export type TrialSubmissionValue = {
   uuid: string
@@ -44,7 +46,14 @@ export type TrialSubmissionValue = {
   state: string
   moderator_note?: string | null
   moderator_username?: string | null
+  video_status?: "processing" | "ready" | "failed"
+  video_error?: string | null
+  original_key?: string | null
 }
+
+// How often the page checks back while the server is still processing
+// this submission's video.
+const VIDEO_STATUS_POLL_MS = 5000
 
 type SubmissionResponse = {
   data?: { results: TrialSubmissionValue[] }
@@ -163,6 +172,23 @@ export default function TrialSubmissionView({
   const [editTimeError, setEditTimeError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [worldRecords, setWorldRecords] = useState<WorldRecordValue[]>([])
+  const videoProcessing = submission?.video_status === "processing"
+
+  useEffect(() => {
+    if (!videoProcessing) {
+      return
+    }
+
+    const timer = window.setInterval(async () => {
+      const response = await fetch(apiV2(`/submissions/${uuid}`), { cache: "no-store" }).catch(() => null)
+      const json = (await response?.json().catch(() => null)) as SubmissionResponse | null
+      const latest = json?.data?.results?.[0]
+      if (latest && latest.video_status !== "processing") {
+        setSubmission(latest)
+      }
+    }, VIDEO_STATUS_POLL_MS)
+    return () => window.clearInterval(timer)
+  }, [videoProcessing, uuid])
 
   useEffect(() => {
     setSubmissionUuids(getSubmissionUuids())
@@ -394,6 +420,7 @@ export default function TrialSubmissionView({
     isWrSubmission ? "wr" : "",
   ]
   const videoSrc = `https://assets.wasans.tully.sh/scores/${uuid}.mp4`
+  const videoStatus = submission.video_status ?? "ready"
   // Trial submissions are moderator+ territory; combo moderators
   // (permission === 1) don't get moderation controls here. Deleting is
   // further restricted to senior moderators+ (permission >= 3) — junior
@@ -468,7 +495,8 @@ export default function TrialSubmissionView({
                     <Button
                       type="button"
                       variant={state === "approved" ? "default" : "outline"}
-                      disabled={saving}
+                      disabled={saving || (state !== "approved" && videoStatus !== "ready")}
+                      title={videoStatus === "ready" ? undefined : "The video has to finish processing first"}
                       onClick={() => updateState("approved")}
                     >
                       <CheckIcon />
@@ -491,6 +519,14 @@ export default function TrialSubmissionView({
                     >
                       Add note
                     </Button>
+                    {submission.original_key ? (
+                      <Button asChild variant="outline">
+                        <a href={apiV2(`/submissions/${uuid}/original`)} title="The file exactly as submitted, kept for 90 days">
+                          <DownloadIcon />
+                          Original
+                        </a>
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
                       variant="outline"
@@ -645,7 +681,21 @@ export default function TrialSubmissionView({
         </CardHeader>
 
         <CardContent>
-          <video controls className="w-full" src={videoSrc} />
+          {videoStatus === "processing" ? (
+            <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-lg bg-muted px-4 text-center text-sm text-muted-foreground">
+              <Spinner className="size-5" />
+              <p>Processing video… This usually takes under a minute.</p>
+            </div>
+          ) : videoStatus === "failed" ? (
+            <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-lg bg-muted px-4 text-center text-sm">
+              <p className="font-medium text-destructive">Video processing failed</p>
+              <p className="text-muted-foreground">
+                {submission.video_error || "The video couldn't be processed."} Delete this submission and submit the run again.
+              </p>
+            </div>
+          ) : (
+            <video controls className="w-full" src={videoSrc} />
+          )}
         </CardContent>
       </Card>
     </div>

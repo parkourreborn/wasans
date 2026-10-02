@@ -16,7 +16,14 @@ interface __BaseEnv_CloudflareEnv {
 	JWT_SECRET: string;
 	CRON_SECRET: string;
 	WORKER_SELF_REFERENCE: Service<typeof import("./.open-next/worker").default>;
-	COMPILATION_RENDERER: Fetcher;
+	VIDEO_SERVICE: Fetcher;
+	UPLOADS: R2Bucket;
+	VIDEO_QUEUE: Queue;
+	R2_ACCOUNT_ID: string;
+	R2_UPLOADS_BUCKET: string;
+	R2_UPLOAD_ACCESS_KEY_ID: string;
+	R2_UPLOAD_SECRET_ACCESS_KEY: string;
+	VIDEO_CALLBACK_SECRET: string;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {

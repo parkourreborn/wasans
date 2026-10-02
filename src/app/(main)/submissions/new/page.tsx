@@ -30,10 +30,9 @@ import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import calculateScore from "@/lib/calc-score"
-import { createFile } from "mp4box"
 import { getSubmissionErrorMessage } from "@/lib/submission-errors"
 import { formatSubmissionBanMessage, type SubmissionBanSummary } from "@/lib/submission-bans"
-import { captureVideoFrame, captureVideoFrameFromUrl } from "@/lib/video-thumbnail"
+import { VIDEO_FILE_ACCEPT, uploadVideoFile, validateVideoFile } from "@/lib/direct-upload"
 import { refreshV2AccessToken } from "@/components/custom/v2-auth-refresh"
 import { HudzellCalculator } from "@/components/custom/hudzell-calculator"
 
@@ -65,8 +64,7 @@ type ListResponse<T> = {
 type CreatedSubmission = {
   uuid: string
   trial_name: TrialName
-  proof_url: string
-  object_key?: string
+  video_status: "processing" | "ready" | "failed"
 }
 
 type CreateSubmissionsResponse = {
@@ -118,16 +116,6 @@ function parseFilename(filename: string): { trialName?: TrialName; time?: string
   return result
 }
 
-function isMedalLink(value: string) {
-  try {
-    const url = new URL(value)
-    const host = url.hostname.toLowerCase()
-    return host === "medal.tv" || host === "www.medal.tv"
-  } catch {
-    return false
-  }
-}
-
 function createDraft(id = "submission-1"): SubmissionDraft {
   return {
     id,
@@ -137,93 +125,6 @@ function createDraft(id = "submission-1"): SubmissionDraft {
     proof_file: null,
     proof_file_error: undefined,
   }
-}
-
-async function isValidH264Mp4(file: File) {
-  const fileName = file.name.toLowerCase()
-  if (!file.type.includes("mp4") && !fileName.endsWith(".mp4")) {
-    return false
-  }
-
-  const mp4boxFile = createFile()
-
-  return new Promise<boolean>(async (resolve, reject) => {
-    let resolved = false
-
-    mp4boxFile.onError = (error: unknown) => {
-      if (!resolved) {
-        resolved = true
-        reject(new Error(String(error)))
-      }
-    }
-
-    mp4boxFile.onReady = (info) => {
-      if (resolved) {
-        return
-      }
-
-      const validTrack = (info.tracks || []).some((track) => {
-        const codec = String(track.codec || "").toLowerCase()
-        return /^avc[13]/.test(codec)
-      })
-
-      resolved = true
-      resolve(validTrack)
-    }
-
-    try {
-      const stream = file.stream?.()
-
-      if (stream) {
-        const reader = stream.getReader()
-        let offset = 0
-
-        const pump = async (): Promise<void> => {
-          const { done, value } = await reader.read()
-
-          if (done) {
-            mp4boxFile.flush()
-            if (!resolved) {
-              resolved = true
-              resolve(false)
-            }
-            return
-          }
-
-          if (!value) {
-            return pump()
-          }
-
-          const chunk = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer & {
-            fileStart: number
-          }
-          chunk.fileStart = offset
-          offset += chunk.byteLength
-
-          mp4boxFile.appendBuffer(chunk)
-          return pump()
-        }
-
-        await pump()
-      } else {
-        const arrayBuffer = await file.arrayBuffer()
-        const buffer = arrayBuffer as ArrayBuffer & { fileStart: number }
-        buffer.fileStart = 0
-        mp4boxFile.appendBuffer(buffer)
-        mp4boxFile.flush()
-
-        if (!resolved) {
-          resolved = true
-          resolve(false)
-        }
-      }
-    } catch (err) {
-      if (!resolved) {
-        resolved = true
-        reject(err)
-      }
-    }
-  })
 }
 
 async function getWorldRecords() {
@@ -269,123 +170,60 @@ function formatTime(value: number) {
   return value.toFixed(3).replace(/\.?0+$/, "")
 }
 
+// Each video file goes straight to R2 first (see lib/direct-upload.ts), then
+// the submissions are created in one small JSON request that references
+// the uploads by id. The server processes the videos (transcode +
+// thumbnail) in the background after that, so there's nothing left for the
+// browser to do once this returns.
 async function uploadSubmissions(
   submissions: SubmissionDraft[],
   onProgress: (progress: number, status: UploadState["status"], message?: string) => void,
-  hasMedalLink: boolean,
   idempotencyKey: string
 ) {
-  const previewBlobs = await Promise.all(
-    submissions.map((submission) =>
-      submission.proof_file ? captureVideoFrame(submission.proof_file).catch(() => null) : Promise.resolve(null)
-    )
-  )
+  onProgress(0, "uploading", "Preparing upload")
 
-  return new Promise<CreateSubmissionsResponse>((resolve, reject) => {
-    const payload = submissions.map((submission) => ({
-      trial_name: submission.trial_name,
-      time: submission.time,
-      proof_url: submission.proof_url.trim(),
-    }))
+  const files = submissions.map((submission) => submission.proof_file)
+  const totalBytes = files.reduce((sum, file) => sum + (file?.size || 0), 0)
+  const sentBytes = files.map(() => 0)
+  const uploadIds: Array<string | null> = files.map(() => null)
 
-    const formData = new FormData()
-    formData.append("submissions", JSON.stringify(payload))
-    formData.append("idempotency_key", idempotencyKey)
+  // One at a time: parallel uploads would only split the same bandwidth,
+  // and an early failure stops before the rest are sent for nothing.
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index]
+    if (!file) continue
 
-    submissions.forEach((submission, index) => {
-      if (submission.proof_file) {
-        formData.append(`proof_file_${index}`, submission.proof_file)
-      }
-      if (previewBlobs[index]) {
-        formData.append(`preview_file_${index}`, previewBlobs[index] as Blob, "preview.jpg")
-      }
+    uploadIds[index] = await uploadVideoFile(file, (loaded) => {
+      sentBytes[index] = loaded
+      const sent = sentBytes.reduce((sum, value) => sum + value, 0)
+      const progress = totalBytes > 0 ? Math.min(Math.round((sent / totalBytes) * 90), 90) : 50
+      onProgress(progress, "uploading", `Uploading ${progress}%`)
     })
+  }
 
-    const request = new XMLHttpRequest()
+  onProgress(92, "processing", "Creating submissions")
 
-    request.upload.onprogress = (event) => {
-      if (!event.lengthComputable) {
-        onProgress(50, "uploading", hasMedalLink ? "Uploading submission" : "Uploading submission")
-        return
-      }
-
-      const progress = Math.min(Math.round((event.loaded / event.total) * 90), 90)
-      onProgress(progress, "uploading", hasMedalLink ? `Uploading ${progress}%` : `Uploading ${progress}%`)
-    }
-
-    request.upload.onload = () => {
-      if (hasMedalLink) {
-        onProgress(55, "uploading", "Downloading proof video")
-      } else {
-        onProgress(90, "processing", "Processing submissions")
-      }
-    }
-
-    request.onload = () => {
-      let json: CreateSubmissionsResponse | null = null
-
-      try {
-        json = JSON.parse(request.responseText || "null") as CreateSubmissionsResponse | null
-      } catch {
-        json = null
-      }
-
-      if (request.status >= 200 && request.status < 300) {
-        onProgress(100, "done", "Uploaded")
-        resolve(json || {})
-        return
-      }
-
-      const errorMessage = getSubmissionErrorMessage(json?.error, "Unable to create submission")
-
-      reject(new Error(errorMessage))
-    }
-
-    request.onerror = () => {
-      reject(new Error("Unable to create submission"))
-    }
-
-    request.onabort = () => {
-      reject(new Error("Upload was cancelled"))
-    }
-
-    onProgress(0, "uploading", "Preparing upload")
-    request.open("POST", apiV2("/submissions"))
-    request.setRequestHeader("Idempotency-Key", idempotencyKey)
-    request.send(formData)
+  const response = await fetch(apiV2("/submissions"), {
+    method: "POST",
+    headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({
+      idempotency_key: idempotencyKey,
+      submissions: submissions.map((submission, index) => ({
+        trial_name: submission.trial_name,
+        time: submission.time,
+        proof_url: uploadIds[index] ? "" : submission.proof_url.trim(),
+        upload_id: uploadIds[index],
+      })),
+    }),
   })
-}
+  const json = (await response.json().catch(() => null)) as CreateSubmissionsResponse | null
 
-// Direct file uploads already get their preview captured client-side before
-// the submission is created (see uploadSubmissions above). Medal-link
-// submissions have their video fetched server-side instead, so there's
-// nothing to capture from until the video is actually hosted — this re-loads
-// it from its now-public URL, grabs a frame, and PUTs it to the new preview
-// endpoint. Awaited (with each capture internally bounded to ~8s, see
-// captureFrameFromVideoElement) before navigating away, so the thumbnail
-// exists by the time the submissions list renders it instead of racing that
-// list's first image load — a failed/slow capture just leaves that one
-// submission without a thumbnail rather than blocking the others.
-async function capturePreviewsForMedalSubmissions(submissions: SubmissionDraft[], results: CreatedSubmission[]) {
-  await Promise.allSettled(
-    results.map(async (result, index) => {
-      const submission = submissions[index]
-      if (!submission || submission.proof_file || !result.object_key) {
-        return
-      }
+  if (!response.ok) {
+    throw new Error(getSubmissionErrorMessage(json?.error, "Unable to create submission"))
+  }
 
-      const blob = await captureVideoFrameFromUrl(result.proof_url)
-      if (!blob) {
-        return
-      }
-
-      await fetch(apiV2(`/submissions/${result.uuid}/preview`), {
-        method: "PUT",
-        headers: { "content-type": "image/jpeg" },
-        body: blob,
-      })
-    })
-  )
+  onProgress(100, "done", "Submitted. The video is processing.")
+  return json || {}
 }
 
 export default function NewSubmissionPage() {
@@ -495,16 +333,17 @@ export default function NewSubmissionPage() {
     }
   }
 
-  const handleProofFileChange = async (id: string, file: File | null) => {
+  const handleProofFileChange = (id: string, file: File | null) => {
     if (!file) {
       updateSubmission(id, { proof_file: null, proof_file_error: undefined })
       return
     }
 
     const submission = submissions.find((item) => item.id === id)
+    const fileError = validateVideoFile(file)
     const updates: Partial<SubmissionDraft> = {
-      proof_file: null,
-      proof_file_error: "Validating file...",
+      proof_file: fileError ? null : file,
+      proof_file_error: fileError ?? undefined,
     }
 
     if (submission) {
@@ -518,20 +357,6 @@ export default function NewSubmissionPage() {
     }
 
     updateSubmission(id, updates)
-
-    const isValid = await isValidH264Mp4(file)
-    if (isValid) {
-      updateSubmission(id, {
-        proof_file: file,
-        proof_file_error: undefined,
-      })
-      return
-    }
-
-    updateSubmission(id, {
-      proof_file: null,
-      proof_file_error: "Video file must be an H.264 MP4.",
-    })
   }
 
   const addSubmission = () => {
@@ -585,22 +410,16 @@ export default function NewSubmissionPage() {
     )
 
     try {
-      // The upload below goes out over XMLHttpRequest for progress events, so
-      // it never passes through the fetch interceptor that refreshes an
-      // expired access token and retries. Refreshing first gives the upload a
-      // full access-token lifetime to finish in, instead of failing at the end
-      // of a long video with "Authentication required". A failed refresh is
-      // not fatal here — the current access token may still be good, and the
-      // upload reports its own 401 if it is not.
+      // Refreshing first gives the whole upload a full access-token lifetime,
+      // so the submission request at the end of a long video upload doesn't
+      // start with an expired token. A failed refresh is not fatal here: the
+      // current access token may still be good, and the API reports its own
+      // 401 if it is not.
       await refreshV2AccessToken()
 
-      const preparedSubmissions = submissions
-      const hasMedalLink = submissions.some(
-        (submission) => !submission.proof_file && isMedalLink(submission.proof_url.trim())
-      )
       const idempotencyKey = crypto.randomUUID()
 
-      const response = await uploadSubmissions(preparedSubmissions, (progress, status, message) => {
+      await uploadSubmissions(submissions, (progress, status, message) => {
         setUploadStates((current) =>
           Object.fromEntries(
             Object.entries(current).map(([id, state]) => [
@@ -620,19 +439,7 @@ export default function NewSubmissionPage() {
             ])
           )
         )
-      }, hasMedalLink, idempotencyKey)
-
-      if (response.data?.results?.some((result, index) => !preparedSubmissions[index]?.proof_file && result.object_key)) {
-        setUploadStates((current) =>
-          Object.fromEntries(
-            Object.entries(current).map(([id, state]) => [
-              id,
-              { ...state, progress: 95, status: "processing" as const, message: "Generating thumbnail" },
-            ])
-          )
-        )
-        await capturePreviewsForMedalSubmissions(preparedSubmissions, response.data.results)
-      }
+      }, idempotencyKey)
 
       setMessage("Submitted")
       router.push("/submissions/trials")
@@ -843,10 +650,10 @@ export default function NewSubmissionPage() {
                     <Input
                       id={`proof-file-${submission.id}`}
                       type="file"
-                      accept="video/mp4"
+                      accept={VIDEO_FILE_ACCEPT}
                       onChange={(event) => {
                         const file = event.target.files?.[0] ?? null
-                        void handleProofFileChange(submission.id, file)
+                        handleProofFileChange(submission.id, file)
                       }}
                       disabled={submitting}
                       aria-invalid={Boolean(submission.proof_file_error)}

@@ -2,53 +2,23 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useSettings } from "@/components/custom/settings-provider"
-import { apiV2 } from "@/lib/api"
-import { captureVideoFrameFromUrl } from "@/lib/video-thumbnail"
+import { Spinner } from "@/components/ui/spinner"
+
+export type VideoStatus = "processing" | "ready" | "failed"
 
 type ScoreVideoPreviewProps = {
   submissionUuid: string
+  videoStatus?: VideoStatus | null
 }
 
-// Medal-link submissions generate their preview asynchronously right after
-// creation (see submissions/new page) — a few seconds where the -preview.jpg
-// object legitimately doesn't exist yet. A single 404 used to fall back to
-// the video permanently for the lifetime of this component; retrying a
-// couple times with a short delay covers that window without polling forever.
-const previewRetryDelaysMs = [2000, 5000]
-
-// Submissions occasionally never get a preview at all (the upload-time
-// capture can miss — closed tab, flaky network, an undecodable frame — see
-// the comment on the preview route). Nothing used to retry that, so those
-// submissions stayed thumbnail-less forever. Once retries above are
-// exhausted and we're genuinely falling back to the raw <video>, take the
-// chance to re-capture a frame from it and PUT it back — the preview route
-// accepts this from any signed-in viewer as long as no preview exists yet.
-// Deduped per submission per session so many instances of the same
-// submission (e.g. across lists) don't all attempt it at once.
-const repairAttempted = new Set<string>()
-
-async function repairMissingPreview(submissionUuid: string) {
-  if (repairAttempted.has(submissionUuid)) {
-    return
-  }
-  repairAttempted.add(submissionUuid)
-
-  const blob = await captureVideoFrameFromUrl(`https://assets.wasans.tully.sh/scores/${submissionUuid}.mp4`)
-  if (!blob) {
-    return
-  }
-
-  await fetch(apiV2(`/submissions/${submissionUuid}/preview`), {
-    method: "PUT",
-    headers: { "content-type": "image/jpeg" },
-    body: blob,
-  }).catch(() => {})
-}
-
-export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
+// Thumbnails are generated server-side by the video processing container
+// (video-worker/), and a submission only becomes "ready" once its
+// -preview.jpg exists, so there's nothing to capture or repair here. The
+// <video> fallback only covers the rare legacy video whose thumbnail is
+// missing until the /admin backfill reaches it.
+export function ScoreVideoPreview({ submissionUuid, videoStatus }: ScoreVideoPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(false)
-  const [retryCount, setRetryCount] = useState(0)
   const [previewFailed, setPreviewFailed] = useState(false)
   const settings = useSettings()
   const disableSubmissionThumbnails = settings?.disableSubmissionThumbnails ?? false
@@ -68,23 +38,8 @@ export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
     return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    if (previewFailed) {
-      void repairMissingPreview(submissionUuid)
-    }
-  }, [previewFailed, submissionUuid])
-
-  const handlePreviewError = () => {
-    if (retryCount >= previewRetryDelaysMs.length) {
-      setPreviewFailed(true)
-      return
-    }
-
-    const delay = previewRetryDelaysMs[retryCount]
-    window.setTimeout(() => setRetryCount((count) => count + 1), delay)
-  }
-
-  const shouldLoad = isVisible && !disableSubmissionThumbnails
+  const status = videoStatus ?? "ready"
+  const shouldLoad = isVisible && !disableSubmissionThumbnails && status === "ready"
 
   return (
     <div ref={containerRef} className="aspect-video max-h-full w-full overflow-hidden rounded-lg bg-muted">
@@ -92,16 +47,23 @@ export function ScoreVideoPreview({ submissionUuid }: ScoreVideoPreviewProps) {
         <div className="flex h-full w-full items-center justify-center px-3 text-center text-xs text-muted-foreground">
           Thumbnails disabled
         </div>
+      ) : status === "processing" ? (
+        <div className="flex h-full w-full items-center justify-center gap-2 px-3 text-center text-xs text-muted-foreground">
+          <Spinner className="size-3" /> Processing video…
+        </div>
+      ) : status === "failed" ? (
+        <div className="flex h-full w-full items-center justify-center px-3 text-center text-xs text-destructive">
+          Video processing failed
+        </div>
       ) : null}
       {shouldLoad && !previewFailed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          key={retryCount}
-          src={`https://assets.wasans.tully.sh/scores/${submissionUuid}-preview.jpg?retry=${retryCount}`}
+          src={`https://assets.wasans.tully.sh/scores/${submissionUuid}-preview.jpg`}
           alt=""
           className="h-full w-full object-cover"
           loading="lazy"
-          onError={handlePreviewError}
+          onError={() => setPreviewFailed(true)}
         />
       ) : null}
       {shouldLoad && previewFailed ? (

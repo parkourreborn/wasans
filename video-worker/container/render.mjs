@@ -16,12 +16,11 @@
 // every file, which would otherwise drift the audio out of sync a little
 // more with each of the ~50 joins.
 
-import { spawn } from "node:child_process"
-import { createReadStream, createWriteStream } from "node:fs"
-import { mkdir, open, rm, stat, writeFile } from "node:fs/promises"
+import { createReadStream } from "node:fs"
+import { mkdir, rm, stat, writeFile } from "node:fs/promises"
 import { Readable } from "node:stream"
-import { pipeline } from "node:stream/promises"
 import path from "node:path"
+import { readJob, run, saveResponse, uploadMultipart } from "./lib.mjs"
 
 const WIDTH = 1920
 const HEIGHT = 1080
@@ -32,10 +31,6 @@ const INTRO_SECONDS = 3
 const CARD_SECONDS = 2
 const TEXT_FADE_SECONDS = 0.5
 const CLIP_FADE_SECONDS = 0.5
-
-// R2 requires every multipart part except the last to be the same size,
-// and at least 5 MiB.
-const UPLOAD_PART_BYTES = 16 * 1024 * 1024
 
 const R2_BASE = process.env.R2_BASE || "http://r2.internal"
 const STATUS_URL = process.env.STATUS_URL || "http://status.internal/"
@@ -57,15 +52,6 @@ const VIDEO_ENCODE_ARGS = [
 ]
 const AUDIO_SEGMENT_ARGS = ["-c:a", "pcm_s16le", "-ar", String(AUDIO_RATE), "-ac", "2"]
 
-function readJob() {
-  const raw = process.env.JOB_JSON
-  if (!raw) {
-    throw new Error("JOB_JSON is not set")
-  }
-
-  return JSON.parse(Buffer.from(raw, "base64").toString("utf8"))
-}
-
 async function reportStatus(jobId, update) {
   try {
     const response = await fetch(STATUS_URL, {
@@ -80,28 +66,6 @@ async function reportStatus(jobId, update) {
     // A lost progress update shouldn't kill a render that is otherwise fine.
     console.error("Status update request failed:", error)
   }
-}
-
-function run(command, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] })
-    let stdout = ""
-    let stderr = ""
-    child.stdout.on("data", (chunk) => { stdout += chunk })
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk
-      // ffmpeg is chatty; only the tail matters for an error message.
-      if (stderr.length > 64_000) stderr = stderr.slice(-32_000)
-    })
-    child.on("error", reject)
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve(stdout)
-      } else {
-        reject(new Error(`${command} exited with ${code}: ${stderr.slice(-2000)}`))
-      }
-    })
-  })
 }
 
 async function probe(file) {
@@ -243,60 +207,8 @@ async function downloadObject(key, destination) {
     throw new Error(`download failed (${response.status})`)
   }
 
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(destination))
+  await saveResponse(response, destination)
   return true
-}
-
-async function r2Request(pathname, init) {
-  const response = await fetch(`${R2_BASE}${pathname}`, init)
-  if (!response.ok) {
-    throw new Error(`R2 ${pathname} failed (${response.status}): ${await response.text().catch(() => "")}`)
-  }
-  return response
-}
-
-async function uploadToR2(file, key, contentType, contentDisposition) {
-  const { size } = await stat(file)
-  const query = (extra = {}) => new URLSearchParams({ key, ...extra }).toString()
-
-  const created = await r2Request(`/multipart/create?${query()}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ contentType, contentDisposition }),
-  })
-  const { uploadId } = await created.json()
-
-  try {
-    const parts = []
-    const handle = await open(file, "r")
-    try {
-      for (let offset = 0, partNumber = 1; offset < size; offset += UPLOAD_PART_BYTES, partNumber += 1) {
-        const length = Math.min(UPLOAD_PART_BYTES, size - offset)
-        const buffer = Buffer.alloc(length)
-        await handle.read(buffer, 0, length, offset)
-
-        const response = await r2Request(`/multipart/part?${query({ uploadId, partNumber: String(partNumber) })}`, {
-          method: "PUT",
-          headers: { "content-length": String(length) },
-          body: buffer,
-        })
-        parts.push(await response.json())
-      }
-    } finally {
-      await handle.close()
-    }
-
-    await r2Request(`/multipart/complete?${query({ uploadId })}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ parts }),
-    })
-  } catch (error) {
-    await fetch(`${R2_BASE}/multipart/abort?${query({ uploadId })}`, { method: "POST" }).catch(() => {})
-    throw error
-  }
-
-  return size
 }
 
 function formatTimestamp(seconds) {
@@ -436,12 +348,12 @@ async function main() {
   await rm(segmentsDir, { recursive: true, force: true })
 
   const finalInfo = await probe(finalFile)
-  const sizeBytes = await uploadToR2(
-    finalFile,
-    job.objectKey,
-    "video/mp4",
-    `attachment; filename="${job.downloadFilename}"`
-  )
+  // The Worker writes this to the job's own compilations/ key; the
+  // container never chooses where it lands.
+  const sizeBytes = await uploadMultipart(`${R2_BASE}/compilation/multipart`, finalFile, {
+    contentType: "video/mp4",
+    contentDisposition: `attachment; filename="${job.downloadFilename}"`,
+  })
 
   let youtube = null
   let youtubeError = null

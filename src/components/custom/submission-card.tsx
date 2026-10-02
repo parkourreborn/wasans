@@ -1,7 +1,7 @@
 import Link from "next/link"
 import Badges from "@/components/custom/badges"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
-import { ScoreVideoPreview } from "@/components/custom/score-video-preview"
+import { ScoreVideoPreview, type VideoStatus } from "@/components/custom/score-video-preview"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 
@@ -22,6 +22,7 @@ type SubmissionCardProps = {
   scoreText?: string
   moderatorNote?: string | null
   moderatorUsername?: string | null
+  videoStatus?: VideoStatus | null
   className?: string
   onNavigate: (submissionUuid: string) => void
 }
@@ -43,6 +44,7 @@ export function SubmissionCard({
   scoreText,
   moderatorNote,
   moderatorUsername,
+  videoStatus,
   className,
   onNavigate,
 }: SubmissionCardProps) {
@@ -64,7 +66,7 @@ export function SubmissionCard({
       <Card className={className || "h-full overflow-hidden transition-colors hover:border-foreground/30"}>
         <CardContent className="flex h-full min-h-0 gap-4 p-4">
           <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
-            <ScoreVideoPreview submissionUuid={submissionUuid} />
+            <ScoreVideoPreview submissionUuid={submissionUuid} videoStatus={videoStatus} />
           </div>
 
           <div className="flex w-40 shrink-0 flex-col justify-between gap-3 py-1 xl:w-52">

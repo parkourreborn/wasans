@@ -70,6 +70,7 @@ type SubmissionValue = {
   date: number
   moderator_note?: string | null
   moderator_username?: string | null
+  video_status?: "processing" | "ready" | "failed"
 }
 
 type ComboSubmissionValue = {
@@ -521,6 +522,7 @@ export default function PlayerProfilePage() {
                 scoreText={row.state !== "denied" ? row.score.toFixed(3) : undefined}
                 moderatorNote={row.moderator_note}
                 moderatorUsername={row.moderator_username}
+                videoStatus={row.video_status}
                 onNavigate={(submissionUuid) => router.push(`/submissions/${submissionUuid}`)}
               />
             ))
