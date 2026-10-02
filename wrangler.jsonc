@@ -14,6 +14,11 @@
 		{
 			"binding": "WORKER_SELF_REFERENCE",
 			"service": "wasans"
+		},
+		{
+			// WR compilation renderer (video-worker/). Deploy that Worker first.
+			"binding": "COMPILATION_RENDERER",
+			"service": "wasans-wr-compilations"
 		}
 	],
 	"r2_buckets": [

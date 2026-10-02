@@ -1,0 +1,60 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	// Renders the monthly WR compilation video in a Cloudflare Container.
+	// Deployed separately from the main wasans app (like cron-worker/), and
+	// reachable only through the main app's COMPILATION_RENDERER service
+	// binding -- it has no public URL. See src/index.js.
+	"name": "wasans-wr-compilations",
+	"main": "src/index.js",
+	"compatibility_date": "2026-09-29",
+	"workers_dev": false,
+	"preview_urls": false,
+	"containers": [
+		{
+			"class_name": "CompilationRenderer",
+			"image": "./container/Dockerfile",
+			// 4 vCPU / 12 GiB / 20 GB disk. Only billed while a render is
+			// actually running (the container exits when it's done).
+			"instance_type": "standard-4",
+			"max_instances": 1
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "COMPILATION_RENDERER",
+				"class_name": "CompilationRenderer"
+			}
+		]
+	},
+	"exports": {
+		"CompilationRenderer": {
+			"type": "durable-object",
+			"storage": "sqlite"
+		}
+	},
+	"r2_buckets": [
+		{
+			"binding": "SUBMISSION_VIDEOS",
+			"bucket_name": "wasans"
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "wasans",
+			"database_name": "wasans",
+			"database_id": "64fda1ee-ce43-4f8e-9e89-57fc8f695cc1"
+		}
+	],
+	"vars": {
+		// YouTube upload only happens once YOUTUBE_CLIENT_ID,
+		// YOUTUBE_CLIENT_SECRET and YOUTUBE_REFRESH_TOKEN secrets are all set.
+		// Set YOUTUBE_UPLOAD to "off" to skip it even then.
+		"YOUTUBE_UPLOAD": "on",
+		// "private", "unlisted" or "public".
+		"YOUTUBE_PRIVACY": "unlisted"
+	},
+	"observability": {
+		"enabled": true
+	}
+}

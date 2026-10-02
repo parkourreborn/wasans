@@ -4,6 +4,7 @@ import * as React from "react"
 import { apiV2 } from "@/lib/api"
 import { SUBMISSION_BAN_REASON_MAX_LENGTH } from "@/lib/submission-bans"
 import { AnnouncementsSection } from "@/components/custom/admin/announcements-section"
+import { CompilationsSection } from "@/components/custom/admin/compilations-section"
 import { AdminAnalyticsOverview } from "@/components/custom/analytics/admin-analytics-overview"
 import { ErrorState, PageHeader, PageShell, SectionCard } from "@/components/custom/page-shell"
 import { Badge } from "@/components/ui/badge"
@@ -1127,6 +1128,8 @@ export default function AdminPage() {
       </SectionCard>
 
       <AnnouncementsSection />
+
+      <CompilationsSection />
 
       <SectionCard title="Feature flags" description="Site-wide kill switches. Owners can still moderate while moderation is disabled for everyone else.">
         {loadingFlags ? (
