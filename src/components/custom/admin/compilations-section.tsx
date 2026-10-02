@@ -8,6 +8,7 @@ import { useApiGet } from "@/hooks/use-api"
 import { SectionCard } from "@/components/custom/page-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
@@ -91,6 +92,9 @@ function statusLabel(row: CompilationRow) {
 export function CompilationsSection() {
   const { data, loading, error, refetch } = useApiGet<CompilationsResponse>(apiV2("/admin/compilations"))
   const [title, setTitle] = React.useState("")
+  // Off by default so test renders don't land on the channel; the monthly
+  // run always uploads.
+  const [uploadToYouTube, setUploadToYouTube] = React.useState(false)
   const [starting, setStarting] = React.useState(false)
 
   const compilations = data?.data || []
@@ -109,13 +113,14 @@ export function CompilationsSection() {
       const response = await fetch(apiV2("/admin/compilations"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: title.trim() || null }),
+        body: JSON.stringify({ title: title.trim() || null, upload_to_youtube: uploadToYouTube }),
       })
       const json = await response.json().catch(() => null)
       if (!response.ok) {
         throw new Error(jsonErrorMessage(json, "Unable to start the compilation"))
       }
       setTitle("")
+      setUploadToYouTube(false)
       toast.success("Compilation started. It takes a few minutes to render.")
       refetch()
     } catch (err) {
@@ -128,20 +133,29 @@ export function CompilationsSection() {
   return (
     <SectionCard
       title="WR compilations"
-      description="Every active trial's world record in one video, in trial order. Renders automatically at 00:00 UTC on the 1st of each month, or generate one now."
+      description="Every active trial's world record in one video, in trial order. Renders automatically at 00:00 UTC on the 1st of each month and uploads to YouTube, or generate one now."
     >
-      <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row">
-        <Input
-          placeholder={defaultManualTitle()}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          maxLength={100}
-          aria-label="Intro title (optional)"
-        />
-        <Button type="button" onClick={generate} disabled={starting || anyInProgress}>
-          {starting ? <Spinner className="size-4" /> : null}
-          Generate now
-        </Button>
+      <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            placeholder={defaultManualTitle()}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={100}
+            aria-label="Intro title (optional)"
+          />
+          <Button type="button" onClick={generate} disabled={starting || anyInProgress}>
+            {starting ? <Spinner className="size-4" /> : null}
+            Generate now
+          </Button>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Checkbox
+            checked={uploadToYouTube}
+            onCheckedChange={(checked) => setUploadToYouTube(checked === true)}
+          />
+          Also upload to YouTube (as last month&apos;s compilation)
+        </label>
       </div>
 
       {loading && !data ? (

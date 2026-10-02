@@ -35,6 +35,7 @@ const CLIP_FADE_SECONDS = 0.5
 const R2_BASE = process.env.R2_BASE || "http://r2.internal"
 const STATUS_URL = process.env.STATUS_URL || "http://status.internal/"
 const YOUTUBE_TOKEN_URL = process.env.YOUTUBE_TOKEN_URL || "http://youtube.internal/token"
+const YOUTUBE_UPLOAD_URL = process.env.YOUTUBE_UPLOAD_URL || "https://www.googleapis.com/upload/youtube/v3/videos"
 const WORK_DIR = process.env.WORK_DIR || "/work"
 const FONT_LATIN = process.env.FONT_LATIN || "/usr/share/fonts/geist/Geist-Bold.ttf"
 const FONT_LATIN_LABEL = process.env.FONT_LATIN_LABEL || "/usr/share/fonts/geist/Geist-SemiBold.ttf"
@@ -219,9 +220,18 @@ function formatTimestamp(seconds) {
   return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${secs}` : `${minutes}:${secs}`
 }
 
+// The main app's fixed description, then one timestamp per trial for
+// YouTube chapters. YouTube drops chapters entirely unless the first is at
+// 0:00, there are at least three, and each runs at least 10s, so the 3s intro
+// isn't a chapter of its own: the first trial's chapter starts at 0:00.
 function buildYouTubeDescription(job, chapters) {
-  const lines = chapters.map((chapter) => `${formatTimestamp(chapter.start)} ${chapter.label}`)
-  return [`Every Parkour Reborn trial world record, as of ${job.asOf}.`, "", ...lines].join("\n")
+  const trials = chapters.filter((chapter) => chapter.label !== "Intro")
+  const lines = trials.map((chapter, index) => `${formatTimestamp(index === 0 ? 0 : chapter.start)} ${chapter.label}`)
+  const description = job.youtube.description || ""
+  if (lines.length < 3) {
+    return description
+  }
+  return description ? `${description}\n\n${lines.join("\n")}` : lines.join("\n")
 }
 
 // Resumable upload straight from the container to YouTube. The access token
@@ -235,7 +245,7 @@ async function uploadToYouTube(job, file, chapters) {
   const { access_token: accessToken } = await tokenResponse.json()
   const { size } = await stat(file)
 
-  const session = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
+  const session = await fetch(`${YOUTUBE_UPLOAD_URL}?uploadType=resumable&part=snippet,status`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${accessToken}`,
@@ -245,7 +255,7 @@ async function uploadToYouTube(job, file, chapters) {
     },
     body: JSON.stringify({
       snippet: {
-        title: job.title.slice(0, 100),
+        title: job.youtube.title.slice(0, 100),
         description: buildYouTubeDescription(job, chapters).slice(0, 5000),
         categoryId: "20", // Gaming
       },
@@ -357,7 +367,9 @@ async function main() {
 
   let youtube = null
   let youtubeError = null
-  if (job.youtube?.enabled) {
+  if (job.youtube?.requested && !job.youtube.enabled) {
+    youtubeError = "Not uploaded: YouTube isn't configured (see video-worker/README.md)."
+  } else if (job.youtube?.enabled) {
     try {
       youtube = await uploadToYouTube(job, finalFile, chapters)
     } catch (error) {
