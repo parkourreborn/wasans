@@ -18,7 +18,7 @@
 
 import { mkdir, readFile, rm, stat } from "node:fs/promises"
 import path from "node:path"
-import { SizeLimitError, readJob, run, saveResponse, uploadMultipart } from "./lib.mjs"
+import { ShutdownError, SizeLimitError, isShuttingDown, onShutdown, readJob, run, saveResponse, uploadMultipart } from "./lib.mjs"
 
 const MEDIA_BASE = process.env.MEDIA_BASE || "http://media.internal"
 const STATUS_URL = process.env.STATUS_URL || "http://status.internal/result"
@@ -367,11 +367,25 @@ async function main(job) {
 }
 
 const job = readJob()
+// Stopped mid-job (e.g. a deploy): report a retryable failure, so the
+// Worker re-queues it and it runs again on the new container.
+onShutdown(async () => {
+  await report({
+    status: "failed",
+    retryable: true,
+    error: "Something went wrong while processing the video.",
+    detail: new ShutdownError().message,
+  }).catch(() => {})
+})
 try {
   const result = await main(job)
   await report(result)
   process.exit(0)
 } catch (error) {
+  if (error instanceof ShutdownError || isShuttingDown()) {
+    // onShutdown reports and exits; don't race it with a second report.
+    await new Promise(() => {})
+  }
   console.error("Video processing failed:", error)
   const permanent = error instanceof PermanentError || error instanceof SizeLimitError
   try {
