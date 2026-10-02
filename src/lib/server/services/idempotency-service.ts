@@ -26,8 +26,9 @@ export function readIdempotencyKey(request: Request) {
   return key
 }
 
-export function readIdempotencyKeyFromFormData(formData: FormData) {
-  const key = String(formData.get("idempotency_key") || "").trim()
+// Same rules as the header, for clients that send the key in a JSON body.
+export function readIdempotencyKeyFromBody(value: unknown) {
+  const key = typeof value === "string" ? value.trim() : ""
   if (!key) {
     return null
   }

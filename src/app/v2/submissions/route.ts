@@ -2,13 +2,13 @@ import { jsonError, parsePagination } from "@/lib/server/http"
 import { listSubmissions } from "@/lib/server/repositories/submission-repository"
 import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-repository"
 import { getSubmissionBan } from "@/lib/server/repositories/submission-ban-repository"
-import { createSubmissionsFromRequest } from "@/lib/server/services/submission-write-service"
+import { createSubmissions } from "@/lib/server/services/submission-write-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import {
   buildRequestHash,
   lookupIdempotentResponse,
   readIdempotencyKey,
-  readIdempotencyKeyFromFormData,
+  readIdempotencyKeyFromBody,
   storeIdempotentResponse,
 } from "@/lib/server/services/idempotency-service"
 import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
@@ -40,7 +40,8 @@ export const POST = withV2Context(async (ctx) => {
     return jsonError("Submissions are currently disabled", 403, { code: "forbidden", requestId: ctx.requestId })
   }
 
-  // Checked before the body is read so a banned player never uploads a video
+  // Checked before the body is read (and again before an upload URL is
+  // handed out, see /v2/uploads) so a banned player never uploads a video
   // we would only throw away.
   const submissionBan = await getSubmissionBan(ctx.db, ctx.auth.uuid)
   if (submissionBan) {
@@ -65,13 +66,15 @@ export const POST = withV2Context(async (ctx) => {
     })
   }
 
-  const formData = await ctx.request.formData().catch(() => null)
-  if (!formData) {
-    return jsonError("Submission payload is too large or invalid", 413, { code: "validation_error", requestId: ctx.requestId })
+  // JSON only: videos go straight to R2 (see /v2/uploads), so nothing
+  // large passes through this Worker any more.
+  const body = (await ctx.request.json().catch(() => null)) as { submissions?: unknown; idempotency_key?: unknown } | null
+  if (!body || !Array.isArray(body.submissions)) {
+    return jsonError("Submission payload is invalid", 400, { code: "validation_error", requestId: ctx.requestId })
   }
 
-  const rawSubmissions = String(formData.get("submissions") || "")
-  const providedIdempotencyKey = readIdempotencyKey(ctx.request) || readIdempotencyKeyFromFormData(formData)
+  const rawSubmissions = JSON.stringify(body.submissions)
+  const providedIdempotencyKey = readIdempotencyKey(ctx.request) || readIdempotencyKeyFromBody(body.idempotency_key)
   const idempotencyKey = providedIdempotencyKey
     || await buildRequestHash("v2:submissions.create:auto-key", ctx.auth.uuid, rawSubmissions)
 
@@ -96,8 +99,7 @@ export const POST = withV2Context(async (ctx) => {
   }
 
   try {
-    const writer = await createSubmissionsFromRequest(ctx.db, ctx.env, { uuid: ctx.auth.uuid })
-    const results = await writer(formData)
+    const results = await createSubmissions(ctx.db, ctx.env, { uuid: ctx.auth.uuid }, body.submissions)
     const payload = { results }
 
     await storeIdempotentResponse(ctx.db, {

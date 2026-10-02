@@ -1,15 +1,26 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	// Renders the monthly WR compilation video in a Cloudflare Container.
-	// Deployed separately from the main wasans app (like cron-worker/), and
-	// reachable only through the main app's COMPILATION_RENDERER service
-	// binding -- it has no public URL. See src/index.js.
-	"name": "wasans-wr-compilations",
+	// Everything that needs ffmpeg: submission video processing (queue-fed)
+	// and the monthly WR compilation. Deployed separately from the main
+	// wasans app (like cron-worker/), and reachable only through the main
+	// app's VIDEO_SERVICE service binding and the video-processing queue --
+	// it has no public URL. See src/index.js and README.md.
+	"name": "wasans-video",
 	"main": "src/index.js",
 	"compatibility_date": "2026-09-29",
 	"workers_dev": false,
 	"preview_urls": false,
 	"containers": [
+		{
+			"class_name": "SubmissionVideoProcessor",
+			"image": "./container/Dockerfile",
+			// 2 vCPU / 8 GiB / 16 GB disk per video. Only billed while a video
+			// is actually processing (the container exits when it's done).
+			"instance_type": "standard-3",
+			// Videos processed in parallel. Anything beyond this waits on the
+			// queue (see START_RETRY_DELAY_SECONDS in src/index.js).
+			"max_instances": 6
+		},
 		{
 			"class_name": "CompilationRenderer",
 			"image": "./container/Dockerfile",
@@ -22,21 +33,57 @@
 	"durable_objects": {
 		"bindings": [
 			{
+				"name": "VIDEO_PROCESSOR",
+				"class_name": "SubmissionVideoProcessor"
+			},
+			{
 				"name": "COMPILATION_RENDERER",
 				"class_name": "CompilationRenderer"
 			}
 		]
 	},
 	"exports": {
+		"SubmissionVideoProcessor": {
+			"type": "durable-object",
+			"storage": "sqlite"
+		},
 		"CompilationRenderer": {
 			"type": "durable-object",
 			"storage": "sqlite"
 		}
 	},
+	"queues": {
+		"producers": [
+			{
+				// Retries of failed runs are re-sent here with a delay.
+				"binding": "VIDEO_QUEUE",
+				"queue": "video-processing"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "video-processing",
+				"max_batch_size": 5,
+				"max_batch_timeout": 1,
+				// Starting a container is quick; these retries are for "every
+				// instance is busy" during a backfill, so be generous.
+				"max_retries": 100,
+				"retry_delay": 60,
+				"dead_letter_queue": "video-processing-dlq"
+			}
+		]
+	},
 	"r2_buckets": [
 		{
+			// Public (assets.wasans.tully.sh): published videos + thumbnails.
 			"binding": "SUBMISSION_VIDEOS",
 			"bucket_name": "wasans"
+		},
+		{
+			// Private: players' direct uploads (incoming/) and the originals
+			// kept for moderators (originals/).
+			"binding": "UPLOADS",
+			"bucket_name": "wasans-uploads"
 		}
 	],
 	"d1_databases": [
@@ -47,9 +94,13 @@
 		}
 	],
 	"vars": {
-		// YouTube upload only happens once YOUTUBE_CLIENT_ID,
-		// YOUTUBE_CLIENT_SECRET and YOUTUBE_REFRESH_TOKEN secrets are all set.
-		// Set YOUTUBE_UPLOAD to "off" to skip it even then.
+		// Where processing results are reported (POST
+		// /v2/internal/submission-videos/{uuid}, authenticated with the
+		// VIDEO_CALLBACK_SECRET secret, which the main app must share).
+		"APP_URL": "https://wasans.tully.sh",
+		// YouTube upload of the compilation only happens once
+		// YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET and YOUTUBE_REFRESH_TOKEN
+		// secrets are all set. Set YOUTUBE_UPLOAD to "off" to skip it even then.
 		"YOUTUBE_UPLOAD": "on",
 		// "private", "unlisted" or "public".
 		"YOUTUBE_PRIVACY": "unlisted"

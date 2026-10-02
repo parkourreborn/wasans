@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim
 
-# ffmpeg for rendering; Noto Sans CJK so Korean/Japanese/Chinese player
+# ffmpeg for rendering/processing; Noto Sans CJK so Korean/Japanese/Chinese player
 # names render (Geist, the site font, is Latin-only).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg fonts-noto-cjk ca-certificates \
@@ -16,7 +16,10 @@ RUN mkdir -p /usr/share/fonts/geist \
   && rm -rf /tmp/package /tmp/geist-1.7.2.tgz
 
 WORKDIR /app
-COPY render.mjs ./
+COPY lib.mjs render.mjs process.mjs ./
 
-# Batch job: renders one compilation from JOB_JSON, then exits.
+# One image, two batch jobs. Each reads JOB_JSON, does its work, and exits:
+#   render.mjs   the WR compilation (default)
+#   process.mjs  a submission video (the processor's Container class
+#                overrides the entrypoint, see ../src/processing.js)
 CMD ["node", "/app/render.mjs"]
