@@ -5,6 +5,7 @@ import {
   compilationFileStem,
   compilationObjectKey,
   compilationTitle,
+  formatWrHeldFor,
   isCompilationStale,
   type CompilationTrigger,
 } from "@/lib/server/compilations"
@@ -45,7 +46,10 @@ export async function startCompilation(
     await markCompilationFailed(db, inProgress.id, "Timed out without a result from the renderer", now)
   }
 
-  const entries = await listCompilationEntries(db)
+  const entries = (await listCompilationEntries(db)).map((entry) => ({
+    ...entry,
+    heldFor: formatWrHeldFor(entry.wrDate, now),
+  }))
   if (entries.length === 0) {
     throw new ApiError("There are no world records to compile", 400, "bad_request")
   }

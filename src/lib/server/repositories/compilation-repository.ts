@@ -8,6 +8,11 @@ export type CompilationEntry = {
   playerScore: number
   submissionUuid: string
   videoKey: string
+  // When the WR run was submitted (unix seconds); there's no separate
+  // approval timestamp.
+  wrDate: number
+  // e.g. "259 days", filled in when the compilation is queued.
+  heldFor?: string
 }
 
 export type CompilationRow = {
@@ -45,6 +50,7 @@ export async function listCompilationEntries(db: D1Database): Promise<Compilatio
        wrs.time,
        wrs.player_name,
        wrs.submission_uuid,
+       wrs.date,
        COALESCE(players.score, 0) AS player_score
      FROM wrs
      JOIN trials ON trials.name = wrs.trial_name
@@ -52,7 +58,7 @@ export async function listCompilationEntries(db: D1Database): Promise<Compilatio
      WHERE trials.status = 'active'
        AND COALESCE(players.account_status, 'active') != 'deactivated'
      ORDER BY trials.sort_order ASC, trials.name ASC`
-  ).all<{ trial_name: string; time: number; player_name: string; submission_uuid: string; player_score: number }>()
+  ).all<{ trial_name: string; time: number; player_name: string; submission_uuid: string; date: number; player_score: number }>()
 
   return (rows.results || []).map((row) => ({
     trial: row.trial_name,
@@ -61,6 +67,7 @@ export async function listCompilationEntries(db: D1Database): Promise<Compilatio
     playerScore: Number(row.player_score),
     submissionUuid: row.submission_uuid,
     videoKey: `scores/${row.submission_uuid}.mp4`,
+    wrDate: Number(row.date),
   }))
 }
 

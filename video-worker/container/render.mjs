@@ -129,9 +129,25 @@ async function renderCard(name, text, duration, fontSize, output) {
   ])
 }
 
-// One WR clip: letterboxed to 1080p60, "name (score)" bottom-left, and a
-// fade in from / out to black on both picture and sound.
-async function renderClip(index, source, label, output) {
+function labelFilter(font, textFile, x) {
+  return [
+    `drawtext=fontfile=${font}`,
+    `textfile=${textFile}`,
+    "expansion=none",
+    "fontsize=44",
+    "fontcolor=white",
+    `x=${x}`,
+    "y=h-text_h-48",
+    "box=1",
+    "boxcolor=black@0.5",
+    "boxborderw=14",
+  ].join(":")
+}
+
+// One WR clip: letterboxed to 1080p60, "name (score)" bottom-left, how long
+// it has been the WR ("259 days") bottom-right in the same style, and a fade
+// in from / out to black on both picture and sound.
+async function renderClip(index, source, label, heldFor, output) {
   const info = await probe(source)
   if (!info.hasVideo || info.duration <= CLIP_FADE_SECONDS * 2) {
     throw new Error("video has no usable video stream")
@@ -140,24 +156,15 @@ async function renderClip(index, source, label, output) {
   const duration = info.duration
   const fadeOutStart = Math.max(0, duration - CLIP_FADE_SECONDS)
   const labelFile = await writeTextFile(`label-${index}`, label)
+  const heldForFile = heldFor ? await writeTextFile(`held-${index}`, heldFor) : null
 
   const videoFilter = [
     `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease:flags=lanczos`,
     `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black`,
     "setsar=1",
     `fps=${FPS}`,
-    [
-      `drawtext=fontfile=${fontFor(label, FONT_LATIN_LABEL)}`,
-      `textfile=${labelFile}`,
-      "expansion=none",
-      "fontsize=44",
-      "fontcolor=white",
-      "x=48",
-      "y=h-text_h-48",
-      "box=1",
-      "boxcolor=black@0.5",
-      "boxborderw=14",
-    ].join(":"),
+    labelFilter(fontFor(label, FONT_LATIN_LABEL), labelFile, "48"),
+    ...(heldForFile ? [labelFilter(FONT_LATIN_LABEL, heldForFile, "w-text_w-48")] : []),
     `fade=t=in:st=0:d=${CLIP_FADE_SECONDS}`,
     `fade=t=out:st=${fadeOutStart}:d=${CLIP_FADE_SECONDS}`,
     "format=yuv420p",
@@ -243,7 +250,7 @@ async function main() {
       }
 
       await renderCard(`card-${index}`, `${entry.trial} ${timeText}`, CARD_SECONDS, 96, card)
-      await renderClip(index, source, `${entry.playerName} (${Number(entry.playerScore).toFixed(3)})`, clip)
+      await renderClip(index, source, `${entry.playerName} (${Number(entry.playerScore).toFixed(3)})`, entry.heldFor, clip)
 
       segments.push(card, clip)
       chapters.push({ start: cursor, label: `${entry.trial} - ${entry.playerName} ${timeText}` })
