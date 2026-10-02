@@ -46,13 +46,12 @@
 				// Consumed by the wasans-video Worker (video-worker/).
 				"binding": "VIDEO_QUEUE",
 				"queue": "video-processing"
-			},
-		],
-		"consumers": [
-      {
-        "queue": "video-processing-dlq"
-      }
-    ]
+			}
+		]
+		// No consumer for video-processing-dlq on purpose: this OpenNext
+		// Worker has no queue() handler, and dead letters should stay in
+		// that queue to be inspected. Stuck submissions are re-queued by the
+		// daily maintenance sweep (see video-processing-service.ts).
 	},
 	"images": {
 		"binding": "IMAGES"
