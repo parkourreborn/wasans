@@ -1,0 +1,17 @@
+# Store every text file with LF line endings, whatever the OS the edit was
+# made on. Git converts on commit (and on checkout, with core.autocrlf set
+# locally), so Windows editors can keep using CRLF without rewriting every
+# line of every file in the next commit.
+* text=auto eol=lf
+
+# Never touch binaries.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.mp4 binary
