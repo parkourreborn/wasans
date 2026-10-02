@@ -15,14 +15,21 @@ const SWEEP_URL = "https://wasans.tully.sh/v2/admin/trials/sweep"
 const CLEANUP_URL = "https://wasans.tully.sh/v2/admin/maintenance/cleanup-expired"
 const GIVEAWAY_SWEEP_URL = "https://wasans.tully.sh/v2/admin/giveaways/sweep-expired"
 const RANK_SNAPSHOT_URL = "https://wasans.tully.sh/v2/admin/analytics/snapshot-ranks"
+const COMPILATION_URL = "https://wasans.tully.sh/v2/admin/compilations/scheduled"
 
 // The per-minute "* * * * *" trigger only runs the giveaway sweep -- an
 // active giveaway needs to end within a minute of its deadline, not once a
-// day like the other two.
+// day like the other two. The monthly "0 0 1 * *" trigger only kicks off the
+// WR compilation video.
 export default {
   async scheduled(event, env, ctx) {
     if (event.cron === "* * * * *") {
       ctx.waitUntil(runGiveawaySweep(env))
+      return
+    }
+
+    if (event.cron === "0 0 1 * *") {
+      ctx.waitUntil(runCompilation(env))
       return
     }
 
@@ -101,5 +108,23 @@ async function runGiveawaySweep(env) {
     }
   } catch (error) {
     console.error("Giveaway sweep request failed:", error)
+  }
+}
+
+async function runCompilation(env) {
+  try {
+    const response = await fetch(COMPILATION_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.CRON_SECRET}`,
+      },
+    })
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "")
+      console.error(`WR compilation failed to start: ${response.status} ${body}`)
+    }
+  } catch (error) {
+    console.error("WR compilation request failed:", error)
   }
 }
