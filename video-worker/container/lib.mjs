@@ -20,9 +20,53 @@ export function readJob() {
   return JSON.parse(Buffer.from(raw, "base64").toString("utf8"))
 }
 
+// Child processes still running, so a shutdown can stop them (see
+// onShutdown) instead of leaving them orphaned.
+const children = new Set()
+let shuttingDown = false
+
+export function isShuttingDown() {
+  return shuttingDown
+}
+
+export class ShutdownError extends Error {
+  constructor(detail = "") {
+    super(`The container was stopped before the job finished (usually a deploy of the wasans-video Worker)${detail}.`)
+    this.name = "ShutdownError"
+  }
+}
+
+// Cloudflare stops a container (on a deploy/rollout, or an inactivity
+// timeout) by sending SIGTERM, then SIGKILL 15 minutes later. Without a
+// handler, ffmpeg dies of it with exit code 255 and no error text, and the
+// job carried on as if a clip were broken. Now the job stops cleanly and
+// reports why via `handler`, then exits.
+export function onShutdown(handler) {
+  const stop = async (signal) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    console.error(`Received ${signal}; stopping.`)
+    for (const child of children) child.kill("SIGTERM")
+    try {
+      await handler(signal)
+    } finally {
+      process.exit(1)
+    }
+  }
+  process.on("SIGTERM", () => stop("SIGTERM"))
+  process.on("SIGINT", () => stop("SIGINT"))
+}
+
 export function run(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] })
+    if (shuttingDown) {
+      reject(new ShutdownError())
+      return
+    }
+    // ffmpeg reads stdin for interactive keys unless told not to.
+    const fullArgs = command === "ffmpeg" ? ["-nostdin", ...args] : args
+    const child = spawn(command, fullArgs, { stdio: ["ignore", "pipe", "pipe"] })
+    children.add(child)
     let stdout = ""
     let stderr = ""
     child.stdout.on("data", (chunk) => { stdout += chunk })
@@ -31,10 +75,24 @@ export function run(command, args) {
       // ffmpeg is chatty; only the tail matters for an error message.
       if (stderr.length > 64_000) stderr = stderr.slice(-32_000)
     })
-    child.on("error", reject)
-    child.on("close", (code) => {
+    child.on("error", (error) => {
+      children.delete(child)
+      reject(error)
+    })
+    child.on("close", (code, signal) => {
+      children.delete(child)
       if (code === 0) {
         resolve(stdout)
+      } else if (shuttingDown) {
+        reject(new ShutdownError())
+      } else if (signal) {
+        reject(new Error(`${command} was killed by ${signal} (out of memory?)`))
+      } else if (code === 255 && !stderr.trim()) {
+        // ffmpeg's own exit code for "interrupted by a signal" (the only
+        // message it prints about that is below -loglevel error). In a
+        // container that's the platform stopping it, so it's treated as a
+        // shutdown, not as a problem with the video.
+        reject(new ShutdownError(`: ${command} was interrupted by a signal (exit 255)`))
       } else {
         reject(new Error(`${command} exited with ${code}: ${stderr.slice(-2000)}`))
       }
