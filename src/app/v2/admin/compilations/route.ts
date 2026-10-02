@@ -49,9 +49,14 @@ export const GET = withV2Context(async (ctx) => {
 export const POST = withV2Context(async (ctx) => {
   const user = await requireV2Owner(ctx)
 
-  const body = (await ctx.request.json().catch(() => null)) as { title?: unknown } | null
+  const body = (await ctx.request.json().catch(() => null)) as { title?: unknown; upload_to_youtube?: unknown } | null
   const title = typeof body?.title === "string" ? body.title : null
 
-  const result = await startCompilation(ctx.db, ctx.env, { trigger: "manual", requester: user, title })
+  const result = await startCompilation(ctx.db, ctx.env, {
+    trigger: "manual",
+    requester: user,
+    title,
+    uploadToYouTube: body?.upload_to_youtube === true,
+  })
   return jsonOk(result, { status: 202, requestId: ctx.requestId })
 })

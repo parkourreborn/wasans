@@ -1,10 +1,12 @@
 import "server-only"
 import { insertAuditLog } from "@/lib/server/audit"
 import {
+  COMPILATION_YOUTUBE_DESCRIPTION,
   compilationAsOf,
   compilationFileStem,
   compilationObjectKey,
   compilationTitle,
+  compilationYouTubeTitle,
   isCompilationStale,
   type CompilationTrigger,
 } from "@/lib/server/compilations"
@@ -28,7 +30,14 @@ type Requester = { uuid: string; player_name: string }
 export async function startCompilation(
   db: D1Database,
   env: CloudflareEnv,
-  options: { trigger: CompilationTrigger; requester?: Requester | null; title?: string | null }
+  options: {
+    trigger: CompilationTrigger
+    requester?: Requester | null
+    title?: string | null
+    // The monthly run always uploads; a manual one only when asked to, so
+    // test renders don't land on the channel.
+    uploadToYouTube?: boolean
+  }
 ) {
   if (!env.VIDEO_SERVICE) {
     throw new ApiError("The compilation renderer isn't configured", 503, "internal_error")
@@ -75,6 +84,11 @@ export async function startCompilation(
         asOf: compilationAsOf(nowDate, options.trigger),
         objectKey,
         downloadFilename: `${compilationFileStem(nowDate, options.trigger)}.mp4`,
+        youtube: {
+          requested: options.trigger === "scheduled" || options.uploadToYouTube === true,
+          title: compilationYouTubeTitle(nowDate),
+          description: COMPILATION_YOUTUBE_DESCRIPTION,
+        },
         entries,
       }),
     })
@@ -91,7 +105,12 @@ export async function startCompilation(
 
   await insertAuditLog(db, "wr_compilation_started", "wr_compilation", id, {
     actor: options.requester ?? null,
-    details: { trigger: options.trigger, title, trials: entries.length },
+    details: {
+      trigger: options.trigger,
+      title,
+      trials: entries.length,
+      youtube: options.trigger === "scheduled" || options.uploadToYouTube === true,
+    },
   })
 
   return { id, title, objectKey, trials: entries.length }
