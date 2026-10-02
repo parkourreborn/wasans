@@ -83,7 +83,8 @@
 			// Private: players' direct uploads (incoming/) and the originals
 			// kept for moderators (originals/).
 			"binding": "UPLOADS",
-			"bucket_name": "wasans-uploads"
+			"bucket_name": "wasans-uploads",
+			"remote": true
 		}
 	],
 	"d1_databases": [
