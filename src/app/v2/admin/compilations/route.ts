@@ -1,3 +1,4 @@
+import { compilationYouTubeDescription, compilationYouTubeTitle, type CompilationChapter } from "@/lib/server/compilations"
 import { listCompilations, type CompilationRow } from "@/lib/server/repositories/compilation-repository"
 import { startCompilation } from "@/lib/server/services/compilation-service"
 import { jsonOk, requireV2Owner, withV2Context } from "@/lib/server/v2/http"
@@ -29,8 +30,10 @@ function toApiCompilation(row: CompilationRow) {
     duration_seconds: row.duration_seconds,
     size_bytes: row.size_bytes,
     download_url: row.status === "done" ? `${publicAssetsBaseUrl}/${row.object_key}` : null,
-    youtube_url: row.youtube_url,
-    youtube_error: row.youtube_error,
+    // Ready to paste into YouTube Studio (see compilationYouTubeTitle).
+    youtube_title: compilationYouTubeTitle(new Date(row.created_at * 1000)),
+    youtube_description:
+      row.status === "done" ? compilationYouTubeDescription(parseJson<CompilationChapter[]>(row.chapters_json, [])) : null,
     error: row.error,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -49,14 +52,9 @@ export const GET = withV2Context(async (ctx) => {
 export const POST = withV2Context(async (ctx) => {
   const user = await requireV2Owner(ctx)
 
-  const body = (await ctx.request.json().catch(() => null)) as { title?: unknown; upload_to_youtube?: unknown } | null
+  const body = (await ctx.request.json().catch(() => null)) as { title?: unknown } | null
   const title = typeof body?.title === "string" ? body.title : null
 
-  const result = await startCompilation(ctx.db, ctx.env, {
-    trigger: "manual",
-    requester: user,
-    title,
-    uploadToYouTube: body?.upload_to_youtube === true,
-  })
+  const result = await startCompilation(ctx.db, ctx.env, { trigger: "manual", requester: user, title })
   return jsonOk(result, { status: 202, requestId: ctx.requestId })
 })
