@@ -16,6 +16,7 @@ interface __BaseEnv_CloudflareEnv {
 	JWT_SECRET: string;
 	CRON_SECRET: string;
 	WORKER_SELF_REFERENCE: Service<typeof import("./.open-next/worker").default>;
+	COMPILATION_RENDERER: Fetcher;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
