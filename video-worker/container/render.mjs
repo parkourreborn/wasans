@@ -17,7 +17,7 @@
 
 import { mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { readJob, run, saveResponse, uploadMultipart } from "./lib.mjs"
+import { ShutdownError, isShuttingDown, onShutdown, readJob, run, saveResponse, uploadMultipart } from "./lib.mjs"
 
 const WIDTH = 1920
 const HEIGHT = 1080
@@ -276,6 +276,11 @@ async function main() {
       chapters.push({ start: cursor, label: `${entry.trial} - ${entry.playerName} ${timeText}` })
       cursor += (await probe(card)).duration + (await probe(clip)).duration
     } catch (error) {
+      // A stopped container isn't a broken clip: fail the whole render
+      // rather than publish a video with clips silently missing.
+      if (error instanceof ShutdownError || isShuttingDown()) {
+        throw error
+      }
       console.error(`Skipping ${entry.trial}:`, error)
       skipped.push({ trial: entry.trial, reason: String(error?.message || error).slice(0, 300) })
       await rm(card, { force: true })
@@ -327,12 +332,21 @@ async function main() {
 }
 
 let jobId = null
+onShutdown(async () => {
+  if (jobId) {
+    await reportStatus(jobId, { status: "failed", error: `${new ShutdownError().message} Generate it again.` })
+  }
+})
 try {
   jobId = readJob().id
   await main()
   process.exit(0)
 } catch (error) {
   console.error("Compilation failed:", error)
+  if (isShuttingDown()) {
+    // onShutdown reports and exits; don't race it with a second report.
+    await new Promise(() => {})
+  }
   if (jobId) {
     await reportStatus(jobId, { status: "failed", error: String(error?.message || error).slice(0, 2000) })
   }
