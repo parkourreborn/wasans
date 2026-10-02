@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(cd \"c:\\\\Users\\\\tully\\\\Documents\\\\wasans\" && npm run lint 2>&1 > /tmp/lintout.txt; grep -n \"v2\" /tmp/lintout.txt | grep -v \"worker-configuration\\\\|react-server-components\\\\|v2 \" | head -60)",
+      "Read(//tmp/**)",
+      "Bash(npx tsc *)",
+      "Bash(npx wrangler *)"
+    ]
+  }
+}

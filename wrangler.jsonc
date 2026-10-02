@@ -46,8 +46,13 @@
 				// Consumed by the wasans-video Worker (video-worker/).
 				"binding": "VIDEO_QUEUE",
 				"queue": "video-processing"
-			}
-		]
+			},
+		],
+		"consumers": [
+      {
+        "queue": "video-processing-dlq"
+      }
+    ]
 	},
 	"images": {
 		"binding": "IMAGES"
@@ -62,7 +67,7 @@
 		// signed with the R2_UPLOAD_ACCESS_KEY_ID/R2_UPLOAD_SECRET_ACCESS_KEY
 		// secrets. Fill in the Cloudflare account ID (dashboard > R2 >
 		// Account details).
-		"R2_ACCOUNT_ID": "",
+		"R2_ACCOUNT_ID": "7599248988d1378ed7254d2fe7d3583d",
 		"R2_UPLOADS_BUCKET": "wasans-uploads"
 	},
 	"d1_databases": [
