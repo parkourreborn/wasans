@@ -5,6 +5,7 @@ import {
   COMPILATION_YOUTUBE_DESCRIPTION,
   compilationYouTubeDescription,
   compilationYouTubeTitle,
+  formatWrHeldFor,
   compilationAsOf,
   compilationObjectKey,
   compilationTitle,
@@ -78,4 +79,16 @@ test("fewer than three trials means no chapters (YouTube would ignore them)", ()
     compilationYouTubeDescription([{ start: 0, label: "Intro" }, { start: 3, label: "Crystal - jahz 7.553" }]),
     COMPILATION_YOUTUBE_DESCRIPTION
   )
+})
+
+test("WR age is whole days since the record was set", () => {
+  const day = 86_400
+  const now = 1_000_000_000
+
+  assert.equal(formatWrHeldFor(now - 259 * day - 5, now), "259 days")
+  assert.equal(formatWrHeldFor(now - 12 * day, now), "12 days")
+  assert.equal(formatWrHeldFor(now - day - 1, now), "1 day")
+  assert.equal(formatWrHeldFor(now - 3600, now), "0 days")
+  // A clock skew can't produce a negative age.
+  assert.equal(formatWrHeldFor(now + 60, now), "0 days")
 })

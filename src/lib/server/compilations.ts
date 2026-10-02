@@ -69,6 +69,13 @@ export function compilationYouTubeDescription(chapters: CompilationChapter[]) {
   return `${COMPILATION_YOUTUBE_DESCRIPTION}\n\n${lines.join("\n")}`
 }
 
+// "How long this has been the WR", shown bottom-right on each clip:
+// whole days from the record's submission date to the render.
+export function formatWrHeldFor(wrDateSeconds: number, nowSeconds: number) {
+  const days = Math.max(0, Math.floor((nowSeconds - wrDateSeconds) / 86_400))
+  return days === 1 ? "1 day" : `${days} days`
+}
+
 export function compilationTitle(now: Date, trigger: CompilationTrigger) {
   const { year, month } = compilationMonth(now, trigger)
   return `World Records — ${MONTHS[month]} ${year}`
