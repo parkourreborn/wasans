@@ -103,8 +103,9 @@
 		// YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET and YOUTUBE_REFRESH_TOKEN
 		// secrets are all set. Set YOUTUBE_UPLOAD to "off" to skip it even then.
 		"YOUTUBE_UPLOAD": "on",
-		// "private", "unlisted" or "public".
-		"YOUTUBE_PRIVACY": "unlisted"
+		// "private", "unlisted" or "public". Google forces "private" anyway
+		// until the Cloud project passes its YouTube API audit.
+		"YOUTUBE_PRIVACY": "public"
 	},
 	"observability": {
 		"enabled": true
