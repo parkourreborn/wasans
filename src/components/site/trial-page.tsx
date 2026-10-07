@@ -18,7 +18,7 @@ import { useAuthSession } from "@/components/custom/use-auth-session"
 import { PageHeader } from "@/components/site/page-header"
 import { Pager } from "@/components/site/pager"
 import { RankCell } from "@/components/site/rank-cell"
-import type { WorldRecordsResponse } from "@/components/site/trials-index"
+import type { WorldRecord, WorldRecordsResponse } from "@/components/site/trials-index"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -80,6 +80,48 @@ function Stat({ label, children, className }: { label: string; children: React.R
       <dt className="label-caps text-[13px] text-subtle-foreground">{label}</dt>
       <dd className="m-0 min-w-0">{children}</dd>
     </div>
+  )
+}
+
+// The record plays right on the trial page. No autoplay: a full run on
+// every visit would be a lot of mobile data. If the file won't load, say
+// so and point to the run page instead of leaving a black box.
+function WrVideo({ trial, wr, showPoster }: { trial: string; wr: WorldRecord; showPoster: boolean }) {
+  const [failed, setFailed] = useState(false)
+  const runHref = `/submissions/${encodeURIComponent(wr.submission_uuid)}`
+
+  return (
+    <figure className="m-0 flex flex-col gap-2">
+      <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-line-strong bg-black">
+        {failed ? (
+          <div className="flex size-full flex-col items-center justify-center gap-2 px-4 text-center">
+            <p className="text-sm text-muted-foreground">This video couldn&apos;t be loaded here.</p>
+            <Link href={runHref} className="label-caps text-[15px] underline decoration-primary underline-offset-4">
+              Open the run page
+            </Link>
+          </div>
+        ) : (
+          <video
+            src={`${ASSETS}/scores/${wr.submission_uuid}.mp4`}
+            poster={showPoster ? `${ASSETS}/scores/${wr.submission_uuid}-preview.jpg` : undefined}
+            controls
+            playsInline
+            preload="metadata"
+            onError={() => setFailed(true)}
+            aria-label={`${trial} world record by ${wr.player_name}, ${formatTime(wr.time)}`}
+            className="size-full bg-black object-contain"
+          />
+        )}
+      </div>
+      <figcaption className="flex items-center justify-between gap-3 text-[13px] text-muted-foreground">
+        <span className="min-w-0 truncate">
+          World record by {wr.player_name}, set {formatDate(wr.date)}
+        </span>
+        <Link href={runHref} className="shrink-0 hover:text-foreground">
+          Run details
+        </Link>
+      </figcaption>
+    </figure>
   )
 }
 
@@ -199,16 +241,16 @@ export function TrialPage({ trial }: { trial: TrialName }) {
         }
         title={trial}
       >
-        <div className="grid gap-x-10 gap-y-7 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] md:items-end">
-          <dl className="m-0 flex flex-col gap-6">
+        {/* Phones: record, video, stats. Desktop: record and stats on the
+            left, the video large on the right. */}
+        <div className="grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:grid-rows-[auto_1fr] xl:grid-cols-[minmax(0,1fr)_minmax(0,38rem)]">
+          <dl className="m-0">
             <Stat label="World record">
               {records.loading ? (
                 <Skeleton className="mt-1 h-10 w-40 rounded-sm bg-surface-3" />
               ) : wr ? (
                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-                  <Link href={`/submissions/${encodeURIComponent(wr.submission_uuid)}`} className="num text-[40px] font-semibold leading-none text-gold hover:underline">
-                    {formatTime(wr.time)}
-                  </Link>
+                  <span className="num text-[40px] font-semibold leading-none text-gold">{formatTime(wr.time)}</span>
                   <span className="flex min-w-0 items-center gap-2 text-[15px]">
                     <PlayerAvatar
                       size="sm"
@@ -232,7 +274,15 @@ export function TrialPage({ trial }: { trial: TrialName }) {
                 <p className="text-[15px] text-muted-foreground">No record yet. The first approved run sets it.</p>
               )}
             </Stat>
+          </dl>
 
+          {wr ? (
+            <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+              <WrVideo key={wr.submission_uuid} trial={trial} wr={wr} showPoster={showThumbnails} />
+            </div>
+          ) : null}
+
+          <dl className="m-0 flex flex-col gap-5">
             <div className="grid grid-cols-3 gap-x-4 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-5">
               {mine ? (
                 <Stat label="Your PB">
@@ -260,52 +310,7 @@ export function TrialPage({ trial }: { trial: TrialName }) {
             <p className="max-w-xl text-sm text-muted-foreground">
               A run scores 0 at the bronze time, 0.300 at platinum and 1.000 at the world record.
             </p>
-            {wr ? (
-              <Link
-                href={`/submissions/${encodeURIComponent(wr.submission_uuid)}`}
-                className="flex items-center gap-3 rounded-lg border border-line-strong bg-surface p-2 pr-3 transition-colors hover:bg-surface-2 md:hidden"
-              >
-                <span className="relative block aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-surface-3">
-                  {showThumbnails ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={`${ASSETS}/scores/${wr.submission_uuid}-preview.jpg`} alt="" className="size-full object-cover" />
-                  ) : null}
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    <span className="flex size-7 items-center justify-center rounded-full bg-foreground text-background">
-                      <PlayIcon className="size-3.5 translate-x-px fill-current" aria-hidden />
-                    </span>
-                  </span>
-                </span>
-                <span className="flex min-w-0 flex-col">
-                  <span className="label-caps text-[15px]">Watch the record</span>
-                  <span className="truncate text-[13px] text-muted-foreground">{wr.player_name} · {formatTime(wr.time)}</span>
-                </span>
-              </Link>
-            ) : null}
           </dl>
-
-          {wr ? (
-            <Link
-              href={`/submissions/${encodeURIComponent(wr.submission_uuid)}`}
-              className="group relative hidden aspect-video w-full overflow-hidden rounded-lg border border-line-strong bg-surface md:block"
-              aria-label={`Watch the world record by ${wr.player_name}`}
-            >
-              {showThumbnails ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={`${ASSETS}/scores/${wr.submission_uuid}-preview.jpg`}
-                  alt=""
-                  className="size-full object-cover opacity-90 transition-opacity group-hover:opacity-100"
-                />
-              ) : null}
-              <span className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/85 to-transparent px-3 pb-2.5 pt-8">
-                <span className="flex size-8 items-center justify-center rounded-full bg-foreground text-background">
-                  <PlayIcon className="size-4 translate-x-px fill-current" aria-hidden />
-                </span>
-                <span className="label-caps text-[15px]">Watch the record</span>
-              </span>
-            </Link>
-          ) : null}
         </div>
       </PageHeader>
 
