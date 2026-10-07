@@ -3,9 +3,9 @@
 import { useMemo } from "react"
 import { apiV2 } from "@/lib/api"
 import { trials as fallbackTrialNames, type TrialName } from "@/lib/trials"
-import { useApiGet } from "@/hooks/use-api"
+import { useApi } from "@/hooks/use-api"
 
-type TrialOrderRow = { name: string; sort_order: number }
+type TrialOrderRow = { name: string; sort_order: number; status?: "active" | "removed" }
 type TrialOrderResponse = { data?: TrialOrderRow[] }
 
 const knownTrialNames = new Set<string>(fallbackTrialNames)
@@ -13,9 +13,9 @@ const knownTrialNames = new Set<string>(fallbackTrialNames)
 // Site-wide trial display order — driven by the admin-configurable
 // sort_order in the DB (see /admin's "Trials" reorder UI), falling back to
 // src/lib/trials.ts's literal array order while loading or if the request
-// fails, so the calculator/compare/WRs/submissions pages never render empty.
+// fails, so the calculator/compare/trials/submissions pages never render empty.
 export function useTrialOrder() {
-  const { data, loading, error } = useApiGet<TrialOrderResponse>(apiV2("/trials"))
+  const { data, loading, error } = useApi<TrialOrderResponse>(apiV2("/trials"))
 
   const orderedTrialNames = useMemo<TrialName[]>(() => {
     const rows = data?.data
@@ -40,6 +40,12 @@ export function useTrialOrder() {
     return ordered
   }, [data])
 
+  // Trials an admin has removed stay visible (their records still count for
+  // a grace period) but are labelled as retired.
+  const removedTrials = useMemo(() => {
+    return new Set((data?.data ?? []).filter((row) => row.status === "removed").map((row) => row.name))
+  }, [data])
+
   const orderIndex = useMemo(() => {
     const map = new Map<string, number>()
     orderedTrialNames.forEach((name, index) => map.set(name.toUpperCase(), index))
@@ -57,5 +63,5 @@ export function useTrialOrder() {
     }
   }, [orderIndex])
 
-  return { orderedTrialNames, compareByTrialOrder, loading, error }
+  return { orderedTrialNames, removedTrials, compareByTrialOrder, loading, error }
 }

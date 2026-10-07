@@ -4,7 +4,7 @@ import { PageShell, SectionCard } from "@/components/custom/page-shell"
 import { legalContactEmail, legalUpdatedLabel } from "@/lib/legal"
 
 export const metadata: Metadata = {
-  title: "Terms of Service | wasans",
+  title: "Terms of Service",
   description: "Terms for using the Wasans website.",
 }
 

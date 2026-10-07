@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, createContext, useContext } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { CheckIcon, DownloadIcon, LogOutIcon, Settings2Icon, Trash2Icon, UserPenIcon, UserXIcon, XIcon } from "lucide-react"
+import { CheckIcon, DownloadIcon, LogOutIcon, Trash2Icon, UserPenIcon, UserXIcon, XIcon } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,16 +22,15 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { SidebarMenuButton } from "@/components/ui/sidebar"
 import { Switch } from "@/components/ui/switch"
 import { LinkedAccountsSection } from "@/components/custom/linked-accounts-section"
+import { useAuthSession } from "@/components/custom/use-auth-session"
 import { accountDeletePhrase } from "@/lib/account-deletion"
 import { apiV2 } from "@/lib/api"
-import { loadAuthSession } from "@/lib/auth-session"
+import { loadAuthSession, setAuthSessionUser } from "@/lib/auth-session"
 import { OPEN_SETTINGS_EVENT } from "@/lib/linked-accounts"
 import { validatePlayerName } from "@/lib/player-name"
 
@@ -360,13 +359,6 @@ export function FloatingSettingsModal({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <SidebarMenuButton type="button" className="cursor-pointer" aria-label="Open settings">
-          <Settings2Icon className="size-4" />
-          <span className="truncate">Settings</span>
-        </SidebarMenuButton>
-      </DialogTrigger>
-
       <DialogContent
         className="max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto"
         showCloseButton
@@ -568,5 +560,19 @@ export function FloatingSettingsModal({
         ) : null}
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Mounted once in the app shell and opened from anywhere with
+// openSettings() (lib/linked-accounts), e.g. the account menu.
+export function SettingsDialog() {
+  const { user } = useAuthSession()
+
+  return (
+    <FloatingSettingsModal
+      user={user}
+      onLogout={() => setAuthSessionUser(null)}
+      onUserUpdate={(next) => setAuthSessionUser(next)}
+    />
   )
 }

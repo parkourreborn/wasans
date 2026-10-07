@@ -189,7 +189,7 @@ function ComboSubmissionsPage() {
     <PageShell>
       <PageHeader title="Combo Submissions" />
 
-      <div className="sticky top-14 z-30 space-y-3 rounded-lg border border-border bg-background p-4 md:top-0">
+      <div className="sticky top-14 z-30 space-y-3 rounded-lg border border-border bg-background p-4">
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center">
           <Input
             type="search"

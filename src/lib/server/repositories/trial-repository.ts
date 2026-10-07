@@ -43,13 +43,13 @@ export async function listTrialLifecycles(db: D1Database): Promise<TrialLifecycl
 }
 
 // Slim public view for pages that only need display order (calculator,
-// compare, WRs, submissions/trials) — deliberately excludes lifecycle
-// fields those pages have no use for.
-export type TrialOrderRow = { name: string; sort_order: number }
+// compare, trials, submissions) — status is the one lifecycle field it
+// carries, so removed trials can be labelled as retired; the rest stay out.
+export type TrialOrderRow = { name: string; sort_order: number; status: "active" | "removed" }
 
 export async function listPublicTrialOrder(db: D1Database): Promise<TrialOrderRow[]> {
   const { results } = await db.prepare(
-    `SELECT name, sort_order
+    `SELECT name, sort_order, status
      FROM trials
      ORDER BY sort_order ASC, name ASC`
   ).all<TrialOrderRow>()

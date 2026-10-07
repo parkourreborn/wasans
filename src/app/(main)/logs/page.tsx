@@ -283,7 +283,7 @@ export default function LogsPage() {
         </div>
       </div>
 
-      <div className="sticky top-14 z-30 space-y-3 rounded-md border border-border bg-background p-4 md:top-0">
+      <div className="sticky top-14 z-30 space-y-3 rounded-md border border-border bg-background p-4">
         <div className="flex items-center gap-2 text-sm font-medium">
           <FilterIcon className="size-4" />
           Diagnostics

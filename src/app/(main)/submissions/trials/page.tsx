@@ -375,7 +375,7 @@ function SubmissionsPage() {
       onDrop={handleDrop}
     >
       {uploadingDragFile && (
-        <div className="sticky top-14 z-40 border-b border-border bg-background/95 backdrop-blur-sm py-4 md:top-0">
+        <div className="sticky top-14 z-40 border-b border-border bg-background/95 backdrop-blur-sm py-4">
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
               <span>{uploadStatus}</span>
@@ -394,7 +394,7 @@ function SubmissionsPage() {
           </div>
         </div>
       )}
-      <div className="sticky top-14 z-30 space-y-3 rounded-lg border border-border bg-background p-4 md:top-0">
+      <div className="sticky top-14 z-30 space-y-3 rounded-lg border border-border bg-background p-4">
       <div className="flex flex-col gap-3">
         {filteredPlayerName && (
           <div className="flex items-center gap-4">

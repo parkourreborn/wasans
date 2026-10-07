@@ -1,5 +1,6 @@
 import "server-only"
 import { getCloudflareContext } from "@opennextjs/cloudflare"
+import { TIERS, type TierKey } from "@/lib/tiers"
 
 export type ApprovedHighScoreRun = {
   submission_uuid: string
@@ -34,31 +35,27 @@ export type WorldRecordRun = {
   date: number
 }
 
-const roleRanks = {
-  0.0: "1257994886070800465", // unranked
-  0.3: "1501720864872206568",
-  0.4: "1501720851748229294",
-  0.5: "1373849841494523984",
-  0.6: "1373849485003980820",
-  0.7: "1305891664413593651",
-  0.8: "1493644824237052075",
-  0.9: "1257994883059290245"
+// The Discord role for each score tier. The thresholds and names come from
+// lib/tiers.ts, which the site uses to label players, so the bot and the
+// site can't disagree about who is in which tier.
+const roleIdByTier: Record<TierKey, string> = {
+  unranked: "1257994886070800465",
+  platinum: "1501720864872206568",
+  diamond: "1501720851748229294",
+  master3: "1373849841494523984",
+  master2: "1373849485003980820",
+  master1: "1305891664413593651",
+  elite: "1493644824237052075",
+  router: "1257994883059290245",
 }
 
-const sortedRankRoles = Object.entries(roleRanks)
-  .map(([score, roleId]) => ({ score: Number(score), roleId }))
-  .sort((a, b) => a.score - b.score)
+const sortedRankRoles = [...TIERS]
+  .sort((a, b) => a.min - b.min)
+  .map((tier) => ({ score: tier.min, roleId: roleIdByTier[tier.key] }))
 
-const roleNames: Record<string, string> = {
-  "1257994886070800465": "unranked",
-  "1501720864872206568": "platinum",
-  "1501720851748229294": "diamond",
-  "1373849841494523984": "master III",
-  "1373849485003980820": "master II",
-  "1305891664413593651": "master I",
-  "1493644824237052075": "elite",
-  "1257994883059290245": "router",
-}
+const roleNames: Record<string, string> = Object.fromEntries(
+  TIERS.map((tier) => [roleIdByTier[tier.key], tier.roleName])
+)
 
 export function getRoleForScore(score: number) {
   if (!Number.isFinite(score)) {

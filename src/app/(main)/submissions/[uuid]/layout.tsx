@@ -67,7 +67,7 @@ export async function generateMetadata({ params }: SubmissionLayoutProps): Promi
 
   const { env } = await getCloudflareContext({ async: true })
   if (!env?.wasans) {
-    return { title: "Submission | wasans" }
+    return { title: "Submission" }
   }
 
   const trialSubmission = await getTrialSubmissionMetadata(env.wasans, uuid).catch((err) => {
@@ -169,7 +169,7 @@ export async function generateMetadata({ params }: SubmissionLayoutProps): Promi
     }
   }
 
-  return { title: "Submission | wasans" }
+  return { title: "Submission" }
 }
 
 export default function SubmissionLayout({ children }: SubmissionLayoutProps) {

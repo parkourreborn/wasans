@@ -64,18 +64,19 @@ export function AnnouncementBanner() {
     // top of the screen until dismissed."
     <div className="flex flex-col">
       {announcements.map((a) => (
-        <div
-          key={a.uuid}
-          className="flex items-center justify-between gap-3 border-b border-border/70 bg-primary/10 px-4 py-2 text-sm"
-        >
-          <div className="min-w-0 flex-1 truncate">
-            {a.link_url ? (
-              <a href={a.link_url} className="underline underline-offset-2 hover:no-underline">
-                {a.body}
-              </a>
-            ) : (
-              a.body
-            )}
+        <div key={a.uuid} className="border-b border-line bg-surface-2">
+          <div className="mx-auto flex min-h-11 max-w-[1200px] items-center justify-between gap-3 px-4 py-2 text-sm">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <span className="label-caps shrink-0 text-[13px] text-primary">Notice</span>
+            <span className="min-w-0 truncate">
+              {a.link_url ? (
+                <a href={a.link_url} className="underline underline-offset-2 hover:no-underline">
+                  {a.body}
+                </a>
+              ) : (
+                a.body
+              )}
+            </span>
           </div>
           {status === "authenticated" ? (
             <Button
@@ -89,6 +90,7 @@ export function AnnouncementBanner() {
               <XIcon className="size-4" />
             </Button>
           ) : null}
+          </div>
         </div>
       ))}
     </div>

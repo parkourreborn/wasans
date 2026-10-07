@@ -4,7 +4,7 @@ import { PageShell, SectionCard } from "@/components/custom/page-shell"
 import { legalContactEmail, legalUpdatedLabel } from "@/lib/legal"
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | wasans",
+  title: "Privacy Policy",
   description: "Privacy details for the Wasans website.",
 }
 

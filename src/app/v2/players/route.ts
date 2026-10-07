@@ -8,10 +8,16 @@ export const GET = withV2Context(async (ctx) => {
   const { limit, offset, page } = parsePagination(url, { page: 1, limit: 50, maxLimit: 200 })
   const search = String(url.searchParams.get("search") || "").trim()
 
-  const key = await cacheKey(ctx.cache, "players", page, limit, search || "-")
-  const { value } = await readThroughCache(ctx.cache, key, 60, () =>
-    listPlayers(ctx.db, { limit, offset, search: search || undefined })
-  )
+  // Searches skip the KV cache: search-as-you-type sends a new term on most
+  // keystrokes, so caching them would be a KV write each for entries that
+  // are rarely read twice. The query itself is cheap.
+  const value = search
+    ? await listPlayers(ctx.db, { limit, offset, search })
+    : (
+        await readThroughCache(ctx.cache, await cacheKey(ctx.cache, "players", page, limit, "-"), 60, () =>
+          listPlayers(ctx.db, { limit, offset })
+        )
+      ).value
 
   return jsonOk(value.results, {
     meta: { page, limit, total: value.total },

@@ -166,7 +166,7 @@ export default function NewComboSubmissionPage() {
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto flex w-full max-w-2xl flex-col gap-4 pb-8">
-      <div className="sticky top-14 z-40 flex flex-col gap-3 border-b border-border bg-background/95 backdrop-blur-sm py-4 md:top-0">
+      <div className="sticky top-14 z-40 flex flex-col gap-3 border-b border-border bg-background/95 backdrop-blur-sm py-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">New combo submission</h1>

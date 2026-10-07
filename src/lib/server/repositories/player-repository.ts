@@ -37,12 +37,24 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
     .bind(...bindings)
     .first<{ count: number }>()
 
+  // rank and position are worked out over every listed player before the
+  // search filter applies, so a search result shows where that player
+  // really stands. rank is shared on equal scores (the same number
+  // getPlayerRank gives a profile); position is the row's place in this
+  // ordering, which is what paging needs.
+  const searchSql = options.search ? "WHERE LOWER(player_name) LIKE ?" : ""
   const rows = await db.prepare(
-    `SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider,
-            discord_id, (avatar_roblox_id IS NOT NULL) AS has_roblox_avatar, player_name, score, permission, date_joined
-     FROM players
-     ${whereSql}
-     ORDER BY score DESC, player_name ASC
+    `SELECT *
+     FROM (
+       SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider,
+              discord_id, (avatar_roblox_id IS NOT NULL) AS has_roblox_avatar, player_name, score, permission, date_joined,
+              RANK() OVER (ORDER BY score DESC) AS rank,
+              ROW_NUMBER() OVER (ORDER BY score DESC, player_name ASC) AS position
+       FROM players
+       WHERE COALESCE(account_status, 'active') != 'deactivated'
+     )
+     ${searchSql}
+     ORDER BY position ASC
      LIMIT ? OFFSET ?`
   )
     .bind(...bindings, options.limit, options.offset)
@@ -104,6 +116,22 @@ export async function getPlayerRank(db: D1Database, score: number) {
     .first<{ rank: number }>()
 
   return Number(rank?.rank ?? 1)
+}
+
+// The player's row number in the leaderboard ordering (score, then name),
+// which is where "jump to me" has to page to. Unlike getPlayerRank it never
+// ties.
+export async function getPlayerPosition(db: D1Database, score: number, playerName: string) {
+  const row = await db.prepare(
+    `SELECT COUNT(*) + 1 AS position
+     FROM players
+     WHERE (score > ? OR (score = ? AND player_name < ?))
+       AND COALESCE(account_status, 'active') != 'deactivated'`
+  )
+    .bind(score, score, playerName)
+    .first<{ position: number }>()
+
+  return Number(row?.position ?? 1)
 }
 
 export async function getPlayerPbs(db: D1Database, playerUuid: string) {

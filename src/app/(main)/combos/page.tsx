@@ -226,7 +226,7 @@ export default function CombosLeaderboardPage() {
         </div>
       ) : (
         <>
-          <div className="sticky top-14 z-30 rounded-lg border border-border bg-background p-4 md:top-0">
+          <div className="sticky top-14 z-30 rounded-lg border border-border bg-background p-4">
             <Tabs value={activeCategory} onValueChange={setActiveCategory}>
               <TabsList>
                 {categories.map((category) => (

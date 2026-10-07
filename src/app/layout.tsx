@@ -1,28 +1,48 @@
-import type { Metadata } from "next";
-import {  Geist } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Saira_Condensed } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { ClientErrorLogger } from "@/components/custom/client-error-logger";
 import { V2AuthRefresh } from "@/components/custom/v2-auth-refresh";
 import "./globals.css";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-plex-sans",
+  display: "swap",
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-plex-mono",
+  display: "swap",
+});
+
+const saira = Saira_Condensed({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-saira",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "wasans",
-  description: "hi i wasans i'm trying to explain my sin",
+  title: { default: "wasans", template: "%s · wasans" },
+  description: "Parkour Reborn time trial leaderboards, world records and run submissions.",
 };
+
+export const viewport: Viewport = {
+  themeColor: "#080808",
+  colorScheme: "dark",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable, "dark")}>
-        <head>
-          {/* <link rel="icon" type="image/png" sizes="16x16" href="https://tully.sh/icons/favicon-16x16.png" />
-          <link rel="icon" type="image/png" sizes="32x32" href="https://tully.sh/icons/favicon-32x32.png" />
-          <link rel="icon" type="image/x-icon" sizes="16x16" href="https://tully.sh/icons/favicon.ico" /> */}
-        </head>
+    <html lang="en" className={cn("dark font-sans", plexSans.variable, plexMono.variable, saira.variable)}>
       <body>
         <ClientErrorLogger />
         <V2AuthRefresh />

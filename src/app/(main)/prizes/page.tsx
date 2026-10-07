@@ -58,7 +58,7 @@ type GiveawayWithDetails = Giveaway & { winners: GiveawayWinner[]; entry_count: 
 type GiveawaysResponse = { data?: Giveaway[] }
 type GiveawayDetailResponse = { data?: { giveaway: Giveaway; winners: GiveawayWinner[]; entry_count: number; viewer_has_joined: boolean } }
 
-// Mirrors the "unseen error" badge on /logs (see app-sidebar.tsx): the
+// Mirrors the "unseen error" badge on /logs (see site/use-nav-badges.ts): the
 // sidebar polls the same active prizes/giveaways endpoints to decide whether
 // to show the dot, and this key is what marks them as seen once visited.
 const lastSeenPrizeStorageKey = "wasans:last-seen-prize-at"
@@ -232,7 +232,7 @@ export default function PrizesPage() {
     <PageShell>
       <PageHeader title="Prizes" description="Rewards for hitting records or ranks, and community giveaways." />
 
-      <div className="sticky top-14 z-30 rounded-lg border border-border bg-background p-4 md:top-0">
+      <div className="sticky top-14 z-30 rounded-lg border border-border bg-background p-4">
         <Tabs value={filter} onValueChange={(value) => setFilter(value as "active" | "history")}>
           <TabsList>
             <TabsTrigger className="cursor-pointer" value="active">Active</TabsTrigger>
