@@ -175,7 +175,7 @@ export async function buildOAuthStart(request: Request, env: CloudflareEnv, prov
   if (provider === "roblox") {
     // Players link alts, so always offer Roblox's account picker instead of
     // silently using whichever account the browser is signed in to.
-    authorizeUrl.searchParams.set("prompt", "select_account")
+    // authorizeUrl.searchParams.set("prompt", "select_account")
 
     const verifier = base64Url(crypto.getRandomValues(new Uint8Array(32)))
     authorizeUrl.searchParams.set("code_challenge", await sha256Base64Url(verifier))
