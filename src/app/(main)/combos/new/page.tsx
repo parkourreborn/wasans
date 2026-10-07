@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner"
 import { getSubmissionErrorMessage } from "@/lib/submission-errors"
 import { formatSubmissionBanMessage, type SubmissionBanSummary } from "@/lib/submission-bans"
+import { openSettings, robloxLinkRequiredMessage } from "@/lib/linked-accounts"
 
 type ComboCategory = {
   slug: string
@@ -39,6 +40,7 @@ type AuthResponse = {
   data?: {
     user?: { uuid: string } | null
     submission_ban?: SubmissionBanSummary | null
+    roblox_link_required?: boolean
   }
 }
 
@@ -53,6 +55,7 @@ export default function NewComboSubmissionPage() {
   const router = useRouter()
   const [authUser, setAuthUser] = useState<{ uuid: string } | null>(null)
   const [submissionBan, setSubmissionBan] = useState<SubmissionBanSummary | null>(null)
+  const [robloxLinkRequired, setRobloxLinkRequired] = useState(false)
   const [categories, setCategories] = useState<ComboCategory[]>([])
   const [categorySlug, setCategorySlug] = useState("")
   const [comboCount, setComboCount] = useState("")
@@ -78,6 +81,7 @@ export default function NewComboSubmissionPage() {
 
         setAuthUser(authJson.data.user)
         setSubmissionBan(authJson.data.submission_ban || null)
+        setRobloxLinkRequired(Boolean(authJson.data.roblox_link_required))
 
         const categoriesJson = (await categoriesResponse.json()) as ComboCategoriesResponse
         if (!categoriesResponse.ok) {
@@ -103,12 +107,13 @@ export default function NewComboSubmissionPage() {
     return (
       !loadingContext
       && !submissionBan
+      && !robloxLinkRequired
       && Boolean(categorySlug)
       && Number.isInteger(parsedCount)
       && parsedCount > 0
       && youtubeUrl.trim().length > 0
     )
-  }, [categorySlug, comboCount, loadingContext, submissionBan, youtubeUrl])
+  }, [categorySlug, comboCount, loadingContext, robloxLinkRequired, submissionBan, youtubeUrl])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -121,6 +126,11 @@ export default function NewComboSubmissionPage() {
 
     if (submissionBan) {
       setError(formatSubmissionBanMessage(submissionBan.reason))
+      return
+    }
+
+    if (robloxLinkRequired) {
+      setError(robloxLinkRequiredMessage)
       return
     }
 
@@ -183,6 +193,17 @@ export default function NewComboSubmissionPage() {
       {submissionBan && (
         <Alert variant="destructive">
           <AlertDescription>{formatSubmissionBanMessage(submissionBan.reason)}</AlertDescription>
+        </Alert>
+      )}
+
+      {robloxLinkRequired && !submissionBan && (
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-col items-start gap-2">
+            <span>{robloxLinkRequiredMessage}</span>
+            <Button type="button" size="sm" variant="outline" onClick={openSettings}>
+              Open Settings
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 

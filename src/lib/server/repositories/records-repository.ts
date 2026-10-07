@@ -9,6 +9,8 @@ export async function listWorldRecords(db: D1Database) {
        players.discord_avatar,
        players.discord_discriminator,
        players.auth_provider,
+       players.discord_id,
+       (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar,
        submissions.moderator_note,
        submissions.moderator_username
      FROM wrs
@@ -29,7 +31,9 @@ export async function getWorldRecordHistory(db: D1Database, trialName: string) {
        players.player_id,
        players.discord_avatar,
        players.discord_discriminator,
-       players.auth_provider
+       players.auth_provider,
+       players.discord_id,
+       (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar
      FROM submissions s
      LEFT JOIN players ON players.uuid = s.player_uuid
      WHERE s.trial_name = ?
@@ -66,7 +70,9 @@ export async function getWorldRecordHistoryAll(db: D1Database) {
        players.player_id,
        players.discord_avatar,
        players.discord_discriminator,
-       players.auth_provider
+       players.auth_provider,
+       players.discord_id,
+       (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar
      FROM submissions s
      LEFT JOIN players ON players.uuid = s.player_uuid
      WHERE s.state = 'approved'
@@ -96,6 +102,8 @@ export async function getWorldRecordByTrial(db: D1Database, trialName: string) {
        players.discord_avatar,
        players.discord_discriminator,
        players.auth_provider,
+       players.discord_id,
+       (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar,
        submissions.moderator_note,
        submissions.moderator_username
      FROM wrs

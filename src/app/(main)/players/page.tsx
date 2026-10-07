@@ -26,6 +26,8 @@ type OverallPlayer = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
   player_name: string
   score: number
 }
@@ -36,6 +38,8 @@ type TrialPlayer = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
   player_name: string
   time: number | null
   submission_uuid: string | null
@@ -51,10 +55,10 @@ type Mode = "overall" | "trial"
 type DisplayRow = {
   playerUuid: string
   playerName: string
-  playerId?: string
+  playerDiscordId?: string | null
   playerAvatar?: string | null
   playerDiscriminator?: string | null
-  playerAuthProvider?: string | null
+  playerHasRobloxAvatar?: number | null
   overallScore?: number
   trialTime?: number | null
   trialScore?: number
@@ -109,10 +113,10 @@ export default function PlayersPage() {
           const result = (json.data || []).map((row, index) => ({
             playerUuid: row.uuid,
             playerName: row.player_name,
-            playerId: row.player_id,
+            playerDiscordId: row.discord_id,
             playerAvatar: row.discord_avatar,
             playerDiscriminator: row.discord_discriminator,
-            playerAuthProvider: row.auth_provider,
+            playerHasRobloxAvatar: row.has_roblox_avatar,
             overallScore: Number(row.score),
             rank: index + 1,
           }))
@@ -133,10 +137,10 @@ export default function PlayersPage() {
 
         const result = (json.data?.results || []).map((row, index) => ({
           playerUuid: row.player_uuid,
-          playerId: row.player_id,
+          playerDiscordId: row.discord_id,
           playerAvatar: row.discord_avatar,
           playerDiscriminator: row.discord_discriminator,
-          playerAuthProvider: row.auth_provider,
+          playerHasRobloxAvatar: row.has_roblox_avatar,
           playerName: row.player_name,
           trialTime: row.time,
           trialScore: Number(row.score || 0),
@@ -273,10 +277,11 @@ export default function PlayersPage() {
                 <div className="flex min-w-0 items-center gap-3">
                   <PlayerAvatar
                     playerName={row.playerName}
-                    discordId={row.playerId}
+                    playerUuid={row.playerUuid}
+                    hasRobloxAvatar={row.playerHasRobloxAvatar}
+                    discordId={row.playerDiscordId}
                     discordAvatar={row.playerAvatar}
                     discordDiscriminator={row.playerDiscriminator}
-                    authProvider={row.playerAuthProvider}
                   />
                   <div className="min-w-0">
                     <Link

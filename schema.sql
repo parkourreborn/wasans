@@ -47,27 +47,41 @@ CREATE TABLE players (
   deleted_at INTEGER,
   legal_terms_accepted_at INTEGER,
   legal_privacy_accepted_at INTEGER,
-  legal_version TEXT
+  legal_version TEXT,
+  -- How the account was created. Discord identity lives in discord_id.
+  auth_provider TEXT NOT NULL DEFAULT 'discord'
+    CHECK (auth_provider IN ('discord', 'google', 'roblox')),
+  -- Linked Discord account (avatars, bot DMs); NULL when none is linked.
+  discord_id TEXT,
+  -- Linked Roblox account whose headshot is the avatar.
+  avatar_roblox_id TEXT
 );
 
 CREATE INDEX idx_players_account_status ON players(account_status);
 CREATE INDEX idx_players_score ON players(score DESC, player_name ASC);
 
--- OAuth-linked accounts (Discord)
--- Deliberately stores only the Discord account id <-> player link. Discord's
--- access/refresh tokens are used once during login and never persisted, so a
--- disclosure of this table cannot be replayed against Discord.
+-- OAuth-linked accounts (Discord, Google, Roblox): one Discord and one
+-- Google per player, any number of Roblox accounts.
+-- Deliberately stores only the account id <-> player link (plus Roblox
+-- names, for moderators). Providers' access/refresh tokens are used once
+-- during login and never persisted, so a disclosure of this table cannot be
+-- replayed against them.
 CREATE TABLE oauth_accounts (
   provider TEXT NOT NULL,
   provider_account_id TEXT NOT NULL,
   player_uuid TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+  username TEXT,
+  display_name TEXT,
   PRIMARY KEY (provider, provider_account_id),
   FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_oauth_accounts_player_uuid ON oauth_accounts(player_uuid, updated_at DESC);
+CREATE UNIQUE INDEX idx_oauth_accounts_one_per_provider
+  ON oauth_accounts(player_uuid, provider)
+  WHERE provider IN ('discord', 'google');
 
 -- Login IP tracking
 CREATE TABLE player_ips (
@@ -478,7 +492,8 @@ CREATE TABLE feature_flags (
 INSERT OR IGNORE INTO feature_flags (key, enabled, updated_at) VALUES
   ('submissions_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER)),
   ('moderation_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER)),
-  ('combo_submissions_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER));
+  ('combo_submissions_enabled', 1, CAST(strftime('%s', 'now') AS INTEGER)),
+  ('require_roblox_link', 0, CAST(strftime('%s', 'now') AS INTEGER));
 
 -- v2 API: rotating refresh tokens for JWT auth
 CREATE TABLE refresh_tokens (

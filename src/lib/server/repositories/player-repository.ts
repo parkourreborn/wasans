@@ -13,6 +13,8 @@ export type PlayerWithRankRow = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
   player_name: string
   score: number
   permission: number
@@ -36,7 +38,8 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
     .first<{ count: number }>()
 
   const rows = await db.prepare(
-    `SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider, player_name, score, permission, date_joined
+    `SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider,
+            discord_id, (avatar_roblox_id IS NOT NULL) AS has_roblox_avatar, player_name, score, permission, date_joined
      FROM players
      ${whereSql}
      ORDER BY score DESC, player_name ASC
@@ -53,7 +56,8 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
 
 export async function getPlayerByUuid(db: D1Database, uuid: string) {
   return db.prepare(
-    `SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider, player_name, score, permission, date_joined
+    `SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider,
+            discord_id, (avatar_roblox_id IS NOT NULL) AS has_roblox_avatar, player_name, score, permission, date_joined
      FROM players
      WHERE uuid = ?
        AND COALESCE(account_status, 'active') != 'deactivated'`
@@ -65,6 +69,8 @@ export async function getPlayerByUuid(db: D1Database, uuid: string) {
       discord_avatar?: string | null
       discord_discriminator?: string | null
       auth_provider?: string | null
+      discord_id?: string | null
+      has_roblox_avatar?: number | null
       player_name: string
       score: number
       permission: number

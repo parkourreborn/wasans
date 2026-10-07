@@ -13,10 +13,10 @@ type ComboSubmissionCardProps = {
   playerUuid: string
   playerName: string
   playerScore?: number
-  playerId?: string | null
+  playerDiscordId?: string | null
   playerDiscordAvatar?: string | null
   playerDiscordDiscriminator?: string | null
-  playerAuthProvider?: string | null
+  playerHasRobloxAvatar?: boolean | number | null
   dateText: string
   state: string
   moderatorNote?: string | null
@@ -33,10 +33,10 @@ export function ComboSubmissionCard({
   playerUuid,
   playerName,
   playerScore,
-  playerId,
+  playerDiscordId,
   playerDiscordAvatar,
   playerDiscordDiscriminator,
-  playerAuthProvider,
+  playerHasRobloxAvatar,
   dateText,
   state,
   moderatorNote,
@@ -93,10 +93,11 @@ export function ComboSubmissionCard({
                 <PlayerAvatar
                   size="sm"
                   playerName={playerName}
-                  discordId={playerId}
+                  playerUuid={playerUuid}
+                  hasRobloxAvatar={playerHasRobloxAvatar}
+                  discordId={playerDiscordId}
                   discordAvatar={playerDiscordAvatar}
                   discordDiscriminator={playerDiscordDiscriminator}
-                  authProvider={playerAuthProvider}
                 />
               </Link>
               <Link

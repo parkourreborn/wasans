@@ -1,8 +1,24 @@
 import "server-only"
 
-export type FeatureFlagKey = "submissions_enabled" | "moderation_enabled" | "combo_submissions_enabled"
+export type FeatureFlagKey = "submissions_enabled" | "moderation_enabled" | "combo_submissions_enabled" | "require_roblox_link"
 
-export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = ["submissions_enabled", "moderation_enabled", "combo_submissions_enabled"]
+export const FEATURE_FLAG_KEYS: readonly FeatureFlagKey[] = [
+  "submissions_enabled",
+  "moderation_enabled",
+  "combo_submissions_enabled",
+  "require_roblox_link",
+]
+
+// What a flag reads as when its row (or the table) is missing. Kill
+// switches fail open so a missing row can't take the site down; a
+// requirement fails closed (off) so a missing row can't lock every player
+// out of something.
+const FEATURE_FLAG_DEFAULTS: Record<FeatureFlagKey, boolean> = {
+  submissions_enabled: true,
+  moderation_enabled: true,
+  combo_submissions_enabled: true,
+  require_roblox_link: false,
+}
 
 export type FeatureFlagRow = {
   key: FeatureFlagKey
@@ -11,15 +27,14 @@ export type FeatureFlagRow = {
   updated_by: string | null
 }
 
-// Fails open (treats as enabled) if the flag row — or the table itself,
-// e.g. before its migration has been applied — is missing, so a missing
-// flag can never accidentally take the whole site down.
+// Falls back to FEATURE_FLAG_DEFAULTS if the flag row — or the table
+// itself, e.g. before its migration has been applied — is missing.
 export async function isFeatureEnabled(db: D1Database, key: FeatureFlagKey): Promise<boolean> {
   try {
     const row = await db.prepare(`SELECT enabled FROM feature_flags WHERE key = ?`).bind(key).first<{ enabled: number }>()
-    return row ? Number(row.enabled) === 1 : true
+    return row ? Number(row.enabled) === 1 : FEATURE_FLAG_DEFAULTS[key]
   } catch {
-    return true
+    return FEATURE_FLAG_DEFAULTS[key]
   }
 }
 

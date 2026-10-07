@@ -1,7 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 import { getRequestId, jsonError } from "@/lib/server/http"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
-import { startGoogleOAuthV2 } from "@/lib/server/v2/google-auth"
+import { startOAuthLoginV2 } from "@/lib/server/v2/oauth"
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request)
@@ -25,5 +25,5 @@ export async function GET(request: Request) {
     })
   }
 
-  return startGoogleOAuthV2(request, env)
+  return startOAuthLoginV2(request, env, "google")
 }

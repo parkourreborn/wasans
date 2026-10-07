@@ -18,6 +18,8 @@ type Submission = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
   trial_name: string
   player_name: string
   player_score: number
@@ -201,10 +203,10 @@ export default function WorldRecordHistoryPage() {
               playerUuid={record.player_uuid}
               playerName={record.player_name}
               playerScore={record.player_score}
-              playerId={record.player_id}
+              playerDiscordId={record.discord_id}
               playerDiscordAvatar={record.discord_avatar}
               playerDiscordDiscriminator={record.discord_discriminator}
-              playerAuthProvider={record.auth_provider}
+              playerHasRobloxAvatar={record.has_roblox_avatar}
               dateText={formatDate(record.date)}
               state="approved"
               moderatorNote={record.moderator_note}

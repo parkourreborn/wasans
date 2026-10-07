@@ -8,7 +8,8 @@ export async function listOverallLeaderboard(db: D1Database, limit: number, offs
        WHERE COALESCE(account_status, 'active') != 'deactivated'`
     ),
     db.prepare(
-      `SELECT uuid AS player_uuid, player_id, discord_avatar, discord_discriminator, auth_provider, player_name, score AS overall_score, date_joined
+      `SELECT uuid AS player_uuid, player_id, discord_avatar, discord_discriminator, auth_provider,
+              discord_id, (avatar_roblox_id IS NOT NULL) AS has_roblox_avatar, player_name, score AS overall_score, date_joined
        FROM players
        WHERE COALESCE(account_status, 'active') != 'deactivated'
        ORDER BY score DESC, player_name ASC
@@ -31,6 +32,8 @@ export async function listTrialLeaderboard(db: D1Database, trialName: string, li
     discord_avatar?: string | null
     discord_discriminator?: string | null
     auth_provider?: string | null
+    discord_id?: string | null
+    has_roblox_avatar?: number | null
     player_name: string
     time: number | null
     submission_uuid: string | null
@@ -49,6 +52,8 @@ export async function listTrialLeaderboard(db: D1Database, trialName: string, li
               players.discord_avatar,
               players.discord_discriminator,
               players.auth_provider,
+              players.discord_id,
+              (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar,
               players.player_name,
               pbs.time,
               pbs.submission_uuid

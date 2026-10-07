@@ -13,6 +13,8 @@ interface __BaseEnv_CloudflareEnv {
 	discordClientSecret: string;
 	googleClientId: string;
 	googleClientSecret: string;
+	robloxClientId: string;
+	robloxClientSecret: string;
 	JWT_SECRET: string;
 	CRON_SECRET: string;
 	WORKER_SELF_REFERENCE: Service<typeof import("./.open-next/worker").default>;
@@ -36,7 +38,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "botApiKey" | "discordClientId" | "discordClientSecret" | "googleClientId" | "googleClientSecret" | "JWT_SECRET" | "CRON_SECRET">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "botApiKey" | "discordClientId" | "discordClientSecret" | "googleClientId" | "googleClientSecret" | "robloxClientId" | "robloxClientSecret" | "JWT_SECRET" | "CRON_SECRET">> {}
 }
 
 // Begin runtime types

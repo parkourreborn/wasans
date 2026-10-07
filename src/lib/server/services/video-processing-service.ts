@@ -154,7 +154,7 @@ export async function handleVideoResult(
           time: Number(submission.time),
           oldTime,
           player_score: Number(player.score),
-          discordUserId: player.auth_provider === "discord" ? player.player_id : undefined,
+          discordUserId: player.discord_id ?? undefined,
         })
         if (threadId) {
           await setSubmissionThreadId(db, submissionUuid, threadId)

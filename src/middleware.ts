@@ -39,7 +39,7 @@ const cspDirectives = [
   // thing to tighten next by moving them onto nonces.
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://cdn.discordapp.com https://assets.wasans.tully.sh",
+  "img-src 'self' data: blob: https://cdn.discordapp.com https://*.rbxcdn.com https://assets.wasans.tully.sh",
   "media-src 'self' blob: https://assets.wasans.tully.sh",
   "font-src 'self' data:",
   // R2 S3 endpoint: browsers PUT videos straight to the private uploads
@@ -49,7 +49,7 @@ const cspDirectives = [
   // else, and nothing may post a form off-site.
   "frame-src 'none'",
   "frame-ancestors 'none'",
-  "form-action 'self' https://discord.com https://accounts.google.com",
+  "form-action 'self' https://discord.com https://accounts.google.com https://apis.roblox.com",
   "base-uri 'self'",
   "object-src 'none'",
   "upgrade-insecure-requests",

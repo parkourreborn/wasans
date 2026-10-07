@@ -3,7 +3,7 @@ import { isBotApiRequest } from "@/lib/server/bot-auth"
 import { jsonOk, requireV2Moderator, withV2Params } from "@/lib/server/v2/http"
 
 // Resolves a Discord user id to their wasans player uuid via the
-// oauth_accounts link created at login (see findOrCreatePlayer in
+// oauth_accounts link created at login (see findOrCreatePlayerForIdentity in
 // auth-service.ts) — the current source of truth for the Discord<->player
 // link, unlike the legacy players.player_id column. Callable by the Discord
 // bot (same bot API key it already uses for moderation actions, see

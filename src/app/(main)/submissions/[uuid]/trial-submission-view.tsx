@@ -4,6 +4,7 @@ import { useEffect, useState, type MouseEvent } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Badges from "@/components/custom/badges"
+import { SubmitterRobloxAccounts } from "@/components/custom/submitter-roblox-accounts"
 import { formatPlayerNameWithScore } from "@/lib/player-score"
 import calculateScore from "@/lib/calc-score"
 import { TrialName } from "@/lib/trials"
@@ -478,6 +479,8 @@ export default function TrialSubmissionView({
 
               <SubmissionNavButton direction="next" submissionUuid={nextSubmissionUuid} />
             </div>
+
+            {canModerate && <SubmitterRobloxAccounts playerUuid={submission.player_uuid} />}
 
             {(canModerate || canDelete) && (
               <div className="flex flex-col justify-center gap-2 sm:flex-row">

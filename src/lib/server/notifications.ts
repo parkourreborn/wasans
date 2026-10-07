@@ -460,10 +460,10 @@ export async function syncDiscordMembersOnScoreChange(players: Array<{ playerUui
 
     const placeholders = uniquePlayers.map(() => "?").join(",")
     const { results } = await env.wasans.prepare(
-      `SELECT uuid, player_id, score, player_name, account_status, auth_provider FROM players WHERE uuid IN (${placeholders})`
+      `SELECT uuid, discord_id, score, player_name, account_status FROM players WHERE uuid IN (${placeholders})`
     )
       .bind(...uniquePlayers.map((entry) => entry.playerUuid))
-      .all<{ uuid: string; player_id: string; score: number; player_name: string; account_status?: string | null; auth_provider?: string | null }>()
+      .all<{ uuid: string; discord_id: string | null; score: number; player_name: string; account_status?: string | null }>()
 
     const rowByUuid = new Map((results || []).map((row) => [row.uuid, row]))
     const items: BatchRequestItem[] = []
@@ -471,13 +471,13 @@ export async function syncDiscordMembersOnScoreChange(players: Array<{ playerUui
 
     for (const { playerUuid, oldScore } of uniquePlayers) {
       const row = rowByUuid.get(playerUuid)
-      // Google-only players have no Discord identity to sync a nickname/role
-      // for or DM -- there is nothing meaningful to send the bot.
-      if (!row || (row.account_status || "active") !== "active" || row.auth_provider !== "discord") {
+      // Players with no linked Discord have no Discord identity to sync a
+      // nickname/role for or DM -- there is nothing meaningful to send the bot.
+      if (!row || (row.account_status || "active") !== "active" || !row.discord_id) {
         continue
       }
 
-      const playerId = row.player_id
+      const playerId = row.discord_id
       const score = row.score
       const playerName = row.player_name
       const oldRoleId = getRoleForScore(oldScore)

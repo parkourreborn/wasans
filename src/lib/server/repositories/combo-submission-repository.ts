@@ -18,6 +18,8 @@ export type ComboSubmissionWithPlayerRow = ComboSubmissionRow & {
   discord_avatar: string | null
   discord_discriminator: string | null
   auth_provider: string | null
+  discord_id: string | null
+  has_roblox_avatar: number | null
 }
 
 export type ComboPlayerContext = {
@@ -81,7 +83,8 @@ export async function listComboSubmissions(
     .first<{ count: number }>()
 
   const rows = await db.prepare(
-    `SELECT combo_submissions.*, players.player_id, players.discord_avatar, players.discord_discriminator, players.auth_provider
+    `SELECT combo_submissions.*, players.player_id, players.discord_avatar, players.discord_discriminator, players.auth_provider,
+            players.discord_id, (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar
      FROM combo_submissions
      LEFT JOIN players ON players.uuid = combo_submissions.player_uuid
      ${whereClause}
@@ -140,7 +143,8 @@ export async function createComboSubmission(
 
 export async function getComboSubmissionWithPlayer(db: D1Database, uuid: string) {
   const { results } = await db.prepare(
-    `SELECT combo_submissions.*, players.player_id, players.discord_avatar, players.discord_discriminator, players.auth_provider
+    `SELECT combo_submissions.*, players.player_id, players.discord_avatar, players.discord_discriminator, players.auth_provider,
+            players.discord_id, (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar
      FROM combo_submissions
      LEFT JOIN players ON players.uuid = combo_submissions.player_uuid
      WHERE combo_submissions.uuid = ?`

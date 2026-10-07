@@ -48,11 +48,11 @@ export const GET = withV2Context(async (ctx) => {
     auditLogsResult,
   ] = await db.batch([
     db.prepare(
-      `SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider, player_name, date_joined,
+      `SELECT uuid, player_id, discord_id, discord_avatar, discord_discriminator, auth_provider, avatar_roblox_id, player_name, date_joined,
               permission, score, account_status, legal_terms_accepted_at, legal_privacy_accepted_at, legal_version
        FROM players WHERE uuid = ?`
     ).bind(uuid),
-    db.prepare(`SELECT provider, provider_account_id, created_at, updated_at FROM oauth_accounts WHERE player_uuid = ?`).bind(uuid),
+    db.prepare(`SELECT provider, provider_account_id, username, display_name, created_at, updated_at FROM oauth_accounts WHERE player_uuid = ?`).bind(uuid),
     db.prepare(`SELECT ip_address, count, first_seen, last_seen FROM player_ips WHERE player_uuid = ?`).bind(uuid),
     db.prepare(`SELECT * FROM submissions WHERE player_uuid = ? ORDER BY date DESC`).bind(uuid),
     db.prepare(`SELECT * FROM pbs WHERE player_uuid = ? ORDER BY trial_name ASC`).bind(uuid),

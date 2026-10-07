@@ -1,6 +1,7 @@
 import { jsonError } from "@/lib/server/http"
 import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-repository"
 import { getSubmissionBan } from "@/lib/server/repositories/submission-ban-repository"
+import { isMissingRequiredRobloxLink, robloxLinkRequiredMessage } from "@/lib/server/services/linked-accounts-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import { createVideoUploadUrl } from "@/lib/server/services/video-processing-service"
 import { formatSubmissionBanMessage } from "@/lib/submission-bans"
@@ -27,6 +28,14 @@ export const POST = withV2Context(async (ctx) => {
       code: "forbidden",
       requestId: ctx.requestId,
       details: { banned_at: submissionBan.banned_at },
+    })
+  }
+
+  if (await isMissingRequiredRobloxLink(ctx.db, ctx.auth.uuid)) {
+    return jsonError(robloxLinkRequiredMessage, 403, {
+      code: "forbidden",
+      requestId: ctx.requestId,
+      details: { reason: "roblox_link_required" },
     })
   }
 

@@ -28,8 +28,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SidebarMenuButton } from "@/components/ui/sidebar"
 import { Switch } from "@/components/ui/switch"
+import { LinkedAccountsSection } from "@/components/custom/linked-accounts-section"
 import { accountDeletePhrase } from "@/lib/account-deletion"
 import { apiV2 } from "@/lib/api"
+import { loadAuthSession } from "@/lib/auth-session"
+import { OPEN_SETTINGS_EVENT } from "@/lib/linked-accounts"
 import { validatePlayerName } from "@/lib/player-name"
 
 type SettingsContextValue = {
@@ -43,6 +46,8 @@ type SettingsUser = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
   player_name: string
   score: number
   permission: number
@@ -153,6 +158,13 @@ export function FloatingSettingsModal({
   const [deleteText, setDeleteText] = useState("")
   const [accountError, setAccountError] = useState<string | null>(null)
   const [exportingData, setExportingData] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const openFromEvent = () => setOpen(true)
+    window.addEventListener(OPEN_SETTINGS_EVENT, openFromEvent)
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, openFromEvent)
+  }, [])
 
   if (!settings) {
     return null
@@ -347,7 +359,7 @@ export function FloatingSettingsModal({
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <SidebarMenuButton type="button" className="cursor-pointer" aria-label="Open settings">
           <Settings2Icon className="size-4" />
@@ -356,7 +368,7 @@ export function FloatingSettingsModal({
       </DialogTrigger>
 
       <DialogContent
-        className="w-[calc(100%-2rem)] max-w-md"
+        className="max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto"
         showCloseButton
       >
         <DialogHeader>
@@ -397,6 +409,8 @@ export function FloatingSettingsModal({
                 </Button>
               </div>
             </div>
+
+            <LinkedAccountsSection onAvatarChange={() => void loadAuthSession({ force: true })} />
 
             <div className="rounded-lg border border-border/70 bg-muted/30 p-3">
               <div className="space-y-3">
@@ -467,7 +481,7 @@ export function FloatingSettingsModal({
                       <AlertDialogHeader>
                         <AlertDialogTitle>Deactivate account?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This hides your account from player lists and logs you out. Logging in with Discord again reactivates it.
+                          This hides your account from player lists and logs you out. Logging in again with any linked account reactivates it.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -505,7 +519,7 @@ export function FloatingSettingsModal({
                         <AlertDialogTitle>Delete account?</AlertDialogTitle>
                         <AlertDialogDescription asChild>
                           <div className="space-y-3 text-left">
-                            <p>This is permanent. Your Discord login/account data and sessions will be deleted, and you will be logged out.</p>
+                            <p>This is permanent. Your linked Discord, Google, and Roblox accounts and your sessions will be deleted, and you will be logged out.</p>
                             <ul className="list-disc space-y-1 pl-5">
                               <li>Public submissions, scores, PBs, WRs, and proof videos will stay public.</li>
                               <li>Public records connected to this account will show as Deleted Account.</li>

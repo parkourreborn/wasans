@@ -495,7 +495,7 @@ export async function patchSubmission(
       const newRankName = getRankLabel(newPlayerScore)
       const rankChanged = oldRankName !== null && newRankName !== null && oldRankName !== newRankName
 
-      const notificationPlayerId = oldPlayer?.auth_provider === "discord" ? oldPlayer.player_id : null
+      const notificationPlayerId = oldPlayer?.discord_id ?? null
 
       if (shouldNotifyModeratorOfChange({
         oldPlayerId: notificationPlayerId,
@@ -568,7 +568,7 @@ export async function patchSubmission(
           player_score: newPlayerScore,
           oldPlayerScore: playerScoreBefore,
           oldTime: updateOldTime,
-          discordUserId: oldPlayer?.auth_provider === "discord" ? String(oldPlayer.player_id) : undefined,
+          discordUserId: oldPlayer?.discord_id ?? undefined,
           averageScoreChange,
           is_wr: submissionIsWr,
           previous_wr_submission_uuid: previousToShow?.submission_uuid,
@@ -618,7 +618,7 @@ export async function patchSubmission(
         player_score: newPlayerScore,
         oldPlayerScore: playerScoreBefore,
         oldTime: oldPb?.time,
-        discordUserId: oldPlayer?.auth_provider === "discord" ? String(oldPlayer.player_id) : undefined,
+        discordUserId: oldPlayer?.discord_id ?? undefined,
         averageScoreChange,
         is_wr: submissionIsWr,
         previous_wr_submission_uuid: previousWrRow?.submission_uuid,

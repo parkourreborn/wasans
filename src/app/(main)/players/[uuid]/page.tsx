@@ -45,6 +45,8 @@ type PlayerInfo = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
   player_name: string
   score: number
   date_joined: number
@@ -64,6 +66,8 @@ type SubmissionValue = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
   trial_name: string
   time: number | string
   state: "approved" | "pending" | "denied"
@@ -86,6 +90,8 @@ type ComboSubmissionValue = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
 }
 
 type ComboCategory = { slug: string; label: string }
@@ -446,10 +452,11 @@ export default function PlayerProfilePage() {
           <div className="flex min-w-0 items-center gap-4">
             <PlayerAvatar
               playerName={player.player_name}
-              discordId={player.player_id}
+              playerUuid={player.uuid}
+              hasRobloxAvatar={player.has_roblox_avatar}
+              discordId={player.discord_id}
               discordAvatar={player.discord_avatar}
               discordDiscriminator={player.discord_discriminator}
-              authProvider={player.auth_provider}
               size="lg"
               className="size-20 shrink-0 lg:size-24"
             />
@@ -512,10 +519,10 @@ export default function PlayerProfilePage() {
                 playerUuid={player.uuid}
                 playerName={player.player_name}
                 playerScore={player.score}
-                playerId={row.player_id ?? player.player_id}
+                playerDiscordId={row.discord_id ?? player.discord_id}
                 playerDiscordAvatar={row.discord_avatar ?? player.discord_avatar}
                 playerDiscordDiscriminator={row.discord_discriminator ?? player.discord_discriminator}
-                playerAuthProvider={row.auth_provider ?? player.auth_provider}
+                playerHasRobloxAvatar={row.has_roblox_avatar ?? player.has_roblox_avatar}
                 dateText={formatDate(row.date)}
                 state={row.state}
                 isWr={wrSubmissionIds.has(row.uuid)}
@@ -542,10 +549,10 @@ export default function PlayerProfilePage() {
                 playerUuid={player.uuid}
                 playerName={player.player_name}
                 playerScore={player.score}
-                playerId={player.player_id}
+                playerDiscordId={player.discord_id}
                 playerDiscordAvatar={player.discord_avatar}
                 playerDiscordDiscriminator={player.discord_discriminator}
-                playerAuthProvider={player.auth_provider}
+                playerHasRobloxAvatar={player.has_roblox_avatar}
                 dateText={formatDate(row.date)}
                 state="approved"
                 isWr={wrSubmissionIds.has(row.submission_uuid)}
@@ -568,10 +575,10 @@ export default function PlayerProfilePage() {
               youtubeUrl={row.youtube_url}
               playerUuid={player.uuid}
               playerName={player.player_name}
-              playerId={row.player_id ?? player.player_id}
+              playerDiscordId={row.discord_id ?? player.discord_id}
               playerDiscordAvatar={row.discord_avatar ?? player.discord_avatar}
               playerDiscordDiscriminator={row.discord_discriminator ?? player.discord_discriminator}
-              playerAuthProvider={row.auth_provider ?? player.auth_provider}
+              playerHasRobloxAvatar={row.has_roblox_avatar ?? player.has_roblox_avatar}
               dateText={formatDate(row.date)}
               state={row.state}
               moderatorNote={row.moderator_note}

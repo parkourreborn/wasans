@@ -32,6 +32,7 @@ import { Spinner } from "@/components/ui/spinner"
 import calculateScore from "@/lib/calc-score"
 import { getSubmissionErrorMessage } from "@/lib/submission-errors"
 import { formatSubmissionBanMessage, type SubmissionBanSummary } from "@/lib/submission-bans"
+import { openSettings, robloxLinkRequiredMessage } from "@/lib/linked-accounts"
 import { VIDEO_FILE_ACCEPT, uploadVideoFile, validateVideoFile } from "@/lib/direct-upload"
 import { refreshV2AccessToken } from "@/components/custom/v2-auth-refresh"
 import { HudzellCalculator } from "@/components/custom/hudzell-calculator"
@@ -78,6 +79,7 @@ type AuthResponse = {
       uuid: string
     } | null
     submission_ban?: SubmissionBanSummary | null
+    roblox_link_required?: boolean
   }
 }
 
@@ -231,6 +233,7 @@ export default function NewSubmissionPage() {
   const router = useRouter()
   const [authUser, setAuthUser] = useState<{ uuid: string } | null>(null)
   const [submissionBan, setSubmissionBan] = useState<SubmissionBanSummary | null>(null)
+  const [robloxLinkRequired, setRobloxLinkRequired] = useState(false)
   const [personalBests, setPersonalBests] = useState<Record<string, number>>({})
   const [worldRecords, setWorldRecords] = useState<Record<string, number>>({})
   const [loadingContext, setLoadingContext] = useState(true)
@@ -255,6 +258,7 @@ export default function NewSubmissionPage() {
 
         setAuthUser(authJson?.data?.user || null)
         setSubmissionBan(authJson?.data?.submission_ban || null)
+        setRobloxLinkRequired(Boolean(authJson?.data?.roblox_link_required))
 
         const [pbResponse, wrValues] = await Promise.all([
           fetch(`${apiV2("/submissions")}?player_uuid=${encodeURIComponent(activePlayerUuid)}&state=approved&page=1&limit=100`),
@@ -306,6 +310,7 @@ export default function NewSubmissionPage() {
     return (
       !loadingContext &&
       !submissionBan &&
+      !robloxLinkRequired &&
       !invalidPersonalBest &&
       submissions.every((submission) => {
         const hasTime = Number(submission.time) > 0 && /^\d+(\.\d{1,3})?$/.test(submission.time)
@@ -314,7 +319,7 @@ export default function NewSubmissionPage() {
         return submission.trial_name && hasTime && hasProof && hasValidFile
       })
     )
-  }, [invalidPersonalBest, loadingContext, submissionBan, submissions])
+  }, [invalidPersonalBest, loadingContext, robloxLinkRequired, submissionBan, submissions])
 
   const updateSubmission = (
     id: string,
@@ -391,6 +396,11 @@ export default function NewSubmissionPage() {
 
     if (submissionBan) {
       setError(formatSubmissionBanMessage(submissionBan.reason))
+      return
+    }
+
+    if (robloxLinkRequired) {
+      setError(robloxLinkRequiredMessage)
       return
     }
 
@@ -505,6 +515,17 @@ export default function NewSubmissionPage() {
         <Alert variant="destructive">
           <AlertDescription>
             {formatSubmissionBanMessage(submissionBan.reason)}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {robloxLinkRequired && !submissionBan && (
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-col items-start gap-2">
+            <span>{robloxLinkRequiredMessage}</span>
+            <Button type="button" size="sm" variant="outline" onClick={openSettings}>
+              Open Settings
+            </Button>
           </AlertDescription>
         </Alert>
       )}

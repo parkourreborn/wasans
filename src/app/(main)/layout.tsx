@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { AnnouncementBanner } from "@/components/custom/announcement-banner"
 import { AppSidebar } from "@/components/custom/app-sidebar"
+import { AuthResultToast } from "@/components/custom/auth-result-toast"
 import { SettingsProvider } from "@/components/custom/settings-provider"
 import { Button } from "@/components/ui/button"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
@@ -37,6 +38,8 @@ export default function RootLayout({
           <div className="relative z-10">{children}</div>
         </main>
         <Toaster />
+        {/* After the Toaster, so its effect runs once the Toaster is listening. */}
+        <AuthResultToast />
       </SettingsProvider>
     </SidebarProvider>
   )

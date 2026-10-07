@@ -19,6 +19,11 @@ const googleData = [
   "A display name we seed your player name from at signup, taken from your Google profile name",
 ]
 
+const robloxData = [
+  "Your Roblox user ID",
+  "Your Roblox username and display name, as of the last time you logged in or linked with that account",
+]
+
 const accountData = [
   "An internal player UUID we generate for you",
   "Your player name, score, permission level, and the date you joined",
@@ -29,7 +34,8 @@ const accountData = [
 
 const publicData = [
   "Your player profile: name, avatar, score, rank, and join date",
-  "Your account ID (your Discord user ID, or your Google account ID for a Google login), which the public API returns so the site can build your avatar image",
+  "Your account ID (your Discord user ID, or your Google account ID for an account started with Google), and your linked Discord user ID, which the public API returns so the site can build your avatar image",
+  "If you have a Roblox account linked, the avatar headshot of the one you pick in Settings (but not which Roblox account it is)",
   "Your submissions: trial, time, state, and the moderator note and moderator name attached to them",
   "Your personal bests, any world records you hold, and the proof video for each run",
   "The link to the Discord thread for a submission, where one exists",
@@ -63,7 +69,7 @@ const userRights = [
 ]
 
 const localStorageItems = [
-  "Two cookies that keep you logged in, plus a couple of short-lived ones during the Discord or Google login handshake",
+  "Two cookies that keep you logged in, plus a few short-lived ones during the Discord, Google, or Roblox login or account-linking handshake",
   "Your sidebar and interface preferences",
   "Calculator inputs, cached leaderboard data, and the submission IDs you looked at recently, so the next/previous arrows work",
 ]
@@ -109,7 +115,7 @@ export default function PrivacyPage() {
       <SectionCard title="What Google tells us">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            You can also log in with Google. If you do, we ask it for the <span className="font-medium text-foreground">openid</span> and <span className="font-medium text-foreground">profile</span> scopes only — we do not request, receive, or store your email address, and a Google login is its own independent account, not linked to any Discord account. We keep:
+            You can also log in with Google. If you do, we ask it for the <span className="font-medium text-foreground">openid</span> and <span className="font-medium text-foreground">profile</span> scopes only — we do not request, receive, or store your email address. We keep:
           </p>
           <ul className="list-disc space-y-2 pl-5">
             {googleData.map((item) => (
@@ -120,9 +126,34 @@ export default function PrivacyPage() {
             <span className="font-medium text-foreground">We do not store Google&apos;s access or refresh tokens either</span>, for the same reason as Discord&apos;s: we use them once during login and then throw them away.
           </p>
           <p>
-            Because a Google-only account has no linked Discord account, the Discord-specific features described below — the submission thread post, moderation DMs, and rank-role/nickname sync — do not apply to it. There is nothing on the Discord side for us to post, DM, or sync.
+            Unless you also link a Discord account, the Discord-specific features described below — the submission thread post, moderation DMs, and rank-role/nickname sync — do not apply to you. There is nothing on the Discord side for us to post, DM, or sync.
           </p>
         </div>
+      </SectionCard>
+
+      <SectionCard title="What Roblox tells us">
+        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+          <p>
+            You can log in with Roblox too, and link as many Roblox accounts as you play on, alts included. We ask Roblox for the <span className="font-medium text-foreground">openid</span> and <span className="font-medium text-foreground">profile</span> scopes only, and keep, for each linked Roblox account:
+          </p>
+          <ul className="list-disc space-y-2 pl-5">
+            {robloxData.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <p>
+            We also look up each linked account&apos;s current username, display name, and avatar headshot from Roblox&apos;s public APIs, because those can change. <span className="font-medium text-foreground">We do not store Roblox&apos;s access or refresh tokens</span>, for the same reason as Discord&apos;s and Google&apos;s.
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Your linked Roblox accounts are not public.</span> Only you and our moderators can see them. Moderators use them to check that the Roblox account in a run&apos;s video is yours, which is why we may require at least one linked Roblox account before you can submit. Our Discord bot can look them up for moderators too.
+          </p>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Linking accounts">
+        <p className="text-sm leading-6 text-muted-foreground">
+          One wasans account can have one Discord account, one Google account, and any number of Roblox accounts linked to it, and you can log in with any of them. You link and unlink them in Settings. Unlinking removes that account&apos;s data from us; you can&apos;t unlink your last way to log in.
+        </p>
       </SectionCard>
 
       <SectionCard title="Your account">
@@ -189,7 +220,7 @@ export default function PrivacyPage() {
       <SectionCard title="What we send to Discord">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            This section only applies if you logged in with Discord — a Google-only account has none of this happen.
+            This section only applies if you have a Discord account linked — an account without one has none of this happen.
           </p>
           <p>
             Submitting a run posts it to our Discord server automatically, in a thread for that submission. The post includes your player name, your Discord user ID, the trial, and the time — so anyone who can see that channel can see your run before a moderator has touched it.
@@ -236,7 +267,7 @@ export default function PrivacyPage() {
       <SectionCard title="Who else is involved">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">Discord</span> handles login and our community features. <span className="font-medium text-foreground">Google</span> handles login for accounts that choose to sign in that way. <span className="font-medium text-foreground">Cloudflare</span> hosts the site, the database, and the video storage. <span className="font-medium text-foreground">Medal</span> and similar proof providers are involved when you submit a link and we fetch the video from them.</p>
+            <span className="font-medium text-foreground">Discord</span> handles login and our community features. <span className="font-medium text-foreground">Google</span> and <span className="font-medium text-foreground">Roblox</span> handle login for accounts that choose to sign in that way, and Roblox&apos;s public APIs give us current Roblox names and avatar headshots. <span className="font-medium text-foreground">Cloudflare</span> hosts the site, the database, and the video storage. <span className="font-medium text-foreground">Medal</span> and similar proof providers are involved when you submit a link and we fetch the video from them.</p>
           <p>
             That is the complete list. We do not run ads, we do not use an analytics service, and we do not sell or share your data with anyone else.
           </p>
@@ -248,19 +279,19 @@ export default function PrivacyPage() {
 
       <SectionCard title="Where your data goes">
         <p className="text-sm leading-6 text-muted-foreground">
-          Discord, Google, Cloudflare, and the proof providers all operate outside the EU and EEA, so your data leaves it. We rely on the transfer terms those companies publish for their own services; we are not in a position to negotiate our own with them.
+          Discord, Google, Roblox, Cloudflare, and the proof providers all operate outside the EU and EEA, so your data leaves it. We rely on the transfer terms those companies publish for their own services; we are not in a position to negotiate our own with them.
         </p>
       </SectionCard>
 
       <SectionCard title="Deleting or deactivating your account">
         <div className="space-y-3 text-sm leading-6 text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">Deactivating</span> is the reversible one. You can do it in Settings. It hides your account from the player listings, and logging in with Discord again brings it back.
+            <span className="font-medium text-foreground">Deactivating</span> is the reversible one. You can do it in Settings. It hides your account from the player listings, and logging in again with any linked account brings it back.
           </p>
           <p>
             <span className="font-medium text-foreground">Deleting</span> is not reversible. You can do it in Settings, or email{" "}
             <a href={`mailto:${legalContactEmail}`} className="text-primary underline underline-offset-4">{legalContactEmail}</a>{" "}
-            and we will do it for you. It removes your account ID and avatar, the link to your Discord or Google account, your IP records, and every login token you have, and it renames your public profile to Deleted Account.
+            and we will do it for you. It removes your account ID and avatar, the links to your Discord, Google, and Roblox accounts, your IP records, and every login token you have, and it renames your public profile to Deleted Account.
           </p>
           <p>
             What stays: your submissions, scores, PBs, WRs, proof videos, and the audit log entries about them, all attributed to Deleted Account. We keep those because pulling one player&apos;s runs out of a leaderboard rewrites everyone else&apos;s history too.
@@ -270,7 +301,7 @@ export default function PrivacyPage() {
 
       <SectionCard title="Age">
         <p className="text-sm leading-6 text-muted-foreground">
-          This site is not meant for children under 13. By logging in with Discord or Google you are confirming you meet that provider&apos;s minimum age for your country, which is 13 in most places and higher in some.
+          This site is not meant for children under 13. By logging in with Discord, Google, or Roblox you are confirming you meet that provider&apos;s minimum age for your country, which is 13 in most places and higher in some.
         </p>
       </SectionCard>
 

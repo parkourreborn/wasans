@@ -12,10 +12,10 @@ type SubmissionCardProps = {
   playerUuid: string
   playerName: string
   playerScore: number
-  playerId?: string | null
+  playerDiscordId?: string | null
   playerDiscordAvatar?: string | null
   playerDiscordDiscriminator?: string | null
-  playerAuthProvider?: string | null
+  playerHasRobloxAvatar?: boolean | number | null
   dateText: string
   state: string
   isWr?: boolean
@@ -34,10 +34,10 @@ export function SubmissionCard({
   playerUuid,
   playerName,
   playerScore,
-  playerId,
+  playerDiscordId,
   playerDiscordAvatar,
   playerDiscordDiscriminator,
-  playerAuthProvider,
+  playerHasRobloxAvatar,
   dateText,
   state,
   isWr = false,
@@ -89,10 +89,11 @@ export function SubmissionCard({
                   <PlayerAvatar
                     size="sm"
                     playerName={playerName}
-                    discordId={playerId}
+                    playerUuid={playerUuid}
+                    hasRobloxAvatar={playerHasRobloxAvatar}
+                    discordId={playerDiscordId}
                     discordAvatar={playerDiscordAvatar}
                     discordDiscriminator={playerDiscordDiscriminator}
-                    authProvider={playerAuthProvider}
                   />
                 </Link>
                 <Link

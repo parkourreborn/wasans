@@ -3,6 +3,7 @@ import { listComboSubmissions } from "@/lib/server/repositories/combo-submission
 import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-repository"
 import { getSubmissionBan } from "@/lib/server/repositories/submission-ban-repository"
 import { createComboSubmissionFromRequest, type IncomingComboSubmission } from "@/lib/server/services/combo-submission-write-service"
+import { isMissingRequiredRobloxLink, robloxLinkRequiredMessage } from "@/lib/server/services/linked-accounts-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import {
   buildRequestHash,
@@ -58,6 +59,14 @@ export const POST = withV2Context(async (ctx) => {
       code: "forbidden",
       requestId: ctx.requestId,
       details: { banned_at: submissionBan.banned_at },
+    })
+  }
+
+  if (await isMissingRequiredRobloxLink(ctx.db, ctx.auth.uuid)) {
+    return jsonError(robloxLinkRequiredMessage, 403, {
+      code: "forbidden",
+      requestId: ctx.requestId,
+      details: { reason: "roblox_link_required" },
     })
   }
 

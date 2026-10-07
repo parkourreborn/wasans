@@ -22,6 +22,8 @@ export type AuthSessionUser = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
 }
 
 export type AuthStatus =

@@ -20,6 +20,8 @@ export type SubmissionWithScoreRow = SubmissionRow & {
   discord_avatar: string | null
   discord_discriminator: string | null
   auth_provider: string | null
+  discord_id: string | null
+  has_roblox_avatar: number | null
 }
 
 export type PlayerSubmissionContext = {
@@ -28,6 +30,7 @@ export type PlayerSubmissionContext = {
   player_name: string
   score: number | string | null
   auth_provider: string | null
+  discord_id: string | null
 }
 
 export async function listSubmissions(
@@ -70,7 +73,8 @@ export async function listSubmissions(
     .first<{ count: number }>()
 
   const rows = await db.prepare(
-    `SELECT submissions.*, players.score as player_score, players.player_id, players.discord_avatar, players.discord_discriminator, players.auth_provider
+    `SELECT submissions.*, players.score as player_score, players.player_id, players.discord_avatar, players.discord_discriminator, players.auth_provider,
+            players.discord_id, (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar
      FROM submissions
      LEFT JOIN players ON players.uuid = submissions.player_uuid
      ${whereClause}
@@ -88,7 +92,7 @@ export async function listSubmissions(
 
 export async function findPlayerByUuid(db: D1Database, playerUuid: string) {
   return db.prepare(
-    `SELECT uuid, player_id, player_name, score, auth_provider
+    `SELECT uuid, player_id, player_name, score, auth_provider, discord_id
      FROM players
      WHERE uuid = ?
        AND COALESCE(account_status, 'active') = 'active'`
@@ -198,12 +202,12 @@ export async function updateSubmissionByUuid(
 // keyed off values already known to the caller.
 export async function getPlayerScoreAndPbContext(db: D1Database, playerUuid: string, trialName: string) {
   const [playerResult, pbResult] = await db.batch([
-    db.prepare(`SELECT score, player_id, auth_provider FROM players WHERE uuid = ?`).bind(playerUuid),
+    db.prepare(`SELECT score, player_id, auth_provider, discord_id FROM players WHERE uuid = ?`).bind(playerUuid),
     db.prepare(`SELECT time FROM pbs WHERE player_uuid = ? AND trial_name = ?`).bind(playerUuid, trialName),
   ])
 
   return {
-    player: (playerResult.results[0] as { score: number; player_id: string; auth_provider: string | null } | undefined) ?? null,
+    player: (playerResult.results[0] as { score: number; player_id: string; auth_provider: string | null; discord_id: string | null } | undefined) ?? null,
     pb: (pbResult.results[0] as { time: number } | undefined) ?? null,
   }
 }

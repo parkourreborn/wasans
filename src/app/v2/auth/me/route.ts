@@ -1,6 +1,7 @@
 import { jsonError } from "@/lib/server/http"
 import { loadAuthUserByUuid } from "@/lib/server/auth"
 import { getSubmissionBan } from "@/lib/server/repositories/submission-ban-repository"
+import { isMissingRequiredRobloxLink } from "@/lib/server/services/linked-accounts-service"
 import { getRefreshCookieValue, jsonOk, withV2Context } from "@/lib/server/v2/http"
 
 // Never let a browser or edge cache hold on to who is signed in.
@@ -28,11 +29,13 @@ export const GET = withV2Context(async (ctx) => {
 
     // No refresh cookie: genuinely signed out, so don't send the client off
     // to attempt a refresh that cannot succeed.
-    return jsonOk({ user: null, submission_ban: null }, { requestId: ctx.requestId, headers: noStore })
+    return jsonOk({ user: null, submission_ban: null, roblox_link_required: false }, { requestId: ctx.requestId, headers: noStore })
   }
 
   const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request)
-  const ban = user ? await getSubmissionBan(ctx.db, user.uuid) : null
+  const [ban, robloxLinkRequired] = user
+    ? await Promise.all([getSubmissionBan(ctx.db, user.uuid), isMissingRequiredRobloxLink(ctx.db, user.uuid)])
+    : [null, false]
 
   return jsonOk(
     {
@@ -40,6 +43,8 @@ export const GET = withV2Context(async (ctx) => {
       submission_ban: ban
         ? { reason: ban.reason, banned_at: ban.banned_at, banned_by_name: ban.banned_by_name }
         : null,
+      // Submitting needs a linked Roblox account and this player has none.
+      roblox_link_required: robloxLinkRequired,
     },
     { requestId: ctx.requestId, headers: noStore }
   )

@@ -38,6 +38,8 @@ type ComboLeaderboardEntry = {
   discord_avatar?: string | null
   discord_discriminator?: string | null
   auth_provider?: string | null
+  discord_id?: string | null
+  has_roblox_avatar?: number | null
   player_name: string
   combo_count: number | null
   submission_uuid: string | null
@@ -265,10 +267,11 @@ export default function CombosLeaderboardPage() {
                       </span>
                       <PlayerAvatar
                         playerName={row.player_name}
-                        discordId={row.player_id}
+                        playerUuid={row.player_uuid}
+                        hasRobloxAvatar={row.has_roblox_avatar}
+                        discordId={row.discord_id}
                         discordAvatar={row.discord_avatar}
                         discordDiscriminator={row.discord_discriminator}
-                        authProvider={row.auth_provider}
                       />
                       <div className="min-w-0">
                         <Link

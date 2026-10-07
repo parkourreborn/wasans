@@ -45,6 +45,8 @@ export async function deleteAccount(db: D1Database, user: AuthUser) {
     session.prepare(
       `UPDATE players
        SET player_id = ?,
+           discord_id = NULL,
+           avatar_roblox_id = NULL,
            discord_avatar = NULL,
            discord_discriminator = NULL,
            player_name = ?,

@@ -4,6 +4,7 @@ import { useEffect, useState, type MouseEvent } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Badges from "@/components/custom/badges"
+import { SubmitterRobloxAccounts } from "@/components/custom/submitter-roblox-accounts"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -375,6 +376,8 @@ export default function ComboSubmissionView({
 
               <ComboSubmissionNavButton direction="next" submissionUuid={nextSubmissionUuid} />
             </div>
+
+            {canModerate && <SubmitterRobloxAccounts playerUuid={submission.player_uuid} />}
 
             {(canModerate || canDelete) && (
               <div className="flex flex-col justify-center gap-2 sm:flex-row">

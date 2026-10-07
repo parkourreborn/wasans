@@ -62,6 +62,11 @@
 	"vars": {
 		"discordClientId": "1501043686828544121",
 		"googleClientId": "185761022277-buat4302ug19v6f03e9limul0cil5s5d.apps.googleusercontent.com",
+		// Roblox OAuth app (create.roblox.com > Credentials > OAuth 2.0 apps),
+		// with redirect URI https://wasans.tully.sh/v2/auth/roblox/callback and
+		// scopes openid + profile. The secret is `wrangler secret put
+		// robloxClientSecret`. Until both are set, Roblox login/linking errors.
+		"robloxClientId": "",
 		// For presigned direct-upload URLs (src/lib/server/r2-presign.ts),
 		// signed with the R2_UPLOAD_ACCESS_KEY_ID/R2_UPLOAD_SECRET_ACCESS_KEY
 		// secrets. Fill in the Cloudflare account ID (dashboard > R2 >
