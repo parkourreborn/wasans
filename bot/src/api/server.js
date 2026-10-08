@@ -1,13 +1,24 @@
+import { createHash, timingSafeEqual } from 'crypto';
 import http from 'http';
-import { API_SECRET } from '../config.js';
+import { SITE_TO_BOT_KEY } from '../config.js';
 import { logger } from '../logger.js';
 import { errorBody, normalizeToApiError, unauthorized } from './errors.js';
 import { getAuthHeader, jsonResponse, parseJsonBody } from './http.js';
 import { handleV2Route, isV2Path } from './v2/router.js';
 import { handleV3Route, isV3Path } from './v3/router.js';
 
-async function logApiEvent(level, title, description = '', meta = undefined) {
-    const line = `${title}${description ? `: ${description}` : ''}`;
+// Hashing both sides first gives timingSafeEqual equal-length inputs, so the
+// comparison takes the same time however much of the key a guess got right.
+function digest(value) {
+    return createHash('sha256').update(value).digest();
+}
+
+function isAuthorized(authHeader) {
+    if (!SITE_TO_BOT_KEY || typeof authHeader !== 'string') return false;
+    return timingSafeEqual(digest(authHeader), digest(`Bearer ${SITE_TO_BOT_KEY}`));
+}
+
+function logLocally(level, line) {
     if (level === 'error') {
         console.error(line);
     } else if (level === 'warn') {
@@ -15,6 +26,10 @@ async function logApiEvent(level, title, description = '', meta = undefined) {
     } else {
         console.log(line);
     }
+}
+
+async function logApiEvent(level, title, description = '', meta = undefined) {
+    logLocally(level, `${title}${description ? `: ${description}` : ''}`);
 
     try {
         await logger[level](title, description, meta);
@@ -26,14 +41,24 @@ async function logApiEvent(level, title, description = '', meta = undefined) {
 export const server = http.createServer(async (req, res) => {
     const startedAt = Date.now();
     const method = req.method || 'UNKNOWN';
-    const host = req.headers.host || 'localhost';
-    const url = new URL(req.url || '/', `http://${host}`);
+    // A fixed base, not the caller's Host header: a malformed Host would make
+    // the URL constructor throw outside the try below.
+    const url = new URL(req.url || '/', 'http://localhost');
     const pathname = url.pathname;
+
+    // Only requests that carry the key are mirrored to the Discord logging
+    // channel. Anything else is a stranger, and posting each of their
+    // requests would let anyone who finds the bot spam that channel.
+    let authenticated = false;
 
     res.on('finish', () => {
         const durationMs = Date.now() - startedAt;
         const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'log';
         const summary = `${method} ${pathname} finished with ${res.statusCode} in ${durationMs}ms`;
+        if (!authenticated) {
+            logLocally(level, `Unauthenticated request: ${summary}`);
+            return;
+        }
         void logApiEvent(level, 'Request completed', summary, {
             path: pathname,
             status: res.statusCode,
@@ -41,24 +66,22 @@ export const server = http.createServer(async (req, res) => {
         });
     });
 
-    await logApiEvent('log', 'Request received', `${method} ${pathname}`, { method, path: pathname });
-
     if (req.method !== 'POST') {
-        await logApiEvent('warn', 'Request rejected', 'Only POST is supported');
         return jsonResponse(res, 405, errorBody('bad_request', 'Only POST is supported'));
     }
 
-    if (!API_SECRET) {
-        await logApiEvent('error', 'Request failed', 'API secret is not configured');
+    if (!SITE_TO_BOT_KEY) {
+        logLocally('error', 'Request failed: SITE_TO_BOT_KEY is not configured');
         return jsonResponse(res, 500, errorBody('discord_error', 'API secret is not configured'));
     }
 
-    const authHeader = getAuthHeader(req);
-    if (authHeader !== `Bearer ${API_SECRET}`) {
+    if (!isAuthorized(getAuthHeader(req))) {
         const error = unauthorized();
-        await logApiEvent('warn', 'Request rejected', error.message);
         return jsonResponse(res, error.status, errorBody(error.code, error.message));
     }
+
+    authenticated = true;
+    await logApiEvent('log', 'Request received', `${method} ${pathname}`, { method, path: pathname });
 
     try {
         const payload = await parseJsonBody(req);

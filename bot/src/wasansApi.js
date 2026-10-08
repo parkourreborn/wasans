@@ -50,12 +50,12 @@ export async function apiGet(pathname, query = undefined) {
 }
 
 // Authenticated client for the wasans admin/bot-only v2 routes (e.g.
-// admin/players/by-discord, admin/giveaways/*) -- these require the same bot
-// API key the HTTP server checks on inbound requests (see api/server.js),
-// sent back out as a bearer token.
+// admin/players/by-discord, admin/giveaways/*) -- these require
+// BOT_TO_SITE_KEY as a bearer token. It is deliberately not the key the
+// HTTP server checks on inbound requests (see config.js).
 export async function adminApiRequest(pathname, { method = 'GET', body } = {}) {
-    if (!botConfig.api_secret) {
-        const error = new Error('API_SECRET is not configured');
+    if (!botConfig.site_api_key) {
+        const error = new Error('BOT_TO_SITE_KEY is not configured');
         error.status = 500;
         throw error;
     }
@@ -64,7 +64,7 @@ export async function adminApiRequest(pathname, { method = 'GET', body } = {}) {
     const response = await fetch(url, {
         method,
         headers: {
-            Authorization: `Bearer ${botConfig.api_secret}`,
+            Authorization: `Bearer ${botConfig.site_api_key}`,
             ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,

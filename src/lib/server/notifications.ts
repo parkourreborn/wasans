@@ -159,29 +159,48 @@ async function syncSubmissionThread(payload: SubmissionSyncPayload): Promise<Sub
 // Discord bot API configuration
 const GUILD_ID = "1257994787512913961"
 const THREAD_CHANNEL_ID = "1351374148881874944"
-const BOT_API_BASE = "https://bot.wasans.tully.sh"
 const WR_PING = "<@&1335389577883418736>"
 
-async function getBotApiKey(): Promise<string> {
-  let botApiKey = ""
+// The bot runs on a Raspberry Pi with no public address. The BOT_SERVICE
+// binding is a Workers VPC Service that reaches it through the Pi's
+// Cloudflare Tunnel (see wrangler.jsonc). With a VPC Service the binding's
+// own host and port decide where the request goes, so this URL's host only
+// fills in the Host header.
+const BOT_SERVICE_URL = "http://bot"
 
+type BotEnv = CloudflareEnv & {
+  BOT_SERVICE?: Fetcher
+  SITE_TO_BOT_KEY?: string
+  botApiKey?: string
+  BOT_API_KEY?: string
+}
+
+async function getBotEnv(): Promise<BotEnv | null> {
   try {
     const { env } = await getCloudflareContext({ async: true })
-    botApiKey = String(
-      (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).botApiKey
-      || (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).BOT_API_KEY
-      || ""
-    ).trim()
+    return env as BotEnv
   } catch {
-    // Fall back to process.env for local/runtime environments without Cloudflare context.
+    // Local/runtime environments without a Cloudflare context.
+    return null
   }
+}
+
+// SITE_TO_BOT_KEY is the key the site presents to the bot. The bot presents
+// a different one back (BOT_TO_SITE_KEY, see bot-auth.ts). The old shared
+// botApiKey/BOT_API_KEY is still accepted until the split keys are set.
+function getBotApiKey(env: BotEnv | null): string {
+  const botApiKey = String(
+    env?.SITE_TO_BOT_KEY
+    || env?.botApiKey
+    || env?.BOT_API_KEY
+    || process.env.SITE_TO_BOT_KEY
+    || process.env.botApiKey
+    || process.env.BOT_API_KEY
+    || ""
+  ).trim()
 
   if (!botApiKey) {
-    botApiKey = String(process.env.botApiKey || process.env.BOT_API_KEY || "").trim()
-  }
-
-  if (!botApiKey) {
-    throw new Error("botApiKey/BOT_API_KEY is not configured")
+    throw new Error("SITE_TO_BOT_KEY is not configured")
   }
 
   return botApiKey
@@ -199,8 +218,13 @@ async function sendBotApiRequest(
   endpoint: string,
   body: Record<string, unknown>
 ): Promise<BotApiResponse> {
-  const apiKey = await getBotApiKey()
-  const response = await fetch(`${BOT_API_BASE}${endpoint}`, {
+  const env = await getBotEnv()
+  const apiKey = getBotApiKey(env)
+  if (!env?.BOT_SERVICE) {
+    throw new Error("BOT_SERVICE binding is not configured")
+  }
+
+  const response = await env.BOT_SERVICE.fetch(`${BOT_SERVICE_URL}${endpoint}`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,

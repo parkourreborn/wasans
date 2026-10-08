@@ -53,6 +53,20 @@
 		// that queue to be inspected. Stuck submissions are re-queued by the
 		// daily maintenance sweep (see video-processing-service.ts).
 	},
+	"vpc_services": [
+		{
+			// The Discord bot (bot/), reached privately through the Raspberry
+			// Pi's Cloudflare Tunnel instead of a public hostname. Create it
+			// with `npx wrangler vpc service create wasans-bot --type http
+			// --tunnel-id <tunnel id> --hostname bot --http-port 4500`
+			// ("bot" is the bot's service name in bot/docker-compose.yml,
+			// which the tunnel container resolves) and paste the service ID
+			// it prints here.
+			"binding": "BOT_SERVICE",
+			"service_id": "REPLACE_WITH_VPC_SERVICE_ID",
+			"remote": true
+		}
+	],
 	"images": {
 		"binding": "IMAGES"
 	},

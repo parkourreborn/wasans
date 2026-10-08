@@ -1,3 +1,8 @@
+# Keeps the Compose project name the bot had in its own repo, so the first
+# deploy from this monorepo replaces the old containers instead of starting a
+# second copy of the bot next to them.
+name: wasans-bot
+
 services:
   bot:
     build: .
@@ -6,7 +11,10 @@ services:
       - "${PORT:-4500}:4500"
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
-      API_SECRET: ${API_SECRET}
+      SITE_TO_BOT_KEY: ${SITE_TO_BOT_KEY:-}
+      BOT_TO_SITE_KEY: ${BOT_TO_SITE_KEY:-}
+      # Old shared key; only used when the two keys above aren't set.
+      API_SECRET: ${API_SECRET:-}
       PORT: ${PORT:-4500}
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost ${PORT:-4500}"]

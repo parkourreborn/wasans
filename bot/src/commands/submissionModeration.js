@@ -147,14 +147,14 @@ async function ensureModerator(interaction) {
 }
 
 async function patchSubmission(submissionId, body) {
-    if (!botConfig.api_secret) {
-        throw new Error('API_SECRET is not configured');
+    if (!botConfig.site_api_key) {
+        throw new Error('BOT_TO_SITE_KEY is not configured');
     }
 
     const response = await fetch(`${botConfig.submission_api_base_url}${encodeURIComponent(submissionId)}`, {
         method: 'PATCH',
         headers: {
-            Authorization: `Bearer ${botConfig.api_secret}`,
+            Authorization: `Bearer ${botConfig.site_api_key}`,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),

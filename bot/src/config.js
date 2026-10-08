@@ -1,5 +1,11 @@
 export const PORT = Number(process.env.PORT || 4500);
-export const API_SECRET = process.env.API_SECRET || '';
+// One key per direction, so a leak of either doesn't also hand over the
+// other: SITE_TO_BOT_KEY is what the site presents to this bot's HTTP API,
+// BOT_TO_SITE_KEY is what the bot presents to the site's bot-only routes.
+// Both fall back to the old shared API_SECRET so an existing deployment keeps
+// working until the new keys are set.
+export const SITE_TO_BOT_KEY = process.env.SITE_TO_BOT_KEY || process.env.API_SECRET || '';
+export const BOT_TO_SITE_KEY = process.env.BOT_TO_SITE_KEY || process.env.API_SECRET || '';
 export const BOT_TOKEN = process.env.BOT_TOKEN || process.env.DISCORD_TOKEN || '';
 
 export const DEFAULT_GUILD_ID = '1257994787512913961';
@@ -37,7 +43,7 @@ export const botConfig = {
     player_base_url: process.env.PLAYER_BASE_URL || 'https://wasans.tully.sh/players/',
     submission_api_base_url: process.env.SUBMISSION_API_BASE_URL || 'https://wasans.tully.sh/v2/submissions/',
     bot_token: BOT_TOKEN,
-    api_secret: API_SECRET,
+    site_api_key: BOT_TO_SITE_KEY,
     moderator_role_id: process.env.MODERATOR_ROLE_ID || '1547026410307194920',
     state_tags: {
         pending: process.env.TAG_PENDING_ID || '1351580041896656936',
@@ -91,6 +97,14 @@ if (!BOT_TOKEN) {
     console.warn('[config] BOT_TOKEN (or DISCORD_TOKEN) is not set; Discord login will fail.');
 }
 
-if (!API_SECRET) {
-    console.warn('[config] API_SECRET is not set; all HTTP API requests will be rejected with 401/500.');
+if (!SITE_TO_BOT_KEY) {
+    console.warn('[config] SITE_TO_BOT_KEY is not set; all HTTP API requests will be rejected with 500.');
+}
+
+if (!BOT_TO_SITE_KEY) {
+    console.warn('[config] BOT_TO_SITE_KEY is not set; calls to the site\'s bot-only routes will fail.');
+}
+
+if (process.env.API_SECRET && (!process.env.SITE_TO_BOT_KEY || !process.env.BOT_TO_SITE_KEY)) {
+    console.warn('[config] Falling back to the shared API_SECRET; set SITE_TO_BOT_KEY and BOT_TO_SITE_KEY to separate keys.');
 }

@@ -13,15 +13,27 @@ function getBotApiKeyFromRequest(request: Request) {
     || null
 }
 
-// Shared server-to-server credential check for routes the Discord bot calls
+type BotAuthEnv = CloudflareEnv & {
+  BOT_TO_SITE_KEY?: string
+  botApiKey?: string
+  BOT_API_KEY?: string
+}
+
+// Server-to-server credential check for routes the Discord bot calls
 // directly instead of via a player session (moderation actions in
 // moderation-service.ts, and Discord-id lookups like
-// admin/players/by-discord).
+// admin/players/by-discord). BOT_TO_SITE_KEY is only ever presented by the
+// bot; the site uses a different key to call the bot (SITE_TO_BOT_KEY, see
+// notifications.ts). The old shared botApiKey/BOT_API_KEY is still accepted
+// until the split keys are set.
 export function isBotApiRequest(request: Request, env: CloudflareEnv) {
+  const botEnv = env as BotAuthEnv
   const providedKey = getBotApiKeyFromRequest(request)
   const expectedKey = String(
-    (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).botApiKey
-    || (env as CloudflareEnv & { botApiKey?: string; BOT_API_KEY?: string }).BOT_API_KEY
+    botEnv.BOT_TO_SITE_KEY
+    || botEnv.botApiKey
+    || botEnv.BOT_API_KEY
+    || process.env.BOT_TO_SITE_KEY
     || process.env.botApiKey
     || process.env.BOT_API_KEY
     || ""
