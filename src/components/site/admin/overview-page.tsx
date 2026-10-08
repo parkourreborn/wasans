@@ -100,8 +100,8 @@ function Waiting({ overview, now }: { overview: Overview; now: number }) {
       label: "Prize candidates",
       value: waiting.prize_candidates,
       sub: waiting.prize_candidates === 0 ? "No winners to confirm." : "Detected winners to confirm or reject.",
-      href: "/prizes",
-      cta: "Review on Prizes",
+      href: "/admin/prizes",
+      cta: "Confirm winners",
       alert: false,
     },
     {

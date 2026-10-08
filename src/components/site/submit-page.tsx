@@ -5,10 +5,12 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { UploadIcon } from "lucide-react"
 import { apiV2 } from "@/lib/api"
+import { isVideoFile } from "@/lib/direct-upload"
 import type { AuthSessionUser } from "@/lib/auth-session"
 import { formatCount } from "@/lib/format"
 import { openSettings, robloxLinkRequiredMessage } from "@/lib/linked-accounts"
 import { refreshRunCaches } from "@/lib/moderation"
+import { stashRunFiles } from "@/lib/pending-run-files"
 import { formatSubmissionBanMessage, type SubmissionBanSummary } from "@/lib/submission-bans"
 import { getSubmissionErrorMessage } from "@/lib/submission-errors"
 import { isYoutubeUrl } from "@/lib/submission-input"
@@ -16,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { getYoutubeEmbedId } from "@/lib/youtube"
 import { invalidateApi, useApi } from "@/hooks/use-api"
 import { useComboCategories } from "@/hooks/use-combo-categories"
+import { usePageFileDrop } from "@/hooks/use-page-file-drop"
 import { useAuthSession } from "@/components/custom/use-auth-session"
 import { useLoginDialog } from "@/components/site/login-dialog"
 import { PageHeader } from "@/components/site/page-header"
@@ -27,6 +30,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import { toast } from "sonner"
 
 type AuthMeResponse = {
   data?: { submission_ban?: SubmissionBanSummary | null; roblox_link_required?: boolean }
@@ -37,6 +41,28 @@ export function SubmitPage() {
   const searchParams = useSearchParams()
   const type = searchParams.get("type") === "combo" ? "combo" : "trial"
   const { status, user } = useAuthSession()
+  const router = useRouter()
+  const { openLogin } = useLoginDialog()
+
+  // The trial runs form takes dropped videos itself. Anywhere else on this
+  // page they're caught here rather than opened by the browser: on the combo
+  // tab they switch over to trial runs, and logged out they ask to log in.
+  usePageFileDrop((files) => {
+    const videos = files.filter(isVideoFile)
+    if (videos.length === 0) {
+      toast.error("Only videos can be dropped here.")
+      return
+    }
+    if (!user) {
+      openLogin("Log in to submit runs.")
+      return
+    }
+    stashRunFiles(videos)
+    if (type === "combo") {
+      toast("Combos use a YouTube link, so those videos were added as trial runs.")
+      router.replace("/submit", { scroll: false })
+    }
+  }, !(user && type === "trial"))
 
   return (
     <>

@@ -28,7 +28,7 @@ const trialsByLength = [...trials].sort((a, b) => b.length - a.length)
 
 // Reads the trial and time out of a video's file name when they're in it,
 // e.g. "Neon Bold 24.512.mp4" or "glass_12.345_pb.mov". Only numbers with a
-// decimal point count as times, so dates and resolutions in the name
+// decimal point (or comma) count as times, so dates and resolutions in the name
 // ("2026-10-07", "1080p") aren't mistaken for one.
 export function parseRunFilename(filename: string): { trialName?: TrialName; time?: string } {
   const base = filename.replace(/\.[a-z0-9]{2,4}$/i, "")
@@ -37,10 +37,13 @@ export function parseRunFilename(filename: string): { trialName?: TrialName; tim
   const flat = normalize(base)
   result.trialName = trialsByLength.find((trial) => flat.includes(normalize(trial)))
 
-  for (const match of base.matchAll(/(?<![\d.])(\d{1,3}\.\d{1,3})(?![\d.])/g)) {
-    const time = parseRunTime(match[1])
+  // A comma counts as the decimal point too ("24,512"), as some recorders
+  // and locales write it.
+  for (const match of base.matchAll(/(?<![\d.,])(\d{1,3}[.,]\d{1,3})(?![\d.,])/g)) {
+    const value = match[1].replace(",", ".")
+    const time = parseRunTime(value)
     if (time !== null && time < 1000) {
-      result.time = match[1]
+      result.time = value
       break
     }
   }

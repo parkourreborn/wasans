@@ -8,6 +8,7 @@ export const ADMIN_PAGES = [
   { href: "/admin/players", label: "Players", min: PERMISSION_OWNER },
   { href: "/admin/trials", label: "Trials", min: PERMISSION_OWNER },
   { href: "/admin/combos", label: "Combos", min: PERMISSION_COMBO_MODERATOR },
+  { href: "/admin/prizes", label: "Prizes", min: PERMISSION_OWNER },
   { href: "/admin/content", label: "Content", min: PERMISSION_OWNER },
   { href: "/admin/site", label: "Site", min: PERMISSION_OWNER },
   { href: "/admin/logs", label: "Logs", min: PERMISSION_MODERATOR },

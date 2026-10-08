@@ -20,7 +20,7 @@ const ROLE_LABELS = ["", "Combo moderator", "Moderator", "Moderator", "Owner"]
 // page itself.
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, status } = useAuthSession()
-  const { newErrors } = useNavBadgeState()
+  const { newErrors, pendingCandidates } = useNavBadgeState()
   const pathname = usePathname()
   const router = useRouter()
   const { openLogin } = useLoginDialog()
@@ -67,7 +67,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <span className="label-caps hidden px-3 pb-2 text-[13px] text-subtle-foreground md:block">{ROLE_LABELS[permission] ?? "Staff"}</span>
         {pages.map((page) => {
           const active = current?.href === page.href
-          const badge = page.href === "/admin/logs" && newErrors
+          const badge = page.href === "/admin/logs" ? newErrors : page.href === "/admin/prizes" ? pendingCandidates > 0 : false
+          const badgeLabel = page.href === "/admin/logs" ? "new error" : `${pendingCandidates} to confirm`
           return (
             <Link
               key={page.href}
@@ -80,8 +81,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             >
               {page.label}
               {badge ? (
-                <span className="ml-auto flex items-center" aria-label="new error">
-                  <span className="size-2 rounded-full bg-destructive" aria-hidden />
+                <span className="ml-auto flex items-center" aria-label={badgeLabel}>
+                  <span className={cn("size-2 rounded-full", page.href === "/admin/logs" ? "bg-destructive" : "bg-primary")} aria-hidden />
                 </span>
               ) : null}
             </Link>

@@ -7,12 +7,14 @@ test("file names give up their trial and time", () => {
   assert.deepEqual(parseRunFilename("neon_bold-24.5.mov"), { trialName: "Neon Bold", time: "24.5" })
   assert.deepEqual(parseRunFilename("RustBelt 18.912 pb.mkv"), { trialName: "Rust Belt", time: "18.912" })
   assert.deepEqual(parseRunFilename("circulation13.787.mp4"), { trialName: "Circulation", time: "13.787" })
+  assert.deepEqual(parseRunFilename("neon_bold-24,5.mkv"), { trialName: "Neon Bold", time: "24.5" })
 })
 
 test("dates and resolutions are not times", () => {
   assert.deepEqual(parseRunFilename("2026-10-07 Solar 1080p.mp4"), { trialName: "Solar" })
   assert.deepEqual(parseRunFilename("Medal_2026.10.07_Riser 10.111.mp4").time, "10.111")
   assert.equal(parseRunFilename("clip 1234.5678.mp4").time, undefined)
+  assert.equal(parseRunFilename("Glass 2026,10,07.mp4").time, undefined)
   assert.equal(parseRunFilename("random video.mp4").trialName, undefined)
 })
 

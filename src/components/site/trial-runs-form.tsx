@@ -5,10 +5,11 @@ import Link from "next/link"
 import { CalculatorIcon, CheckIcon, LinkIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { apiV2 } from "@/lib/api"
 import type { AuthSessionUser } from "@/lib/auth-session"
-import { uploadVideoFile, validateVideoFile, VIDEO_FILE_ACCEPT } from "@/lib/direct-upload"
+import { isVideoFile, uploadVideoFile, validateVideoFile, VIDEO_FILE_ACCEPT } from "@/lib/direct-upload"
 import { formatDelta, formatScore, formatTime } from "@/lib/format"
 import { calculateFinalTime, formatThousandths } from "@/lib/hudzell-time"
 import { refreshRunCaches } from "@/lib/moderation"
+import { takeRunFiles } from "@/lib/pending-run-files"
 import { estimateScore } from "@/lib/score-estimate"
 import {
   formatFileSize,
@@ -22,15 +23,17 @@ import { getSubmissionErrorMessage } from "@/lib/submission-errors"
 import type { TrialName } from "@/lib/trials"
 import { cn } from "@/lib/utils"
 import { invalidateApi, useApi } from "@/hooks/use-api"
+import { usePageFileDrop } from "@/hooks/use-page-file-drop"
 import { useTrialOrder } from "@/hooks/use-trial-order"
 import { refreshV2AccessToken } from "@/components/custom/v2-auth-refresh"
+import { TrialCombobox } from "@/components/site/trial-combobox"
 import type { WorldRecordsResponse } from "@/components/site/trials-index"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
+import { toast } from "sonner"
 
 // An upload can be used for six hours; reuse one for a retry well inside that.
 const UPLOAD_REUSE_MS = 5 * 60 * 60 * 1000
@@ -151,7 +154,6 @@ export function TrialRunsForm({ user, blocked }: { user: AuthSessionUser; blocke
   const [progress, setProgress] = useState<Record<string, number>>({})
   const [uploading, setUploading] = useState<string | null>(null)
   const [created, setCreated] = useState<CreatedRun[] | null>(null)
-  const [dragging, setDragging] = useState(false)
   // Which runs' videos are already uploaded (the ids themselves live in the
   // ref, read only when submitting).
   const [uploaded, setUploaded] = useState<Record<string, true>>({})
@@ -233,12 +235,22 @@ export function TrialRunsForm({ user, blocked }: { user: AuthSessionUser; blocke
     })
   }
 
-  // Several videos dropped at once become one run each.
+  // Several videos dropped at once become one run each. Whatever the file
+  // names don't give away is left for the player to fill in.
   const addFiles = (files: File[]) => {
-    if (files.length === 0) return
+    const videos = files.filter(isVideoFile)
+    const skipped = files.length - videos.length
+    if (skipped > 0) {
+      toast.error(skipped === 1 && files.length === 1 ? `${files[0].name} isn't a video.` : `Skipped ${skipped} ${skipped === 1 ? "file that isn't a video" : "files that aren't videos"}.`)
+    }
+    if (videos.length === 0) return
+    const room = MAX_RUNS_PER_SUBMISSION - drafts.filter((draft) => !isBlank(draft)).length
+    if (videos.length > room) {
+      toast.error(`A submission holds up to ${MAX_RUNS_PER_SUBMISSION} runs, so ${videos.length - Math.max(room, 0)} of the videos weren't added.`)
+    }
     setDrafts((current) => {
       const next = [...current]
-      for (const file of files) {
+      for (const file of videos) {
         const blankIndex = next.findIndex(isBlank)
         if (blankIndex >= 0) {
           next[blankIndex] = withFile(next[blankIndex], file)
@@ -249,6 +261,23 @@ export function TrialRunsForm({ user, blocked }: { user: AuthSessionUser; blocke
       return next
     })
   }
+
+  // Videos dropped anywhere on the page, not just on a run.
+  const dragging = usePageFileDrop((files) => {
+    if (busy) {
+      toast.error("Wait for this submission to finish before adding more videos.")
+      return
+    }
+    addFiles(files)
+  })
+
+  // Videos dropped on another page (the Submissions list) and handed here.
+  useEffect(() => {
+    const handedOff = takeRunFiles()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-off pickup of files from another page
+    if (handedOff.length > 0) addFiles(handedOff)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount
+  }, [])
 
   // The first video goes to this run; any others become runs of their own.
   const placeFiles = (id: string, files: File[]) => {
@@ -374,23 +403,20 @@ export function TrialRunsForm({ user, blocked }: { user: AuthSessionUser; blocke
   const gain = estimate.after - estimate.before
 
   return (
-    <div
-      className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
-      onDragOver={(event) => {
-        if (busy || !event.dataTransfer.types.includes("Files")) return
-        event.preventDefault()
-        setDragging(true)
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false)
-      }}
-      onDrop={(event) => {
-        if (busy || !event.dataTransfer.files.length) return
-        event.preventDefault()
-        setDragging(false)
-        addFiles(Array.from(event.dataTransfer.files))
-      }}
-    >
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+      {dragging && !busy ? (
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-50 border-2 border-dashed border-primary bg-primary/5">
+          <div className="absolute inset-x-0 bottom-24 flex justify-center px-4 md:bottom-10">
+            <div className="flex items-center gap-2.5 rounded-md border border-line-strong bg-surface-2 px-4 py-3 shadow-lg">
+              <UploadIcon className="size-4 shrink-0 text-primary" />
+              <span className="text-sm">
+                <span className="label-caps text-[14px]">Drop to add</span>
+                <span className="text-muted-foreground"> · each video becomes a run, filled in from its file name when it can be</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="flex min-w-0 flex-col gap-4">
         <RulesReminder />
         {formError ? (
@@ -441,7 +467,7 @@ export function TrialRunsForm({ user, blocked }: { user: AuthSessionUser; blocke
             Add another run
           </Button>
           <span className="text-[13px] text-subtle-foreground">
-            {dragging ? "Drop to add the videos" : "Tip: pick or drop several videos at once and each becomes a run."}
+            Tip: drop videos anywhere on this page and each one becomes a run.
           </span>
         </div>
       </div>
@@ -561,6 +587,7 @@ function RunCard({
   onRemove: () => void
 }) {
   const [dragOver, setDragOver] = useState(false)
+  const pbHints = new Map(Array.from(pbs, ([trial, pbTime]) => [trial, `PB ${formatTime(pbTime)}`]))
   const time = parseRunTime(draft.time)
   const pb = draft.trial ? pbs.get(draft.trial) : undefined
   const beatsWr = Boolean(wr && time !== null && time < Number(wr.time))
@@ -730,28 +757,16 @@ function RunCard({
           <Label htmlFor={fieldId("trial")} className="label-caps text-[13px] text-subtle-foreground">
             Trial
           </Label>
-          <Select
-            value={draft.trial || undefined}
+          <TrialCombobox
+            id={fieldId("trial")}
+            trials={trials}
+            hints={pbHints}
+            value={draft.trial}
             onValueChange={(value) => onChange((current) => ({ ...current, trial: value as TrialName, autoFilled: false }))}
+            placeholder="Type or choose a trial"
             disabled={busy}
-          >
-            <SelectTrigger id={fieldId("trial")} className="h-10 w-full" aria-invalid={Boolean(trialError)}>
-              <SelectValue placeholder="Choose a trial" />
-            </SelectTrigger>
-            <SelectContent>
-              {trials.map((trial) => {
-                const trialPb = pbs.get(trial)
-                return (
-                  <SelectItem key={trial} value={trial}>
-                    <span className="flex w-full items-baseline justify-between gap-6">
-                      {trial}
-                      <span className="num text-xs text-muted-foreground">{trialPb !== undefined ? `PB ${formatTime(trialPb)}` : ""}</span>
-                    </span>
-                  </SelectItem>
-                )
-              })}
-            </SelectContent>
-          </Select>
+            invalid={Boolean(trialError)}
+          />
           {trialError ? <p className="text-[13px] text-destructive">{trialError}</p> : null}
         </div>
         <div className="flex flex-col gap-1.5">

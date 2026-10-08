@@ -37,7 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { TrialCombobox } from "@/components/site/trial-combobox"
 import { Spinner } from "@/components/ui/spinner"
 
 type TrialRow = {
@@ -408,18 +408,7 @@ function AddTrialDialog({ open, onOpenChange, names }: { open: boolean; onOpenCh
             Players can submit runs straight away. It joins everyone’s score in 7 days, on {formatDate(now + GRACE)}.
           </DialogDescription>
         </DialogHeader>
-        <Select value={name} onValueChange={setName}>
-          <SelectTrigger className="h-10 w-full" aria-label="Trial">
-            <SelectValue placeholder="Choose a trial" />
-          </SelectTrigger>
-          <SelectContent>
-            {names.map((trial) => (
-              <SelectItem key={trial} value={trial}>
-                {trial}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <TrialCombobox trials={names} value={name} onValueChange={setName} aria-label="Trial" />
         <p className="text-[13px] text-muted-foreground">
           Only trials with score thresholds in the code are listed. A new trial needs a deploy first.
         </p>

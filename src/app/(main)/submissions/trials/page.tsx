@@ -5,8 +5,10 @@ import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { apiV2 } from "@/lib/api"
-import { isVideoFile, uploadVideoFile, validateVideoFile } from "@/lib/direct-upload"
-import { getSubmissionErrorMessage } from "@/lib/submission-errors"
+import { isVideoFile } from "@/lib/direct-upload"
+import { stashRunFiles } from "@/lib/pending-run-files"
+import { usePageFileDrop } from "@/hooks/use-page-file-drop"
+import { toast } from "sonner"
 import { SubmissionCard } from "@/components/custom/submission-card"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -23,12 +25,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { PlusCircleIcon, X, UploadIcon } from "lucide-react"
-import { Spinner } from "@/components/ui/spinner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrialName, trials } from "@/lib/trials"
-import { useTrialOrder } from "@/hooks/use-trial-order"
+import { TrialName } from "@/lib/trials"
 import calculateScore from "@/lib/calc-score"
 import { PageShell, SubmissionList } from "@/components/custom/page-shell"
 
@@ -80,32 +79,6 @@ type AuthResponse = {
 
 const submissionUuidListKey = "submission_uuids"
 
-function parseFilename(filename: string): { trialName?: TrialName; time?: string } {
-  const result: { trialName?: TrialName; time?: string } = {}
-
-  // Extract time in format x.xxx (e.g., 12.345)
-  const timeMatch = filename.match(/(\d+(?:\.\d{1,3})?)/)
-  if (timeMatch) {
-    const time = timeMatch[1]
-    // Validate it's a reasonable time (not too long, not zero)
-    const timeNum = parseFloat(time)
-    if (timeNum > 0 && timeNum < 1000) { // reasonable bounds for trial times
-      result.time = time
-    }
-  }
-
-  // Extract trial name (case insensitive)
-  const filenameLower = filename.toLowerCase()
-  for (const trial of trials) {
-    if (filenameLower.includes(trial.toLowerCase())) {
-      result.trialName = trial
-      break
-    }
-  }
-
-  return result
-}
-
 function formatTime(rawTime: number | string) {
   const timeStr = String(rawTime)
   const match = timeStr.match(/^0*([0-9]+)\.(\d{1,3})$/)
@@ -140,7 +113,6 @@ function scoreFor(wr: number | undefined, time: string | number, trial: TrialNam
 function SubmissionsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { orderedTrialNames } = useTrialOrder()
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [wrSubmissionIds, setWrSubmissionIds] = useState<Set<string>>(new Set())
   const [worldRecordTimes, setWorldRecordTimes] = useState<Record<string, number>>({})
@@ -166,14 +138,6 @@ function SubmissionsPage() {
   }
 
   // Drag and drop state
-  const [isDragOver, setIsDragOver] = useState(false)
-  const [dragDialogOpen, setDragDialogOpen] = useState(false)
-  const [parsedFileData, setParsedFileData] = useState<{ trialName?: TrialName; time?: string; file: File } | null>(null)
-  const [uploadingDragFile, setUploadingDragFile] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadStatus, setUploadStatus] = useState<string>("")
-  const [editedTrialName, setEditedTrialName] = useState<TrialName | "">("")
-  const [editedTime, setEditedTime] = useState<string>("")
 
 
   useEffect(() => {
@@ -267,99 +231,17 @@ function SubmissionsPage() {
     fetchMeta()
   }, [])
 
-  const handleDragOver = (event: React.DragEvent) => {
-    event.preventDefault()
-    setIsDragOver(true)
-  }
-
-  const handleDragLeave = (event: React.DragEvent) => {
-    event.preventDefault()
-    // Only set drag over to false if we're leaving the main container
-    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-      setIsDragOver(false)
+  // Videos dropped anywhere here go to the Submit page, one run each, with
+  // the trial and time filled in from the file names where they can be.
+  const dragging = usePageFileDrop((files) => {
+    const videos = files.filter(isVideoFile)
+    if (videos.length === 0) {
+      toast.error("Only videos can be dropped here.")
+      return
     }
-  }
-
-  const handleDrop = (event: React.DragEvent) => {
-    event.preventDefault()
-    setIsDragOver(false)
-
-    const files = Array.from(event.dataTransfer.files)
-    const videoFile = files.find(isVideoFile)
-
-    if (videoFile) {
-      const parsed = parseFilename(videoFile.name)
-      if (parsed.trialName || parsed.time) {
-        setParsedFileData({ ...parsed, file: videoFile })
-        setEditedTrialName(parsed.trialName || trials[0])
-        setEditedTime(parsed.time || "")
-        setDragDialogOpen(true)
-      } else {
-        setError("Could not parse trial name or time from filename. Please use the Submit page.")
-      }
-    } else {
-      setError("Please drop a video file.")
-    }
-  }
-
-  const handleDragUpload = async () => {
-    if (!parsedFileData || !isAuthenticated) return
-
-    setUploadingDragFile(true)
-    setDragDialogOpen(false)
-    setUploadProgress(0)
-    setUploadStatus("Preparing upload...")
-
-    const resetDragUpload = () => {
-      setUploadingDragFile(false)
-      setUploadProgress(0)
-      setUploadStatus("")
-      setParsedFileData(null)
-      setEditedTrialName("")
-      setEditedTime("")
-    }
-
-    try {
-      const fileError = validateVideoFile(parsedFileData.file)
-      if (fileError) {
-        throw new Error(fileError)
-      }
-
-      // Straight to R2 (see lib/direct-upload.ts); only the upload id goes
-      // with the submission. The server makes the thumbnail afterwards.
-      const uploadId = await uploadVideoFile(parsedFileData.file, (loaded, total) => {
-        const progress = Math.min(Math.round((loaded / total) * 90), 90)
-        setUploadProgress(progress)
-        setUploadStatus(`Uploading... ${progress}%`)
-      })
-
-      setUploadProgress(92)
-      setUploadStatus("Creating submission...")
-
-      const response = await fetch(apiV2("/submissions"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          submissions: [{ trial_name: editedTrialName || trials[0], time: editedTime || "", upload_id: uploadId }],
-        }),
-      })
-      const json = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
-      if (!response.ok) {
-        throw new Error(getSubmissionErrorMessage(json?.error, "Unable to create submission"))
-      }
-
-      setUploadProgress(100)
-      setUploadStatus("Submitted! The video is processing.")
-      setTimeout(() => {
-        resetDragUpload()
-        window.location.reload()
-      }, 1000)
-    } catch (err) {
-      console.error("Upload error:", err)
-      setError(err instanceof Error ? err.message : "Failed to upload submission")
-      resetDragUpload()
-    }
-  }
+    stashRunFiles(videos)
+    router.push("/submit")
+  })
 
   useEffect(() => {
     if (loadingSubmissions) {
@@ -374,33 +256,21 @@ function SubmissionsPage() {
 
   return (
     <PageShell className="max-w-[95vw] px-3 md:px-4 lg:px-5">
-    <div 
-      className={`flex h-full w-full flex-col gap-4 ${isDragOver ? 'relative' : ''}`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
+    <div className="flex h-full w-full flex-col gap-4">
       <SubmissionsTabs active="trials" />
-      {uploadingDragFile && (
-        <div className="sticky top-14 z-40 border-b border-border bg-background/95 backdrop-blur-sm py-4">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-              <span>{uploadStatus}</span>
-              <span>{uploadProgress}%</span>
+      {dragging ? (
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-50 border-2 border-dashed border-primary bg-primary/5">
+          <div className="absolute inset-x-0 bottom-24 flex justify-center px-4 md:bottom-10">
+            <div className="flex items-center gap-2.5 rounded-md border border-line-strong bg-surface-2 px-4 py-3 shadow-lg">
+              <UploadIcon className="size-4 shrink-0 text-primary" />
+              <span className="text-sm">
+                <span className="label-caps text-[14px]">Drop to submit</span>
+                <span className="text-muted-foreground"> · opens the Submit page with these videos</span>
+              </span>
             </div>
-            <Progress value={uploadProgress} className="w-full" />
           </div>
         </div>
-      )}
-      {isDragOver && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg">
-          <div className="flex flex-col items-center gap-4 text-center">
-            <UploadIcon className="h-12 w-12 text-primary" />
-            <p className="text-lg font-semibold">Drop your video file here</p>
-            <p className="text-sm text-muted-foreground">We&apos;ll try to parse the trial name and time from the filename</p>
-          </div>
-        </div>
-      )}
+      ) : null}
       <div className="sticky top-14 z-30 space-y-3 rounded-lg border border-border bg-background p-4">
       <div className="flex flex-col gap-3">
         {filteredPlayerName || failedOnly ? (
@@ -512,77 +382,6 @@ function SubmissionsPage() {
             </AlertDialogContent>
           </AlertDialog>
 
-          <AlertDialog
-            open={dragDialogOpen}
-            onOpenChange={(open) => {
-              setDragDialogOpen(open)
-              if (!open) {
-                setParsedFileData(null)
-                setEditedTrialName("")
-                setEditedTime("")
-              }
-            }}
-          >
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Confirm Submission</AlertDialogTitle>
-                <AlertDialogDescription>
-                  We parsed the following data from &quot;{parsedFileData?.file.name}&quot;:
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <div className="py-4">
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">Trial</label>
-                    <Select value={editedTrialName} onValueChange={(value) => setEditedTrialName(value as TrialName)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select trial" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {orderedTrialNames.map((trial) => (
-                          <SelectItem key={trial} value={trial}>
-                            {trial}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">Time</label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      pattern="^\d+(\.\d{1,3})?$"
-                      value={editedTime}
-                      onChange={(event) => {
-                        const value = event.target.value
-                        if (/^\d*(\.\d{0,3})?$/.test(value)) {
-                          setEditedTime(value)
-                        }
-                      }}
-                      placeholder="e.g., 12.345"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">File</label>
-                    <div className="rounded-md border px-3 py-2 text-sm bg-muted">
-                      {parsedFileData?.file.name}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction 
-                  onClick={handleDragUpload}
-                  disabled={uploadingDragFile}
-                >
-                  {uploadingDragFile ? <Spinner className="size-4 mr-2" /> : null}
-                  {uploadingDragFile ? "Uploading..." : "Upload Submission"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </div>
       </div>
       </div>
