@@ -45,9 +45,9 @@ const cspDirectives = [
   // R2 S3 endpoint: browsers PUT videos straight to the private uploads
   // bucket with presigned URLs (see /v2/uploads).
   "connect-src 'self' https://assets.wasans.tully.sh https://*.r2.cloudflarestorage.com",
-  // Nothing here is meant to be framed, nothing needs to frame anything
-  // else, and nothing may post a form off-site.
-  "frame-src 'none'",
+  // Combo videos are YouTube embeds (the no-cookie host); nothing else is
+  // framed. Nothing here may be framed, and nothing may post a form off-site.
+  "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
   "frame-ancestors 'none'",
   "form-action 'self' https://discord.com https://accounts.google.com https://apis.roblox.com",
   "base-uri 'self'",

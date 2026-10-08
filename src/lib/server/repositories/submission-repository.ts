@@ -41,10 +41,13 @@ export async function listSubmissions(
     state?: string | null
     playerUuid?: string | null
     search?: string
+    // "asc" serves the review queue oldest first; lists default to newest.
+    order?: "asc" | "desc"
   }
 ) {
   const whereConditions: string[] = ["COALESCE(players.account_status, 'active') != 'deactivated'"]
   const bindValues: (string | number)[] = []
+  const direction = options.order === "asc" ? "ASC" : "DESC"
 
   if (options.state && ["approved", "denied", "pending"].includes(options.state)) {
     whereConditions.push("submissions.state = ?")
@@ -78,7 +81,7 @@ export async function listSubmissions(
      FROM submissions
      LEFT JOIN players ON players.uuid = submissions.player_uuid
      ${whereClause}
-     ORDER BY submissions.date DESC
+     ORDER BY submissions.date ${direction}, submissions.uuid ${direction}
      LIMIT ? OFFSET ?`
   )
     .bind(...bindValues, options.limit, options.offset)

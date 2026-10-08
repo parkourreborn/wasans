@@ -289,7 +289,7 @@ function SubmissionsPage() {
         setEditedTime(parsed.time || "")
         setDragDialogOpen(true)
       } else {
-        setError("Could not parse trial name or time from filename. Please use the new submission form.")
+        setError("Could not parse trial name or time from filename. Please use the Submit page.")
       }
     } else {
       setError("Please drop a video file.")
@@ -446,7 +446,7 @@ function SubmissionsPage() {
               className="h-10 w-full cursor-pointer sm:w-auto"
               onClick={() => {
                 if (isAuthenticated) {
-                  router.push("/submissions/new")
+                  router.push("/submit")
                 } else {
                   setSignInDialogOpen(true)
                 }

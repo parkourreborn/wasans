@@ -23,10 +23,11 @@ export const GET = withV2Context(async (ctx) => {
   const state = url.searchParams.get("state")
   const playerUuid = url.searchParams.get("player_uuid")
   const search = String(url.searchParams.get("search") || "").trim().toLowerCase()
+  const order = url.searchParams.get("order") === "asc" ? "asc" : "desc"
 
-  const key = await cacheKey(ctx.cache, "submissions", "list", page, limit, state || "-", playerUuid || "-", search || "-")
+  const key = await cacheKey(ctx.cache, "submissions", "list", page, limit, state || "-", playerUuid || "-", search || "-", order)
   const { value } = await readThroughCache(ctx.cache, key, 60, () =>
-    listSubmissions(ctx.db, { limit, offset, state, playerUuid, search: search || undefined })
+    listSubmissions(ctx.db, { limit, offset, state, playerUuid, search: search || undefined, order })
   )
 
   return jsonOk(value.results, { meta: { page, limit, count: value.total }, requestId: ctx.requestId })

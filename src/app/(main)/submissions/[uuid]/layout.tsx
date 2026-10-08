@@ -65,7 +65,14 @@ export async function generateMetadata({ params }: SubmissionLayoutProps): Promi
   const { uuid } = await params
   const pageUrl = `${siteUrl}/submissions/${uuid}`
 
-  const { env } = await getCloudflareContext({ async: true })
+  // Like the queries below, a failed lookup only costs the rich preview; it
+  // never takes the run page down with it.
+  const env = await getCloudflareContext({ async: true })
+    .then((context) => context.env)
+    .catch((err) => {
+      console.error(err)
+      return null
+    })
   if (!env?.wasans) {
     return { title: "Submission" }
   }

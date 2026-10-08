@@ -16,6 +16,7 @@ import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { useSettings } from "@/components/custom/settings-provider"
 import { useAuthSession } from "@/components/custom/use-auth-session"
 import { PageHeader } from "@/components/site/page-header"
+import { RunVideo } from "@/components/site/run-video"
 import { Pager } from "@/components/site/pager"
 import { RankCell } from "@/components/site/rank-cell"
 import type { WorldRecord, WorldRecordsResponse } from "@/components/site/trials-index"
@@ -23,7 +24,6 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const PAGE_SIZE = 50
-const ASSETS = "https://assets.wasans.tully.sh"
 
 type BoardRow = {
   player_uuid: string
@@ -84,35 +84,22 @@ function Stat({ label, children, className }: { label: string; children: React.R
 }
 
 // The record plays right on the trial page. No autoplay: a full run on
-// every visit would be a lot of mobile data. If the file won't load, say
-// so and point to the run page instead of leaving a black box.
+// every visit would be a lot of mobile data.
 function WrVideo({ trial, wr, showPoster }: { trial: string; wr: WorldRecord; showPoster: boolean }) {
-  const [failed, setFailed] = useState(false)
   const runHref = `/submissions/${encodeURIComponent(wr.submission_uuid)}`
 
   return (
     <figure className="m-0 flex flex-col gap-2">
-      <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-line-strong bg-black">
-        {failed ? (
-          <div className="flex size-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <p className="text-sm text-muted-foreground">This video couldn&apos;t be loaded here.</p>
-            <Link href={runHref} className="label-caps text-[15px] underline decoration-primary underline-offset-4">
-              Open the run page
-            </Link>
-          </div>
-        ) : (
-          <video
-            src={`${ASSETS}/scores/${wr.submission_uuid}.mp4`}
-            poster={showPoster ? `${ASSETS}/scores/${wr.submission_uuid}-preview.jpg` : undefined}
-            controls
-            playsInline
-            preload="metadata"
-            onError={() => setFailed(true)}
-            aria-label={`${trial} world record by ${wr.player_name}, ${formatTime(wr.time)}`}
-            className="size-full bg-black object-contain"
-          />
-        )}
-      </div>
+      <RunVideo
+        submissionUuid={wr.submission_uuid}
+        showPoster={showPoster}
+        label={`${trial} world record by ${wr.player_name}, ${formatTime(wr.time)}`}
+        fallback={
+          <Link href={runHref} className="label-caps text-[15px] underline decoration-primary underline-offset-4">
+            Open the run page
+          </Link>
+        }
+      />
       <figcaption className="flex items-center justify-between gap-3 text-[13px] text-muted-foreground">
         <span className="min-w-0 truncate">
           World record by {wr.player_name}, set {formatDate(wr.date)}

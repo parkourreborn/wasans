@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
       { source: "/players", destination: "/leaderboard", permanent: false },
       { source: "/wrs", destination: "/trials", permanent: false },
       { source: "/wrs/history", destination: "/trials", permanent: false },
+      { source: "/submissions/new", destination: "/submit", permanent: false },
+      { source: "/combos/new", destination: "/submit?type=combo", permanent: false },
     ];
   },
 };

@@ -227,7 +227,7 @@ function ComboSubmissionsPage() {
               className="h-10 w-full cursor-pointer sm:w-auto"
               onClick={() => {
                 if (isAuthenticated) {
-                  router.push("/combos/new")
+                  router.push("/submit?type=combo")
                 } else {
                   setSignInDialogOpen(true)
                 }

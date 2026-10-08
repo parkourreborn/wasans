@@ -5,7 +5,8 @@ import { apiV2 } from "@/lib/api"
 
 // The little dots on the nav: a prize or giveaway the viewer hasn't seen,
 // an error in the logs a moderator hasn't seen, prize candidates waiting
-// for the owner. Polled once a minute, like the old sidebar did.
+// for the owner, runs waiting for review. Polled once a minute, like the old
+// sidebar did.
 
 const lastSeenErrorStorageKey = "wasans:last-seen-error-at"
 const lastSeenPrizeStorageKey = "wasans:last-seen-prize-at"
@@ -52,6 +53,7 @@ export function useNavBadges(permission: number) {
   const [latestPrizeAt, setLatestPrizeAt] = useState<string | null>(null)
   const [latestErrorAt, setLatestErrorAt] = useState<string | null>(null)
   const [pendingCandidates, setPendingCandidates] = useState(0)
+  const [pendingReviews, setPendingReviews] = useState(0)
   const lastSeenPrizeAt = useStoredValue(lastSeenPrizeStorageKey)
   const lastSeenErrorAt = useStoredValue(lastSeenErrorStorageKey)
 
@@ -103,13 +105,37 @@ export function useNavBadges(permission: number) {
     }
   }, [])
 
+  // Runs waiting in the review queue: trials for moderators, combos for
+  // combo moderators and up.
+  const loadReviews = useCallback(async () => {
+    const count = async (path: string) => {
+      const response = await fetch(`${apiV2(path)}?state=pending&limit=1`, { cache: "no-store" })
+      if (!response.ok) {
+        throw new Error("count failed")
+      }
+      const json = (await response.json()) as { meta?: { count?: number } }
+      return json.meta?.count ?? 0
+    }
+    try {
+      const [trials, combos] = await Promise.all([
+        permission >= 2 ? count("/submissions") : Promise.resolve(0),
+        count("/combo-submissions"),
+      ])
+      setPendingReviews(trials + combos)
+    } catch {
+      // As above.
+    }
+  }, [permission])
+
   usePolling(loadPrizes, true)
   usePolling(loadErrors, permission >= 2)
   usePolling(loadCandidates, permission >= 4)
+  usePolling(loadReviews, permission >= 1)
 
   return {
     newPrizes: Boolean(latestPrizeAt && (!lastSeenPrizeAt || latestPrizeAt > lastSeenPrizeAt)),
     newErrors: permission >= 2 && Boolean(latestErrorAt && (!lastSeenErrorAt || latestErrorAt > lastSeenErrorAt)),
     pendingCandidates: permission >= 4 ? pendingCandidates : 0,
+    pendingReviews: permission >= 1 ? pendingReviews : 0,
   }
 }

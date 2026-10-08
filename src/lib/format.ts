@@ -48,6 +48,22 @@ export function formatDate(unixSeconds: number | null | undefined) {
   return dateFormatter.format(new Date(unixSeconds * 1000))
 }
 
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+})
+
+// Unix seconds to e.g. "7 Oct 2026, 14:32".
+export function formatDateTime(unixSeconds: number | null | undefined) {
+  if (!unixSeconds || !Number.isFinite(unixSeconds)) {
+    return DASH
+  }
+  return dateTimeFormatter.format(new Date(unixSeconds * 1000))
+}
+
 const DAY = 86400
 
 export function daysBetween(fromUnixSeconds: number, toUnixSeconds: number) {
@@ -73,4 +89,16 @@ export function formatDays(days: number) {
 
 export function formatCount(value: number) {
   return Number.isFinite(value) ? value.toLocaleString() : "0"
+}
+
+// How long something has been waiting, for queues: "12m", "5h", "3d".
+export function formatWaiting(fromUnixSeconds: number | null | undefined, nowUnixSeconds = Date.now() / 1000) {
+  if (!fromUnixSeconds || !Number.isFinite(fromUnixSeconds)) {
+    return DASH
+  }
+  const minutes = Math.max(0, Math.floor((nowUnixSeconds - fromUnixSeconds) / 60))
+  if (minutes < 60) return `${Math.max(1, minutes)}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 48) return `${hours}h`
+  return `${Math.floor(hours / 24)}d`
 }

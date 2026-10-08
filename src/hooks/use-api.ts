@@ -80,6 +80,13 @@ export function fetchApi(url: string, options: { force?: boolean } = {}): Promis
   return pending
 }
 
+// Puts a response the app already has (e.g. the run a PATCH returned) into
+// the cache, so everything showing that URL updates without a refetch.
+export function setApiData(url: string, data: unknown) {
+  const current = store.get(url)
+  setEntry(url, { data, status: 200, fetchedAt: Date.now(), pending: current?.pending })
+}
+
 // Marks every cached URL starting with `prefix` stale and refetches the ones
 // something is still showing. Call after a write that changes them.
 export function invalidateApi(prefix: string) {

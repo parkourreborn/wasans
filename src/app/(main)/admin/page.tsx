@@ -834,7 +834,7 @@ export default function AdminPage() {
             <DialogTitle>Ban {banTarget?.player_name} from submitting</DialogTitle>
             <DialogDescription>
               They keep their account and their approved runs, but any new submission is rejected until you unban them.
-              The reason is shown to them on the New Submission page.
+              The reason is shown to them on the Submit page.
             </DialogDescription>
           </DialogHeader>
           <Input

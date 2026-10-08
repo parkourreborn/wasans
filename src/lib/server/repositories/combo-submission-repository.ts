@@ -46,10 +46,13 @@ export async function listComboSubmissions(
     category?: string | null
     playerUuid?: string | null
     search?: string
+    // "asc" serves the review queue oldest first; lists default to newest.
+    order?: "asc" | "desc"
   }
 ) {
   const whereConditions: string[] = ["COALESCE(players.account_status, 'active') != 'deactivated'"]
   const bindValues: (string | number)[] = []
+  const direction = options.order === "asc" ? "ASC" : "DESC"
 
   if (options.state && ["approved", "denied", "pending"].includes(options.state)) {
     whereConditions.push("combo_submissions.state = ?")
@@ -88,7 +91,7 @@ export async function listComboSubmissions(
      FROM combo_submissions
      LEFT JOIN players ON players.uuid = combo_submissions.player_uuid
      ${whereClause}
-     ORDER BY combo_submissions.date DESC
+     ORDER BY combo_submissions.date ${direction}, combo_submissions.uuid ${direction}
      LIMIT ? OFFSET ?`
   )
     .bind(...bindValues, options.limit, options.offset)

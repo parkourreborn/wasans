@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { FileTextIcon, ListVideoIcon, LogOutIcon, Settings2Icon, ShieldIcon, UserIcon } from "lucide-react"
+import { ClipboardCheckIcon, FileTextIcon, ListVideoIcon, LogOutIcon, Settings2Icon, ShieldIcon, UserIcon } from "lucide-react"
 import type { AuthSessionUser } from "@/lib/auth-session"
 import { logout, permissionLabel } from "@/lib/auth-actions"
 import { formatScore } from "@/lib/format"
@@ -35,10 +35,12 @@ export function AccountMenu({
   user,
   newErrors,
   pendingCandidates,
+  pendingReviews,
 }: {
   user: AuthSessionUser
   newErrors: boolean
   pendingCandidates: number
+  pendingReviews: number
 }) {
   const [loggingOut, setLoggingOut] = useState(false)
   const profileHref = `/players/${encodeURIComponent(user.uuid)}`
@@ -102,9 +104,20 @@ export function AccountMenu({
           <Settings2Icon className="size-4 text-muted-foreground" aria-hidden />
           Settings
         </DropdownMenuItem>
-        {user.permission >= 2 ? (
+        {user.permission >= 1 ? (
           <>
             <DropdownMenuSeparator className="bg-line" />
+            <DropdownMenuItem asChild className={itemClass}>
+              <Link href="/review">
+                <ClipboardCheckIcon className="size-4 text-muted-foreground" aria-hidden />
+                Review queue
+                {pendingReviews > 0 ? <span className="num ml-auto text-xs text-muted-foreground">{pendingReviews} waiting</span> : null}
+              </Link>
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {user.permission >= 2 ? (
+          <>
             <DropdownMenuItem asChild className={itemClass}>
               <Link href="/logs">
                 <FileTextIcon className="size-4 text-muted-foreground" aria-hidden />

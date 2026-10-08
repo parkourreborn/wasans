@@ -182,7 +182,7 @@ export default function CombosLeaderboardPage() {
               className="h-10 cursor-pointer"
               onClick={() => {
                 if (isAuthenticated) {
-                  router.push("/combos/new")
+                  router.push("/submit?type=combo")
                 } else {
                   setSignInDialogOpen(true)
                 }

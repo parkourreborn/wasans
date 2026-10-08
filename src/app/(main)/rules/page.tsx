@@ -19,9 +19,9 @@ const runRules = [
 
 const submissionRules = [
   "Enter the run time with no more than three decimal places.",
-  "Upload a video file or provide an approved proof link. YouTube and Medal links are accepted.",
+  "Upload the video file, or paste a Medal clip link. Combos use a YouTube link.",
   "Cut clips tightly enough that the start, run, and finish are convincing, while still including all required verification details.",
-  "You may submit multiple runs at once from the New Submission page.",
+  "You may submit multiple runs at once from the Submit page.",
   "The site rejects times slower than your current personal best so your score record stays clean.",
   "Times under gold will not be accepted. A run has to at least reach the trial's gold medal time to be eligible.",
   "A submission starts as pending. Moderators can move it between pending, approved, and denied at any time.",

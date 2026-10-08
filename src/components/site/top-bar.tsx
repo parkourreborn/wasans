@@ -66,6 +66,19 @@ export function TopBar() {
             <SearchIcon className="size-5" />
           </Button>
 
+          {user && user.permission >= 1 ? (
+            <Button asChild variant="outline" className="hidden lg:inline-flex">
+              <Link href="/review" aria-current={pathname.startsWith("/review") ? "page" : undefined}>
+                Review
+                {badges.pendingReviews > 0 ? (
+                  <span className="num ml-0.5 rounded-sm bg-foreground px-1.5 text-[12px] font-semibold leading-5 tracking-normal text-background">
+                    {badges.pendingReviews > 99 ? "99+" : badges.pendingReviews}
+                  </span>
+                ) : null}
+              </Link>
+            </Button>
+          ) : null}
+
           {status === "anonymous" ? (
             <Button className="hidden md:inline-flex" onClick={() => openLogin("Log in to submit a run.")}>
               <PlusIcon className="size-4" strokeWidth={2.6} />
@@ -81,7 +94,12 @@ export function TopBar() {
           )}
 
           {user ? (
-            <AccountMenu user={user} newErrors={badges.newErrors} pendingCandidates={badges.pendingCandidates} />
+            <AccountMenu
+              user={user}
+              newErrors={badges.newErrors}
+              pendingCandidates={badges.pendingCandidates}
+              pendingReviews={badges.pendingReviews}
+            />
           ) : status === "anonymous" ? (
             <Button variant="outline" onClick={() => openLogin()}>
               Log in

@@ -10,7 +10,7 @@ export type NavItem = {
   matches?: string[]
 }
 
-export const SUBMIT_HREF = "/submissions/new"
+export const SUBMIT_HREF = "/submit"
 
 export const primaryNav: NavItem[] = [
   // "/" shows the leaderboard until the homepage is designed.
