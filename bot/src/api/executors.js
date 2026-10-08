@@ -1,12 +1,11 @@
 import { botConfig } from '../config.js';
 import {
-    addRoles,
     archiveThread,
     createSubmissionThread,
     deleteThread,
+    editMember,
     fetchGuild,
     fetchThreadById,
-    removeRoles,
     sendDirectMessage,
     sendMessageToChannel,
     sendMessageToThread,
@@ -157,13 +156,65 @@ export async function executeSubmissionDelete(body) {
     };
 }
 
-export async function executeMemberSync(body) {
-    await logger.log('Member sync started', `Member ${body.discord_user_id}`);
+// Runs once per /v3/batch before its member syncs. Members aren't prefetched
+// over the gateway (Request Guild Members is rate limited per guild, and a
+// recalculation sends several batches back to back); guild.members.fetch(id)
+// already serves cached members without an API call.
+export async function prepareMemberSyncBatch() {
+    return { guild: await fetchGuild() };
+}
 
-    const guild = await fetchGuild();
+// Runs once per /v3/batch after its member syncs, replacing the per-member log
+// embeds with a single summary (failures listed individually).
+export async function summarizeMemberSyncBatch(_context, outcomes) {
+    if (!outcomes.length) return;
+
+    const succeeded = outcomes.filter((outcome) => outcome.ok);
+    const failed = outcomes.filter((outcome) => !outcome.ok);
+    const notInGuild = succeeded.filter((outcome) => !outcome.result.member_found).length;
+    const rolesChanged = succeeded.filter(
+        (outcome) => outcome.result.roles_added.length > 0 || outcome.result.roles_removed.length > 0
+    ).length;
+    const nicknamesUpdated = succeeded.filter((outcome) => outcome.result.nickname_updated).length;
+
+    const MAX_LISTED_FAILURES = 15;
+    const failureLines = failed
+        .slice(0, MAX_LISTED_FAILURES)
+        .map((outcome) => `<@${outcome.body?.discord_user_id}>: ${outcome.error.message}`);
+    if (failed.length > MAX_LISTED_FAILURES) {
+        failureLines.push(`...and ${failed.length - MAX_LISTED_FAILURES} more`);
+    }
+
+    const meta = {
+        members: outcomes.length,
+        synced: succeeded.length - notInGuild,
+        roles_changed: rolesChanged,
+        nicknames_updated: nicknamesUpdated,
+        not_in_server: notInGuild,
+        failed: failed.length,
+    };
+
+    if (failed.length > 0) {
+        await logger.warn('Member sync batch completed', failureLines.join('\n'), meta);
+    } else {
+        await logger.log('Member sync batch completed', '', meta);
+    }
+}
+
+// `batch` is the context from prepareMemberSyncBatch when this runs inside a
+// /v3/batch: per-member logging is skipped (summarizeMemberSyncBatch logs the
+// whole batch instead).
+export async function executeMemberSync(body, batch = null) {
+    if (!batch) {
+        await logger.log('Member sync started', `Member ${body.discord_user_id}`);
+    }
+
+    const guild = batch?.guild ?? await fetchGuild();
     const member = await guild.members.fetch(body.discord_user_id).catch(() => null);
     if (!member) {
-        await logger.warn('Member sync completed', 'Member not found');
+        if (!batch) {
+            await logger.warn('Member sync completed', 'Member not found');
+        }
         return {
             ok: true,
             member_found: false,
@@ -181,7 +232,9 @@ export async function executeMemberSync(body) {
     let desiredRolesInScope = body.desired_role_ids_in_scope || [];
     if (body.scope === 'ranking' && body.score !== undefined && body.score !== null) {
         desiredRolesInScope = resolveRolesForRankingScore(body.score);
-        await logger.log('Member sync note', `Resolved ranking roles from score ${body.score}`);
+        if (!batch) {
+            await logger.log('Member sync note', `Resolved ranking roles from score ${body.score}`);
+        }
     }
 
     if (!Array.isArray(desiredRolesInScope) || desiredRolesInScope.length === 0) {
@@ -206,13 +259,36 @@ export async function executeMemberSync(body) {
     const removeUnlisted = body.options?.remove_unlisted_in_scope !== false;
     const toRemove = removeUnlisted ? [...currentInScopeSet].filter((id) => !desiredSet.has(id)) : [];
 
-    await addRoles(member, toAdd);
-    await removeRoles(member, toRemove);
+    const desiredNickname = body.options?.update_nickname === true && typeof body.nickname === 'string'
+        ? body.nickname.trim()
+        : '';
+    const nicknameUpdated = Boolean(desiredNickname) && member.nickname !== desiredNickname;
+    const rolesChanged = toAdd.length > 0 || toRemove.length > 0;
 
-    let nicknameUpdated = false;
-    if (body.options?.update_nickname === true && typeof body.nickname === 'string' && body.nickname.trim()) {
-        await updateNickname(member, body.nickname.trim());
-        nicknameUpdated = true;
+    // Roles and nickname go out as one member edit (one Discord call) instead
+    // of separate add/remove/nickname calls, and nothing is sent when nothing
+    // changed. A member above the bot (or the owner) can still get roles but
+    // not a nickname, so for them the nickname is attempted on its own and
+    // fails without blocking the role change.
+    const toRemoveSet = asSet(toRemove);
+    const nextRoles = [...new Set([
+        ...currentRoles.filter((id) => id !== guild.id && !toRemoveSet.has(id)),
+        ...toAdd,
+    ])];
+    if (member.manageable) {
+        if (rolesChanged || nicknameUpdated) {
+            await editMember(member, {
+                ...(rolesChanged ? { roles: nextRoles } : {}),
+                ...(nicknameUpdated ? { nick: desiredNickname } : {}),
+            });
+        }
+    } else {
+        if (rolesChanged) {
+            await editMember(member, { roles: nextRoles });
+        }
+        if (nicknameUpdated) {
+            await updateNickname(member, desiredNickname);
+        }
     }
 
     const unchanged = [...desiredSet].filter((id) => currentInScopeSet.has(id));
@@ -250,7 +326,9 @@ export async function executeMemberSync(body) {
         }
     }
 
-    await logger.log('Member sync completed', `Member ${body.discord_user_id}`);
+    if (!batch) {
+        await logger.log('Member sync completed', `Member ${body.discord_user_id}`);
+    }
 
     return {
         ok: true,

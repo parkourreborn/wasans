@@ -149,21 +149,12 @@ export async function archiveThread(thread) {
     }
 }
 
-export async function addRoles(member, roleIds) {
-    if (roleIds.length === 0) return;
+// Applies several member changes (e.g. roles + nickname) in one Discord call.
+export async function editMember(member, changes) {
     try {
-        await member.roles.add(roleIds);
+        await member.edit(changes);
     } catch (error) {
-        throw discordError(`Failed to add roles: ${error.message}`);
-    }
-}
-
-export async function removeRoles(member, roleIds) {
-    if (roleIds.length === 0) return;
-    try {
-        await member.roles.remove(roleIds);
-    } catch (error) {
-        throw discordError(`Failed to remove roles: ${error.message}`);
+        throw discordError(`Failed to update member: ${error.message}`);
     }
 }
 

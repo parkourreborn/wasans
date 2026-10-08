@@ -1,4 +1,11 @@
-import { executeDm, executeMemberSync, executeSubmissionDelete, executeSubmissionSync } from '../executors.js';
+import {
+    executeDm,
+    executeMemberSync,
+    executeSubmissionDelete,
+    executeSubmissionSync,
+    prepareMemberSyncBatch,
+    summarizeMemberSyncBatch,
+} from '../executors.js';
 import { createVersionRouter } from '../routerFactory.js';
 import { executeGiveawaySync } from '../../giveaways/sync.js';
 import {
@@ -22,6 +29,7 @@ const routes = {
     '/v3/members/sync': {
         validate: validateMemberSyncBody,
         execute: executeMemberSync,
+        batch: { prepare: prepareMemberSyncBatch, summarize: summarizeMemberSyncBatch },
     },
     '/v3/messages/dm': {
         validate: validateDmBody,

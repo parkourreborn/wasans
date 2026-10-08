@@ -273,6 +273,12 @@ nickname. Roles outside the given scope are never touched.
 - `options.remove_unlisted_in_scope` (default `true`) — remove any role in
   scope that isn't in the desired set.
 - `options.update_nickname` — if true, sets `nickname` (only if non-empty).
+  `nickname_updated` in the response is true only when the nickname actually
+  changed.
+- Role and nickname changes are applied in one member edit, and no Discord call
+  is made when nothing changed. For members the bot can't manage (the owner, or
+  anyone above the bot's top role), roles are still synced and the nickname is
+  attempted separately.
 - When `scope: "ranking"` causes an actual rank change, the bot also posts a
   promotion/demotion announcement to `rank_milestones_channel_id` (best-effort
   — failure to post doesn't fail the request).
@@ -341,6 +347,9 @@ of **that same version** in one call:
   stops at the first failed request.
 - Each `route` must be a full path under the same version prefix as the batch
   call itself (e.g. a `/v3/batch` call cannot invoke a `/v2/...` route).
+- `/v3/members/sync` requests inside a `/v3/batch` don't post per-member log
+  embeds; the batch posts one "Member sync batch completed" summary instead
+  (counts, plus each failure listed).
 
 Response — one result per request, in order, whether or not earlier ones
 failed:
