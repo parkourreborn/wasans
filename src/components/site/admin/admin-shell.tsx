@@ -47,7 +47,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </p>
         {user ? (
           <Button asChild variant="outline">
-            <Link href="/">Back to the leaderboard</Link>
+            <Link href="/">Back to the homepage</Link>
           </Button>
         ) : (
           <Button onClick={() => openLogin()}>Log in</Button>

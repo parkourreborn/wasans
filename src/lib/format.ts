@@ -102,3 +102,15 @@ export function formatWaiting(fromUnixSeconds: number | null | undefined, nowUni
   if (hours < 48) return `${hours}h`
   return `${Math.floor(hours / 24)}d`
 }
+
+const relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
+
+// "3 hours ago", "in 2 days", "yesterday": for sentences and card corners.
+export function formatRelative(unixSeconds: number, nowUnixSeconds: number) {
+  const diff = unixSeconds - nowUnixSeconds
+  const abs = Math.abs(diff)
+  if (abs < 60) return diff >= 0 ? "in under a minute" : "just now"
+  if (abs < 3600) return relativeFormatter.format(Math.round(diff / 60), "minute")
+  if (abs < DAY) return relativeFormatter.format(Math.round(diff / 3600), "hour")
+  return relativeFormatter.format(Math.round(diff / DAY), "day")
+}

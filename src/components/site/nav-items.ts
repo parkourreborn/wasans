@@ -13,8 +13,7 @@ export type NavItem = {
 export const SUBMIT_HREF = "/submit"
 
 export const primaryNav: NavItem[] = [
-  // "/" shows the leaderboard until the homepage is designed.
-  { href: "/leaderboard", label: "Leaderboard", matches: ["/"] },
+  { href: "/leaderboard", label: "Leaderboard" },
   { href: "/trials", label: "Trials" },
   { href: "/combos", label: "Combos" },
   { href: "/submissions/trials", label: "Submissions", matches: ["/submissions"] },

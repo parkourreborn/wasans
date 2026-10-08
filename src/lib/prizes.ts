@@ -1,4 +1,5 @@
 import { apiV2 } from "@/lib/api"
+import { formatRelative } from "@/lib/format"
 
 // Shared by the public /prizes page and the owners' /admin/prizes page.
 
@@ -142,15 +143,8 @@ export function spotsLabel(winners: number, maxWinners: number | null) {
 }
 
 // "in 3 days", "2 hours ago": the countdown on a card.
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
-
 export function formatUntil(unixSeconds: number, nowSeconds: number) {
-  const diff = unixSeconds - nowSeconds
-  const abs = Math.abs(diff)
-  if (abs < 60) return diff >= 0 ? "in under a minute" : "just now"
-  if (abs < 3600) return relative.format(Math.round(diff / 60), "minute")
-  if (abs < 86400) return relative.format(Math.round(diff / 3600), "hour")
-  return relative.format(Math.round(diff / 86400), "day")
+  return formatRelative(unixSeconds, nowSeconds)
 }
 
 const fullDate = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
