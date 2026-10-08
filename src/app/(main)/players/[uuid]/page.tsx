@@ -473,7 +473,7 @@ export default function PlayerProfilePage() {
 
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <Button className="cursor-pointer" asChild>
-              <Link href={`/calculator?player_uuid=${encodeURIComponent(player.uuid)}`}>View in Calculator</Link>
+              <Link href={`/compare?a=${encodeURIComponent(player.uuid)}`}>Try times in Compare</Link>
             </Button>
           </div>
         </div>

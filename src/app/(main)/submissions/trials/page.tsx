@@ -1,5 +1,6 @@
 "use client"
 
+import { SubmissionsTabs } from "@/components/site/submissions-tabs"
 import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -374,6 +375,7 @@ function SubmissionsPage() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      <SubmissionsTabs active="trials" />
       {uploadingDragFile && (
         <div className="sticky top-14 z-40 border-b border-border bg-background/95 backdrop-blur-sm py-4">
           <div className="flex flex-col gap-2">

@@ -9,6 +9,25 @@ type RecordTime = { trial_name: string; time: number | string }
 // that count isn't sent to the browser, but it falls out of the player's
 // score and PBs. When it can't be worked out (a score of 0), the number of
 // trials with a record stands in.
+// A trial's score for a time, against the current records. A time faster
+// than the record would be the new record, so it scores 1.
+export function trialScorer(records: readonly RecordTime[]) {
+  const wrByTrial = new Map(records.map((record) => [record.trial_name, Number(record.time)]))
+  return (trial: string, time: number) => {
+    const wr = wrByTrial.get(trial)
+    if (!wr || !Number.isFinite(time) || time <= 0) return 0
+    return time < wr ? 1 : calculateScore(wr, time, trial as TrialName)
+  }
+}
+
+// How many trials a player's score is averaged over (see estimateScore).
+export function countedTrials(pbs: readonly Pb[], records: readonly RecordTime[], currentScore: number) {
+  const score = trialScorer(records)
+  const sum = pbs.reduce((total, pb) => total + score(pb.trial_name, Number(pb.time)), 0)
+  const derived = currentScore > 0.01 ? Math.round(sum / currentScore) : 0
+  return derived >= 1 && derived <= 80 ? derived : Math.max(records.length, 1)
+}
+
 export function estimateScore(
   pbs: readonly Pb[],
   records: readonly RecordTime[],

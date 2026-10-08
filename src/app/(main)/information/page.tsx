@@ -72,8 +72,8 @@ export default function InformationPage() {
             ))}
           </ul>
           <div className="flex flex-wrap gap-2 text-sm">
-            <Link href="/calculator" className="underline underline-offset-4">
-              Calculator
+            <Link href="/compare" className="underline underline-offset-4">
+              Compare and try times
             </Link>
             <Link href="/wrs" className="underline underline-offset-4">
               Current WRs

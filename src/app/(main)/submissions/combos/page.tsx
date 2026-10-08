@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { PlusCircleIcon } from "lucide-react"
 import { apiV2 } from "@/lib/api"
 import { ComboSubmissionCard } from "@/components/custom/combo-submission-card"
-import { PageHeader, PageShell, SubmissionList } from "@/components/custom/page-shell"
+import { PageShell, SubmissionList } from "@/components/custom/page-shell"
+import { SubmissionsTabs } from "@/components/site/submissions-tabs"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -187,7 +188,7 @@ function ComboSubmissionsPage() {
 
   return (
     <PageShell>
-      <PageHeader title="Combo Submissions" />
+      <SubmissionsTabs active="combos" />
 
       <div className="sticky top-14 z-30 space-y-3 rounded-lg border border-border bg-background p-4">
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center">
