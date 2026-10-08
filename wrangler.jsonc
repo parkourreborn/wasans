@@ -63,7 +63,7 @@
 			// which the tunnel container resolves) and paste the service ID
 			// it prints here.
 			"binding": "BOT_SERVICE",
-			"service_id": "REPLACE_WITH_VPC_SERVICE_ID",
+			"service_id": "01a11cbc-fc30-7a40-bdd1-5d0941829566",
 			"remote": true
 		}
 	],
