@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { ArrowLeftRightIcon, CalculatorIcon, PlayIcon, Settings2Icon, TrophyIcon } from "lucide-react"
 import { apiV2 } from "@/lib/api"
@@ -15,7 +15,7 @@ import { useNow } from "@/hooks/use-now"
 import { useTrialOrder } from "@/hooks/use-trial-order"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { useAuthSession } from "@/components/custom/use-auth-session"
-import { runPosterUrl } from "@/components/site/run-video"
+import { runPosterUrl, runVideoUrl } from "@/components/site/run-video"
 import { TierLabel } from "@/components/site/tier-label"
 import type { WorldRecordsResponse } from "@/components/site/trials-index"
 import { Button } from "@/components/ui/button"
@@ -159,13 +159,47 @@ function ProfileSkeleton() {
   )
 }
 
+// The cover plays the run on computers only: a full run on every profile
+// visit is a lot of mobile data. Phones, data saver and reduced motion keep
+// the still poster.
+const COVER_VIDEO_QUERY = "(min-width: 768px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)"
+
+function subscribeCoverVideo(listener: () => void) {
+  const query = window.matchMedia(COVER_VIDEO_QUERY)
+  query.addEventListener("change", listener)
+  return () => query.removeEventListener("change", listener)
+}
+
+function coverVideoAllowed() {
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
+  return window.matchMedia(COVER_VIDEO_QUERY).matches && !connection?.saveData
+}
+
 function Cover({ playerName, row, own }: { playerName: string; row?: TrialRow; own: boolean }) {
   const [failed, setFailed] = useState<string | null>(null)
+  const [videoFailed, setVideoFailed] = useState<string | null>(null)
+  const playVideo = useSyncExternalStore(subscribeCoverVideo, coverVideoAllowed, () => false)
   const pb = row?.pb
   const showImage = pb && failed !== pb.submission_uuid
+  const showVideo = pb && playVideo && videoFailed !== pb.submission_uuid
   return (
     <div className="relative h-32 overflow-hidden border-b border-line bg-surface md:h-44">
-      {showImage ? (
+      {showVideo ? (
+        <video
+          key={pb.submission_uuid}
+          src={runVideoUrl(pb.submission_uuid)}
+          poster={showImage ? runPosterUrl(pb.submission_uuid) : undefined}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden
+          tabIndex={-1}
+          onError={() => setVideoFailed(pb.submission_uuid)}
+          className="absolute inset-0 size-full object-cover opacity-60"
+        />
+      ) : showImage ? (
         // A plain img: the poster lives on the assets host and may be missing.
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -176,7 +210,7 @@ function Cover({ playerName, row, own }: { playerName: string; row?: TrialRow; o
         />
       ) : null}
       <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,8,8,0.05)_0%,rgba(8,8,8,0.35)_55%,rgba(8,8,8,0.9)_100%)]" />
-      {showImage && row ? (
+      {(showImage || showVideo) && pb && row ? (
         <div className="relative mx-auto flex h-full max-w-[1200px] items-start justify-end px-4 pt-3 md:items-end md:pb-3.5">
           <Link
             href={`/submissions/${encodeURIComponent(pb.submission_uuid)}`}

@@ -116,7 +116,14 @@ function useSide(uuid: string | null, trials: readonly string[], records: WorldR
     const after = time(trial)
     gained += (after === null ? 0 : score(trial, after)) - (before === null ? 0 : score(trial, before))
   }
-  const exact = official + gained / count
+  // The stored score is rounded to 3 decimals, so "exact" is worked out
+  // again from the PBs the way the server does it (the average of every PB's
+  // trial score). If that doesn't agree with the stored score (PBs the
+  // server doesn't count), fall back to building on the stored one.
+  const pbTotal = (player?.pbs ?? []).reduce((total, pb) => total + score(pb.trial_name, Number(pb.time)), 0)
+  const fromPbs = pbTotal / count
+  const base = player && Math.abs(fromPbs - official) <= 0.0005 ? fromPbs : official
+  const exact = base + gained / count
 
   return {
     uuid,
