@@ -6,7 +6,7 @@ import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 export const POST = withV2Context(async (ctx) => {
   const user = await requireV2Owner(ctx)
 
-  await refreshAllPlayerScores(ctx.db)
+  await refreshAllPlayerScores(ctx.db, { discordUpdateMode: "all" })
   await insertAuditLog(ctx.db, "scores_recalculated", "maintenance", null, { actor: user })
   await bumpCacheGeneration(ctx.cache)
 

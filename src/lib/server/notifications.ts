@@ -479,14 +479,23 @@ export async function syncDiscordMembersOnScoreChange(players: Array<{ playerUui
   try {
     const { env } = await getCloudflareContext({ async: true })
 
-    const placeholders = uniquePlayers.map(() => "?").join(",")
-    const { results } = await env.wasans.prepare(
-      `SELECT uuid, discord_id, score, player_name, account_status FROM players WHERE uuid IN (${placeholders})`
-    )
-      .bind(...uniquePlayers.map((entry) => entry.playerUuid))
-      .all<{ uuid: string; discord_id: string | null; score: number; player_name: string; account_status?: string | null }>()
-
-    const rowByUuid = new Map((results || []).map((row) => [row.uuid, row]))
+    // D1 caps a query at 100 bound parameters, so a site-wide sync (the
+    // recalculate-all button) looks players up in chunks.
+    type MemberRow = { uuid: string; discord_id: string | null; score: number; player_name: string; account_status?: string | null }
+    const LOOKUP_CHUNK_SIZE = 90
+    const rowByUuid = new Map<string, MemberRow>()
+    for (let i = 0; i < uniquePlayers.length; i += LOOKUP_CHUNK_SIZE) {
+      const lookupUuids = uniquePlayers.slice(i, i + LOOKUP_CHUNK_SIZE).map((entry) => entry.playerUuid)
+      const placeholders = lookupUuids.map(() => "?").join(",")
+      const { results } = await env.wasans.prepare(
+        `SELECT uuid, discord_id, score, player_name, account_status FROM players WHERE uuid IN (${placeholders})`
+      )
+        .bind(...lookupUuids)
+        .all<MemberRow>()
+      for (const row of results || []) {
+        rowByUuid.set(row.uuid, row)
+      }
+    }
     const items: BatchRequestItem[] = []
     let counter = 0
 

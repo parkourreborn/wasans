@@ -67,11 +67,11 @@ export async function refreshPlayerScores(
   const uniquePlayerUuids = [...new Set(playerUuids.filter(Boolean))]
 
   if (!uniquePlayerUuids.length) {
-    return [] as Array<{ uuid: string; score: number }>
+    return [] as Array<{ uuid: string; score: number; oldScore: number }>
   }
 
   if (uniquePlayerUuids.length > MAX_PLAYERS_PER_REFRESH) {
-    const refreshedPlayers: Array<{ uuid: string; score: number }> = []
+    const refreshedPlayers: Array<{ uuid: string; score: number; oldScore: number }> = []
     for (let i = 0; i < uniquePlayerUuids.length; i += MAX_PLAYERS_PER_REFRESH) {
       refreshedPlayers.push(...await refreshPlayerScores(db, uniquePlayerUuids.slice(i, i + MAX_PLAYERS_PER_REFRESH), options))
     }
@@ -126,7 +126,7 @@ export async function refreshPlayerScores(
   }
 
   const updates = [] as Array<ReturnType<D1Database["prepare"]>>
-  const refreshedPlayers: Array<{ uuid: string; score: number }> = []
+  const refreshedPlayers: Array<{ uuid: string; score: number; oldScore: number }> = []
   const discordUpdates: Array<{ playerUuid: string; oldScore: number }> = []
   const scoreChanges: Array<{ playerUuid: string; playerName: string; oldScore: number; newScore: number }> = []
 
@@ -150,7 +150,7 @@ export async function refreshPlayerScores(
     const oldScore = currentScoresByPlayer.get(playerUuid) ?? 0
     const score = Number((total / Math.max(trialCount, 1)).toFixed(3))
     updates.push(db.prepare(`UPDATE players SET score = ? WHERE uuid = ?`).bind(score, playerUuid))
-    refreshedPlayers.push({ uuid: playerUuid, score })
+    refreshedPlayers.push({ uuid: playerUuid, score, oldScore })
     if (score !== oldScore) {
       scoreChanges.push({
         playerUuid,
@@ -227,30 +227,22 @@ export async function refreshPlayerScore(
   return refreshedPlayer?.score ?? 0
 }
 
+// Refreshes every player on the site, then (when asked) re-syncs every
+// linked Discord member once at the end, so the bot gets the whole run as
+// /v3/batch calls instead of one call per refresh chunk.
 export async function refreshAllPlayerScores(
   db: D1Database,
   options: { discordUpdateMode?: Extract<DiscordUpdateMode, "none" | "all"> } = {}
 ) {
-  const BATCH_SIZE = MAX_PLAYERS_PER_REFRESH
-  let offset = 0
-  let hasMore = true
+  const { results } = await db.prepare(`SELECT uuid FROM players`).all<PlayerRow>()
+  const playerUuids = (results || []).map((player) => player.uuid)
 
-  while (hasMore) {
-    const { results } = await db.prepare(`SELECT uuid FROM players LIMIT ? OFFSET ?`).bind(BATCH_SIZE, offset).all<PlayerRow>()
-    if (!results || results.length === 0) {
-      hasMore = false
-      break
-    }
+  const refreshedPlayers = await refreshPlayerScores(db, playerUuids, { discordUpdateMode: "none" })
 
-    await refreshPlayerScores(db, results.map((player) => player.uuid), {
-      discordUpdateMode: options.discordUpdateMode ?? "none",
-    })
-
-    if (results.length < BATCH_SIZE) {
-      hasMore = false
-    } else {
-      offset += BATCH_SIZE
-    }
+  if (options.discordUpdateMode === "all") {
+    await syncDiscordMembersOnScoreChange(
+      refreshedPlayers.map(({ uuid, oldScore }) => ({ playerUuid: uuid, oldScore }))
+    )
   }
 }
 
