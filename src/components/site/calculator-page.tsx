@@ -27,7 +27,7 @@ type PlayerDetailResponse = { data?: { player?: PlayerDetail | null } }
 type Edits = Record<string, string>
 
 // What-if times stay on this device, per player, until reset.
-const EDITS_EVENT = "wasans:compare-edits"
+const EDITS_EVENT = "wasans:calculator-edits"
 const editsKey = (uuid: string | null) => `wasans:compare-edits:${uuid ?? "blank"}`
 
 function subscribeEdits(listener: () => void) {
@@ -135,10 +135,9 @@ function useSide(uuid: string | null, trials: readonly string[], records: WorldR
   }
 }
 
-// /compare: two players trial by trial, and what-if times for either.
-// It replaces the separate calculator: type over any time to see the score
-// it would give.
-export function ComparePage() {
+// /calculator: type over any time to see the score it would give, and line
+// a second player up trial by trial (this used to be the Compare page).
+export function CalculatorPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -193,8 +192,8 @@ export function ComparePage() {
   return (
     <>
       <PageHeader
-        title="Compare"
-        description="Line two players up trial by trial, or type over any time to see what it would do to a score."
+        title="Calculator"
+        description="Type over any time to see what it would do to a score, or add a second player to line them up trial by trial."
       />
       <div className="mx-auto flex max-w-[1200px] flex-col gap-6 px-4 pb-16 pt-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -267,6 +266,10 @@ export function ComparePage() {
               const at = a.time(trial)
               const bt = b.time(trial)
               const gap = at !== null && bt !== null ? at - bt : null
+              // Head to head, the faster time is green and the slower red; a
+              // time against no time counts as faster.
+              const aTone = !hasB || at === null ? null : bt === null || at < bt ? "faster" : at > bt ? "slower" : null
+              const bTone = !hasB || bt === null ? null : at === null || bt < at ? "faster" : bt > at ? "slower" : null
               return (
                 <li key={trial} className={cn(grid, "min-h-14 border-b border-line px-2 py-1.5 hover:bg-surface")}>
                   <span className="flex min-w-0 flex-col">
@@ -279,20 +282,20 @@ export function ComparePage() {
                   </span>
                   {hasB ? (
                     <>
-                      <MobileCell side={a} trial={trial} scoreOf={scoreOf} />
-                      <MobileCell side={b} trial={trial} scoreOf={scoreOf} />
+                      <MobileCell side={a} trial={trial} scoreOf={scoreOf} tone={aTone} />
+                      <MobileCell side={b} trial={trial} scoreOf={scoreOf} tone={bTone} />
                       <span className="hidden md:block">
-                        <TimeInput side={a} trial={trial} />
+                        <TimeInput side={a} trial={trial} tone={aTone} />
                       </span>
                       <ScoreCell side={a} trial={trial} scoreOf={scoreOf} className="hidden md:flex" />
                       <span className="hidden md:block md:pl-6">
-                        <TimeInput side={b} trial={trial} />
+                        <TimeInput side={b} trial={trial} tone={bTone} />
                       </span>
                       <ScoreCell side={b} trial={trial} scoreOf={scoreOf} className="hidden md:flex" />
                       <span
                         className={cn(
                           "num hidden text-right text-sm md:block",
-                          gap === null ? "text-subtle-foreground" : gap < 0 ? "text-foreground" : "text-muted-foreground"
+                          gap === null || Math.abs(gap) < 0.0005 ? "text-subtle-foreground" : gap < 0 ? "text-success" : "text-destructive"
                         )}
                         title={gap === null ? undefined : gap < 0 ? `${a.player?.player_name ?? "First"} is faster` : `${b.player?.player_name ?? "Second"} is faster`}
                       >
@@ -315,7 +318,7 @@ export function ComparePage() {
         </div>
         <p className="text-[13px] leading-relaxed text-subtle-foreground">
           Edited times are marked and stay on this device. A score of 0.300 means platinum; times faster than the WR count as a
-          new record. {hasB ? "The gap is the first player's time minus the second's." : ""}
+          new record. {hasB ? "Green is the faster time on each trial and red the slower; the gap is the first player's time minus the second's." : ""}
         </p>
       </div>
     </>
@@ -386,7 +389,11 @@ function ScoreCard({ side, fallbackName }: { side: Side; fallbackName: string })
   )
 }
 
-function TimeInput({ side, trial }: { side: Side; trial: string }) {
+type Tone = "faster" | "slower" | null
+
+const toneClass = (tone: Tone) => (tone === "faster" ? "text-success" : tone === "slower" ? "text-destructive" : "")
+
+function TimeInput({ side, trial, tone = null }: { side: Side; trial: string; tone?: Tone }) {
   const edited = side.edited(trial)
   const pb = side.pbTime(trial)
   const name = side.player?.player_name ?? "Your"
@@ -415,7 +422,8 @@ function TimeInput({ side, trial }: { side: Side; trial: string }) {
         aria-label={`${name} ${trial} time`}
         className={cn(
           "num h-9 w-full min-w-0 rounded-md border bg-transparent px-2 text-[15px] outline-none transition-colors placeholder:text-subtle-foreground hover:border-line-strong focus:border-ring focus:bg-surface-2",
-          edited ? "border-primary/70 bg-primary/5" : "border-transparent"
+          edited ? "border-primary/70 bg-primary/5" : "border-transparent",
+          toneClass(tone)
         )}
       />
       {edited ? (
@@ -460,11 +468,11 @@ function ScoreCell({
 }
 
 // Phones with two players: each cell stacks the time over its score.
-function MobileCell({ side, trial, scoreOf }: { side: Side; trial: string; scoreOf: (trial: string, time: number) => number }) {
+function MobileCell({ side, trial, scoreOf, tone }: { side: Side; trial: string; scoreOf: (trial: string, time: number) => number; tone: Tone }) {
   const time = side.time(trial)
   return (
     <span className="flex min-w-0 flex-col gap-0.5 md:hidden">
-      <TimeInput side={side} trial={trial} />
+      <TimeInput side={side} trial={trial} tone={tone} />
       <span className="num pl-2 text-[12px] text-muted-foreground">{formatScore(time === null ? 0 : scoreOf(trial, time))}</span>
     </span>
   )

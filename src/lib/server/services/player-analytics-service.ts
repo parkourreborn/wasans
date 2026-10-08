@@ -1,7 +1,7 @@
 import "server-only"
 import { getPlayerActivityHeatmap, getTimeSinceLastPb } from "@/lib/server/analytics/activity"
 import { getPlayerScoreHistory } from "@/lib/server/analytics/score-history"
-import { getPlayerRankHistory } from "@/lib/server/analytics/rank-snapshot"
+import { getPlayerPeakRank, getPlayerRankHistory } from "@/lib/server/analytics/rank-snapshot"
 import { getTrialScoreDistributions } from "@/lib/server/analytics/trial-distribution"
 import { getPlayerByUuid } from "@/lib/server/repositories/player-repository"
 import { TrialName } from "@/lib/trials"
@@ -18,12 +18,13 @@ export async function buildPlayerAnalytics(db: D1Database, uuid: string) {
     .all<{ trial_name: TrialName }>()
   const attemptedTrials = (attemptedTrialsResult.results || []).map((row) => row.trial_name)
 
-  const [trialDistributions, scoreHistory, rankHistory, activityHeatmap, lastPbAt] = await Promise.all([
+  const [trialDistributions, scoreHistory, rankHistory, activityHeatmap, lastPbAt, peakRank] = await Promise.all([
     getTrialScoreDistributions(db, uuid, attemptedTrials),
     getPlayerScoreHistory(db, uuid),
     getPlayerRankHistory(db, uuid),
     getPlayerActivityHeatmap(db, uuid),
     getTimeSinceLastPb(db, uuid),
+    getPlayerPeakRank(db, uuid),
   ])
 
   return {
@@ -33,5 +34,6 @@ export async function buildPlayerAnalytics(db: D1Database, uuid: string) {
     rank_history: rankHistory,
     activity_heatmap: activityHeatmap,
     last_pb_at: lastPbAt,
+    peak_rank: peakRank,
   }
 }

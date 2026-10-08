@@ -79,3 +79,20 @@ export async function getPlayerRankHistory(db: D1Database, playerUuid: string, l
 
   return (results || []).slice().reverse()
 }
+
+// The best rank a player has ever held in a daily snapshot, and the first
+// day they held it. Covers all snapshots, not just the 180 the chart shows.
+export async function getPlayerPeakRank(db: D1Database, playerUuid: string) {
+  const row = await db
+    .prepare(
+      `SELECT rank, snapshot_date
+       FROM player_rank_snapshots
+       WHERE player_uuid = ?
+       ORDER BY rank ASC, snapshot_date ASC
+       LIMIT 1`
+    )
+    .bind(playerUuid)
+    .first<{ rank: number; snapshot_date: string }>()
+
+  return row ? { rank: Number(row.rank), date: row.snapshot_date } : null
+}

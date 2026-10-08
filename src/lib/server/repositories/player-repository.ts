@@ -134,12 +134,27 @@ export async function getPlayerPosition(db: D1Database, score: number, playerNam
   return Number(row?.position ?? 1)
 }
 
+// Each PB with where it stands on its trial (rank among active players'
+// PBs, ties shared, as on the trial leaderboard) and its video's state, so
+// the profile can use the run's poster frame.
 export async function getPlayerPbs(db: D1Database, playerUuid: string) {
   const rows = await db.prepare(
-    `SELECT trial_name, time, submission_uuid, date
+    `SELECT pbs.trial_name, pbs.time, pbs.submission_uuid, pbs.date, submissions.video_status,
+            (SELECT COUNT(*)
+             FROM pbs faster
+             JOIN players ON players.uuid = faster.player_uuid
+             WHERE faster.trial_name = pbs.trial_name
+               AND faster.time < pbs.time
+               AND COALESCE(players.account_status, 'active') != 'deactivated') + 1 AS rank,
+            (SELECT COUNT(*)
+             FROM pbs everyone
+             JOIN players ON players.uuid = everyone.player_uuid
+             WHERE everyone.trial_name = pbs.trial_name
+               AND COALESCE(players.account_status, 'active') != 'deactivated') AS holders
      FROM pbs
-     WHERE player_uuid = ?
-     ORDER BY trial_name ASC`
+     LEFT JOIN submissions ON submissions.uuid = pbs.submission_uuid
+     WHERE pbs.player_uuid = ?
+     ORDER BY pbs.trial_name ASC`
   )
     .bind(playerUuid)
     .all()
@@ -167,4 +182,19 @@ export async function getPlayerSubmissions(
     .all()
 
   return rows.results || []
+}
+
+// Prizes a player has been awarded, newest first.
+export async function getPlayerPrizeWins(db: D1Database, playerUuid: string) {
+  const { results } = await db.prepare(
+    `SELECT prizes.uuid AS prize_uuid, prizes.title, prize_winners.awarded_at
+     FROM prize_winners
+     JOIN prizes ON prizes.uuid = prize_winners.prize_uuid
+     WHERE prize_winners.player_uuid = ?
+     ORDER BY prize_winners.awarded_at DESC`
+  )
+    .bind(playerUuid)
+    .all<{ prize_uuid: string; title: string; awarded_at: number }>()
+
+  return results || []
 }

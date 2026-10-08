@@ -3,6 +3,7 @@ import {
   getPlayerByUuid,
   getPlayerPbs,
   getPlayerPosition,
+  getPlayerPrizeWins,
   getPlayerRank,
   getPlayerSubmissions,
 } from "@/lib/server/repositories/player-repository"
@@ -11,7 +12,13 @@ import { listComboPbsForPlayer } from "@/lib/server/repositories/combo-submissio
 export async function buildPlayerDetail(
   db: D1Database,
   uuid: string,
-  options: { includePbs: boolean; includeComboPbs: boolean; includeRecentSubmissions: boolean; submissionsLimit: number }
+  options: {
+    includePbs: boolean
+    includeComboPbs: boolean
+    includeRecentSubmissions: boolean
+    includePrizes?: boolean
+    submissionsLimit: number
+  }
 ) {
   const player = await getPlayerByUuid(db, uuid)
 
@@ -19,7 +26,7 @@ export async function buildPlayerDetail(
     return null
   }
 
-  const [rank, position, pbs, comboPbs, recentSubmissions] = await Promise.all([
+  const [rank, position, pbs, comboPbs, recentSubmissions, prizes] = await Promise.all([
     getPlayerRank(db, Number(player.score || 0)),
     getPlayerPosition(db, Number(player.score || 0), String(player.player_name)),
     options.includePbs ? getPlayerPbs(db, uuid) : Promise.resolve(undefined),
@@ -29,6 +36,7 @@ export async function buildPlayerDetail(
     options.includeRecentSubmissions
       ? getPlayerSubmissions(db, uuid, { limit: options.submissionsLimit, offset: 0, approvedOnly: false })
       : Promise.resolve(undefined),
+    options.includePrizes ? getPlayerPrizeWins(db, uuid) : Promise.resolve(undefined),
   ])
 
   return {
@@ -38,5 +46,6 @@ export async function buildPlayerDetail(
     pbs,
     combo_pbs: comboPbs,
     recent_submissions: recentSubmissions,
+    prizes,
   }
 }

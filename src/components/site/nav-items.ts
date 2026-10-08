@@ -21,7 +21,7 @@ export const primaryNav: NavItem[] = [
 ]
 
 export const moreNav: NavItem[] = [
-  { href: "/compare", label: "Compare", description: "Players side by side, and what-if times", matches: ["/calculator"] },
+  { href: "/calculator", label: "Calculator", description: "What-if times, and players side by side", matches: ["/compare"] },
   { href: "/prizes", label: "Prizes", description: "Active prizes and giveaways" },
   { href: "/rules", label: "Rules", description: "What makes a run valid" },
   { href: "/information", label: "Scoring & FAQ", description: "How scores and tiers work" },
