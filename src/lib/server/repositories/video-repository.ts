@@ -201,12 +201,13 @@ export async function touchSubmissionVideo(db: D1Database, uuid: string, now: nu
 }
 
 export async function failStuckSubmissionVideo(db: D1Database, uuid: string, error: string, now: number) {
-  await db.prepare(
+  const outcome = await db.prepare(
     `UPDATE submissions SET video_status = 'failed', video_error = ?, video_updated_at = ?, video_processed_at = ?
      WHERE uuid = ? AND video_status = 'processing'`
   )
     .bind(error, now, now, uuid)
     .run()
+  return outcome.meta.changes === 1
 }
 
 export async function deleteOldVideoUploads(db: D1Database, before: number) {

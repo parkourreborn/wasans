@@ -148,6 +148,8 @@ function SubmissionsPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const playerUuidFromParams = searchParams.get("player_uuid") || ""
   const [playerFilter, setPlayerFilter] = useState(playerUuidFromParams)
+  // Set by the failed-video notice so a player can find the runs to redo.
+  const [failedOnly, setFailedOnly] = useState(searchParams.get("video_status") === "failed")
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [signInDialogOpen, setSignInDialogOpen] = useState(false)
   const [loadingSubmissions, setLoadingSubmissions] = useState(true)
@@ -190,6 +192,9 @@ function SubmissionsPage() {
         if (statusFilter !== "all") {
           params.set("state", statusFilter)
         }
+        if (failedOnly) {
+          params.set("video_status", "failed")
+        }
         if (searchQuery.trim()) {
           params.set("search", searchQuery.trim())
         }
@@ -224,7 +229,7 @@ function SubmissionsPage() {
     }
 
     fetchPage()
-  }, [page, playerFilter, statusFilter, searchQuery])
+  }, [page, playerFilter, statusFilter, searchQuery, failedOnly])
 
   useEffect(() => {
     const fetchMeta = async () => {
@@ -398,21 +403,41 @@ function SubmissionsPage() {
       )}
       <div className="sticky top-14 z-30 space-y-3 rounded-lg border border-border bg-background p-4">
       <div className="flex flex-col gap-3">
-        {filteredPlayerName && (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-1 text-sm">
-              <span>Filtering by: {filteredPlayerName}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPlayerFilter("")}
-                className="h-4 w-4 p-0"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
+        {filteredPlayerName || failedOnly ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {filteredPlayerName ? (
+              <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-1 text-sm">
+                <span>Filtering by: {filteredPlayerName}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPlayerFilter("")}
+                  className="h-4 w-4 p-0"
+                  aria-label="Stop filtering by player"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : null}
+            {failedOnly ? (
+              <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-1 text-sm">
+                <span>Failed videos only</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFailedOnly(false)
+                    setCurrentPage(1)
+                  }}
+                  className="h-4 w-4 p-0"
+                  aria-label="Show all videos"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : null}
           </div>
-        )}
+        ) : null}
 
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center">
           <Input

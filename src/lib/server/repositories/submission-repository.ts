@@ -40,6 +40,7 @@ export async function listSubmissions(
     offset: number
     state?: string | null
     playerUuid?: string | null
+    videoStatus?: string | null
     search?: string
     // "asc" serves the review queue oldest first; lists default to newest.
     order?: "asc" | "desc"
@@ -57,6 +58,11 @@ export async function listSubmissions(
   if (options.playerUuid) {
     whereConditions.push("submissions.player_uuid = ?")
     bindValues.push(options.playerUuid)
+  }
+
+  if (options.videoStatus && ["processing", "ready", "failed"].includes(options.videoStatus)) {
+    whereConditions.push("submissions.video_status = ?")
+    bindValues.push(options.videoStatus)
   }
 
   if (options.search) {

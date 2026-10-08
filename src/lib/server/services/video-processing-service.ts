@@ -1,5 +1,5 @@
 import "server-only"
-import { postPendingRun } from "@/lib/server/notifications"
+import { postPendingRun, sendDiscordDm } from "@/lib/server/notifications"
 import { presignUploadPut } from "@/lib/server/r2-presign"
 import {
   applyBackfillVideoResult,
@@ -136,6 +136,9 @@ export async function handleVideoResult(
   }
 
   const applied = await applySubmissionVideoResult(db, submissionUuid, result, now)
+  if (applied && result.status === "failed") {
+    await notifyVideoFailed(db, submissionUuid, result.error)
+  }
   if (!applied || result.status !== "ready") {
     return { applied }
   }
@@ -166,6 +169,26 @@ export async function handleVideoResult(
   }
 
   return { applied }
+}
+
+// The run can't be approved without a video, and nothing else tells the
+// player, so DM them. The site also shows a notice until the run is deleted
+// (see the nav badges). Best effort: a failed DM never fails the callback.
+async function notifyVideoFailed(db: D1Database, submissionUuid: string, error: string | null) {
+  try {
+    const submission = await getSubmissionWithScore(db, submissionUuid)
+    if (!submission || submission.state !== "pending") return
+    const player = await findPlayerByUuid(db, submission.player_uuid)
+    if (!player?.discord_id) return
+    const run = `${submission.trial_name} ${Number(submission.time).toFixed(3)}`
+    const content =
+      `The video for your ${run} run couldn't be processed, so it can't be reviewed.` +
+      (error ? `\n\nReason: ${error}` : "") +
+      `\n\nDelete the run and submit it again with the video: https://wasans.tully.sh/submissions/${submissionUuid}`
+    await sendDiscordDm(player.discord_id, content)
+  } catch (dmError) {
+    console.error("Failed to send video failure DM:", dmError)
+  }
 }
 
 // Fills the backfill up to BACKFILL_CONCURRENCY jobs in flight. Safe to call
@@ -205,7 +228,10 @@ export async function sweepVideoProcessing(db: D1Database, env: CloudflareEnv) {
       await touchSubmissionVideo(db, row.uuid, now)
       jobs.push(job)
     } else {
-      await failStuckSubmissionVideo(db, row.uuid, "Video processing didn't finish. Please submit again.", now)
+      const error = "Video processing didn't finish. Please submit again."
+      if (await failStuckSubmissionVideo(db, row.uuid, error, now)) {
+        await notifyVideoFailed(db, row.uuid, error)
+      }
     }
   }
   if (jobs.length > 0 && env.VIDEO_QUEUE) {

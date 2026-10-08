@@ -1,6 +1,7 @@
 import { AnnouncementBanner } from "@/components/custom/announcement-banner"
 import { AuthResultToast } from "@/components/custom/auth-result-toast"
 import { SettingsDialog, SettingsProvider } from "@/components/custom/settings-provider"
+import { FailedVideoNotice } from "@/components/site/failed-video-notice"
 import { LoginDialogProvider } from "@/components/site/login-dialog"
 import { MobileTabBar } from "@/components/site/mobile-tab-bar"
 import { NavBadgesProvider } from "@/components/site/nav-badges"
@@ -26,6 +27,7 @@ export default function MainLayout({
             </a>
             <TopBar />
             <AnnouncementBanner />
+            <FailedVideoNotice />
             {/* overflow-x-clip rather than -hidden: hidden would make this a
                 scroll container and sticky elements inside it would stop
                 pinning. */}

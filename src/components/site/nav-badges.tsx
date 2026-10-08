@@ -6,13 +6,19 @@ import { useNavBadges } from "@/components/site/use-nav-badges"
 
 type NavBadges = ReturnType<typeof useNavBadges>
 
-const NavBadgesContext = createContext<NavBadges>({ newPrizes: false, newErrors: false, pendingCandidates: 0, pendingReviews: 0 })
+const NavBadgesContext = createContext<NavBadges>({
+  newPrizes: false,
+  newErrors: false,
+  pendingCandidates: 0,
+  pendingReviews: 0,
+  failedVideos: { count: 0, first: null },
+})
 
 // One poller for the whole shell; the top bar and the phone tab bar both
 // read from it.
 export function NavBadgesProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuthSession()
-  const badges = useNavBadges(user?.permission ?? 0)
+  const badges = useNavBadges(user?.permission ?? 0, user?.uuid ?? null)
   return <NavBadgesContext.Provider value={badges}>{children}</NavBadgesContext.Provider>
 }
 

@@ -316,7 +316,6 @@ export default function LogsPage() {
               <SelectContent>
                 <SelectItem value="all">All sources</SelectItem>
                 <SelectItem value="client">Client</SelectItem>
-                <SelectItem value="client_console">Client console</SelectItem>
                 <SelectItem value="server">Server</SelectItem>
                 <SelectItem value="server_console">Server console</SelectItem>
               </SelectContent>

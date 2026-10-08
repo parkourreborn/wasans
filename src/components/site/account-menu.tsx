@@ -10,7 +10,9 @@ import { formatScore } from "@/lib/format"
 import { openSettings } from "@/lib/linked-accounts"
 import { tierForScore } from "@/lib/tiers"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
+import { failedVideoHref } from "@/components/site/failed-video-notice"
 import { TierLabel } from "@/components/site/tier-label"
+import type { FailedVideos } from "@/components/site/use-nav-badges"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,16 +38,20 @@ export function AccountMenu({
   newErrors,
   pendingCandidates,
   pendingReviews,
+  failedVideos,
 }: {
   user: AuthSessionUser
   newErrors: boolean
   pendingCandidates: number
   pendingReviews: number
+  failedVideos: FailedVideos
 }) {
   const [loggingOut, setLoggingOut] = useState(false)
   const profileHref = `/players/${encodeURIComponent(user.uuid)}`
   const tier = tierForScore(Number(user.score))
-  const attention = newErrors || pendingCandidates > 0
+  const attention = newErrors || pendingCandidates > 0 || failedVideos.count > 0
+  const submissionsHref =
+    failedVideos.count > 0 ? failedVideoHref(failedVideos, user.uuid) : `/submissions/trials?player_uuid=${encodeURIComponent(user.uuid)}`
 
   const onLogout = async () => {
     setLoggingOut(true)
@@ -95,9 +101,15 @@ export function AccountMenu({
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild className={itemClass}>
-          <Link href={`/submissions/trials?player_uuid=${encodeURIComponent(user.uuid)}`}>
+          <Link href={submissionsHref}>
             <ListVideoIcon className="size-4 text-muted-foreground" aria-hidden />
             Your submissions
+            {failedVideos.count > 0 ? (
+              <span className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-destructive">
+                <span className="size-1.5 rounded-full bg-destructive" aria-hidden />
+                {failedVideos.count} failed
+              </span>
+            ) : null}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem className={itemClass} onSelect={() => openSettings()}>

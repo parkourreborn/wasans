@@ -5,7 +5,8 @@ import { apiV2 } from "@/lib/api"
 
 // The little dots on the nav: a prize or giveaway the viewer hasn't seen,
 // an error in the logs a moderator hasn't seen, prize candidates waiting
-// for the owner, runs waiting for review. Polled once a minute, like the old
+// for the owner, runs waiting for review, and the viewer's own runs whose
+// video failed to process. Polled once a minute, like the old
 // sidebar did.
 
 const lastSeenErrorStorageKey = "wasans:last-seen-error-at"
@@ -49,11 +50,22 @@ function usePolling(callback: () => Promise<void>, enabled: boolean) {
   }, [callback, enabled])
 }
 
-export function useNavBadges(permission: number) {
+// The viewer's pending runs whose video failed. They can't be approved, so
+// the player needs to delete and resubmit; `first` is enough to link
+// straight to the run when there's only one.
+export type FailedVideos = {
+  count: number
+  first: { uuid: string; trial_name: string; time: number } | null
+}
+
+const NO_FAILED_VIDEOS: FailedVideos = { count: 0, first: null }
+
+export function useNavBadges(permission: number, uuid: string | null) {
   const [latestPrizeAt, setLatestPrizeAt] = useState<string | null>(null)
   const [latestErrorAt, setLatestErrorAt] = useState<string | null>(null)
   const [pendingCandidates, setPendingCandidates] = useState(0)
   const [pendingReviews, setPendingReviews] = useState(0)
+  const [failedVideos, setFailedVideos] = useState<FailedVideos>(NO_FAILED_VIDEOS)
   const lastSeenPrizeAt = useStoredValue(lastSeenPrizeStorageKey)
   const lastSeenErrorAt = useStoredValue(lastSeenErrorStorageKey)
 
@@ -127,15 +139,39 @@ export function useNavBadges(permission: number) {
     }
   }, [permission])
 
+  const loadFailedVideos = useCallback(async () => {
+    if (!uuid) return
+    try {
+      const params = new URLSearchParams({ player_uuid: uuid, state: "pending", video_status: "failed", limit: "1" })
+      const response = await fetch(`${apiV2("/submissions")}?${params}`, { cache: "no-store" })
+      if (!response.ok) {
+        return
+      }
+      const json = (await response.json()) as {
+        data?: Array<{ uuid: string; trial_name: string; time: number }>
+        meta?: { count?: number }
+      }
+      const first = json.data?.[0]
+      setFailedVideos({
+        count: json.meta?.count ?? 0,
+        first: first ? { uuid: first.uuid, trial_name: first.trial_name, time: Number(first.time) } : null,
+      })
+    } catch {
+      // As above.
+    }
+  }, [uuid])
+
   usePolling(loadPrizes, true)
   usePolling(loadErrors, permission >= 2)
   usePolling(loadCandidates, permission >= 4)
   usePolling(loadReviews, permission >= 1)
+  usePolling(loadFailedVideos, Boolean(uuid))
 
   return {
     newPrizes: Boolean(latestPrizeAt && (!lastSeenPrizeAt || latestPrizeAt > lastSeenPrizeAt)),
     newErrors: permission >= 2 && Boolean(latestErrorAt && (!lastSeenErrorAt || latestErrorAt > lastSeenErrorAt)),
     pendingCandidates: permission >= 4 ? pendingCandidates : 0,
     pendingReviews: permission >= 1 ? pendingReviews : 0,
+    failedVideos: uuid ? failedVideos : NO_FAILED_VIDEOS,
   }
 }

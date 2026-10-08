@@ -13,7 +13,6 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     void reportClientError({
-      source: "client",
       message: error.message,
       name: error.name,
       stack: error.stack,

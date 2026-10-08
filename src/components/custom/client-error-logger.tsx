@@ -4,7 +4,6 @@ import { useEffect } from "react"
 import { apiV2 } from "@/lib/api"
 
 type ClientErrorPayload = {
-  source?: "client" | "client_console"
   message: string
   name?: string
   stack?: string
@@ -37,34 +36,6 @@ function payloadFromUnknown(error: unknown): ClientErrorPayload {
   }
 }
 
-function consoleArgsToPayload(args: unknown[]): ClientErrorPayload {
-  const firstError = args.find((arg) => arg instanceof Error)
-  const message = args
-    .map((arg) => {
-      if (arg instanceof Error) {
-        return `${arg.name}: ${arg.message}`
-      }
-
-      if (typeof arg === "string") {
-        return arg
-      }
-
-      try {
-        return JSON.stringify(arg)
-      } catch {
-        return String(arg)
-      }
-    })
-    .join(" ")
-
-  return {
-    source: "client_console",
-    message: message || "Client console error",
-    name: firstError instanceof Error ? firstError.name : undefined,
-    stack: firstError instanceof Error ? firstError.stack : undefined,
-  }
-}
-
 export function reportClientError(payload: ClientErrorPayload) {
   const body = {
     ...payload,
@@ -80,13 +51,15 @@ export function reportClientError(payload: ClientErrorPayload) {
   }).catch(() => undefined)
 }
 
+// Only real crashes are reported: uncaught errors and unhandled rejections.
+// console.error is deliberately not captured; libraries and React dev warnings
+// write there and it buried the actual errors.
 export function ClientErrorLogger() {
   useEffect(() => {
     const seen = new Set<string>()
-    const originalConsoleError = console.error
 
     const report = (payload: ClientErrorPayload) => {
-      const key = `${payload.source || "client"}:${payload.message}:${payload.stack || ""}`
+      const key = `${payload.message}:${payload.stack || ""}`
       if (seen.has(key)) {
         return
       }
@@ -98,7 +71,6 @@ export function ClientErrorLogger() {
     const onError = (event: ErrorEvent) => {
       report({
         ...payloadFromUnknown(event.error || event.message),
-        source: "client",
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
@@ -108,20 +80,13 @@ export function ClientErrorLogger() {
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       report({
         ...payloadFromUnknown(event.reason),
-        source: "client",
       })
-    }
-
-    console.error = (...args: unknown[]) => {
-      originalConsoleError(...args)
-      report(consoleArgsToPayload(args))
     }
 
     window.addEventListener("error", onError)
     window.addEventListener("unhandledrejection", onUnhandledRejection)
 
     return () => {
-      console.error = originalConsoleError
       window.removeEventListener("error", onError)
       window.removeEventListener("unhandledrejection", onUnhandledRejection)
     }

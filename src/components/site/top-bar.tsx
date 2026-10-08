@@ -99,6 +99,7 @@ export function TopBar() {
               newErrors={badges.newErrors}
               pendingCandidates={badges.pendingCandidates}
               pendingReviews={badges.pendingReviews}
+              failedVideos={badges.failedVideos}
             />
           ) : status === "anonymous" ? (
             <Button variant="outline" onClick={() => openLogin()}>
