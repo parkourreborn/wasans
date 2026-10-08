@@ -1,91 +1,74 @@
-import { cardHeight, emptyState, footer, header, layout, rankBadge, rowPanel, rowY } from '../card.js';
-import { fitText, pill, svgDocument, text, textWidth, theme } from '../theme.js';
+import { formatAge, formatCount, formatDelta, formatScore, formatTime, nameText, numText, rankCell, tierText, wrBadge } from '../card.js';
+import { theme } from '../theme.js';
+import { renderListCard } from './list.js';
 
-// Rows read "rank · player · stat". The stat column is reserved on the right so
-// a long player name gets ellipsised instead of colliding with it.
-//
-// The header text defaults to the trial/overall wording but is overridable, so
-// the combo leaderboard reuses this template instead of copying it.
-const STAT_COLUMN = 180;
-const NAME_X = layout.padding + 72;
-const WR_PILL_WIDTH = 46;
+// The three boards share a shape -- position, player, then the board's own
+// columns -- matching the site's /leaderboard, /trials/[slug] and combo
+// boards. Rows: { rank, name, highlighted, ... } plus per-variant fields.
 
-export function renderLeaderboardCard({
-    trial = null,
-    entries = [],
-    page = 1,
-    totalPages = 1,
-    total = null,
-    emptyMessage = 'No leaderboard entries found.',
-    eyebrow = null,
-    title = null,
-    subtitle = null,
-    footerNote = undefined,
-}) {
-    const height = cardHeight(entries.length);
-    const nameLimit = theme.width - layout.padding - STAT_COLUMN - NAME_X;
+const pos = { label: 'Pos', width: 34, cell: (row, box) => rankCell(row.rank, box) };
 
-    const body = [
-        header({
-            eyebrow: eyebrow || (trial ? 'WASANS · Trial Leaderboard' : 'WASANS'),
-            title: title || trial || 'Overall Leaderboard',
-            subtitle:
-                subtitle
-                || (trial ? `Fastest recorded times on ${trial}` : 'Ranked by total score across every trial'),
-            badge: `Page ${page}/${totalPages}`,
-        }),
-    ];
+function player({ wrBadgeFor = () => false } = {}) {
+    return {
+        label: 'Player',
+        flex: true,
+        cell: (row, box) => {
+            const wr = wrBadgeFor(row);
+            const name = nameText(row.name, box, { reserve: wr ? 52 : 0 });
+            return name.svg + (wr ? wrBadge(box.x + name.width + 12, box.cy).svg : '');
+        },
+    };
+}
 
-    if (entries.length === 0) {
-        body.push(emptyState(emptyMessage));
-    }
+const VARIANTS = {
+    overall: [
+        pos,
+        player(),
+        { label: 'Tier', width: 150, cell: (row, box) => (row.tier ? tierText(row.tier, box.x, box.baseline) : '') },
+        {
+            label: 'WRs',
+            width: 50,
+            cell: (row, box) => numText(row.wrs > 0 ? String(row.wrs) : '—', box, { align: 'left', fill: row.wrs > 0 ? theme.gold : theme.faint, size: 15 }),
+        },
+        { label: 'Score', width: 110, align: 'right', cell: (row, box) => numText(formatScore(row.score), box, { weight: 600 }) },
+    ],
+    trial: [
+        pos,
+        player({ wrBadgeFor: (row) => row.isWr }),
+        { label: 'Set', width: 70, align: 'right', cell: (row, box) => numText(formatAge(row.date), box, { fill: theme.subtle, size: 14, weight: 400 }) },
+        {
+            label: 'Gap',
+            width: 90,
+            align: 'right',
+            cell: (row, box) => numText(row.isWr ? '—' : formatDelta(row.gap), box, { fill: theme.subtle, size: 14, weight: 400 }),
+        },
+        { label: 'Score', width: 80, align: 'right', cell: (row, box) => numText(formatScore(row.score), box, { fill: theme.muted, size: 15, weight: 400 }) },
+        {
+            label: 'Time',
+            width: 100,
+            align: 'right',
+            cell: (row, box) => numText(formatTime(row.time), box, { weight: 600, fill: row.isWr ? theme.gold : theme.text }),
+        },
+    ],
+    combo: [
+        pos,
+        player(),
+        { label: 'Set', width: 70, align: 'right', cell: (row, box) => numText(formatAge(row.date), box, { fill: theme.subtle, size: 14, weight: 400 }) },
+        { label: 'Combo', width: 140, align: 'right', cell: (row, box) => numText(formatCount(row.combo), box, { weight: 600 }) },
+    ],
+};
 
-    entries.forEach((entry, index) => {
-        const centerY = rowY(index) + layout.rowHeight / 2;
-        const isWr = Boolean(entry.isWorldRecord);
-        const name = fitText(entry.name, 19, isWr ? nameLimit - WR_PILL_WIDTH : nameLimit, 600);
-
-        body.push(rowPanel(index, { highlight: isWr }));
-        body.push(rankBadge(index, entry.rank));
-        body.push(text(name, { x: NAME_X, y: centerY + 7, size: 19, weight: 600, fill: theme.text }));
-
-        if (isWr) {
-            body.push(
-                pill('WR', {
-                    x: NAME_X + textWidth(name, 19, 600) + 12,
-                    y: centerY - 11,
-                    height: 22,
-                    size: 11,
-                    paddingX: 9,
-                    fill: theme.accentSoft,
-                    stroke: theme.accentDim,
-                    color: '#ff8a8a',
-                }),
-            );
-        }
-
-        body.push(
-            text(entry.stat, {
-                x: theme.width - layout.padding - 20,
-                y: centerY + 7,
-                size: 19,
-                weight: 900,
-                fill: entry.unranked ? theme.dim : theme.accent,
-                anchor: 'end',
-            }),
-        );
+export function renderLeaderboardCard({ variant, eyebrow, title, meta, subtitle, chips, rows, emptyMessage, footerRight }) {
+    return renderListCard({
+        eyebrow,
+        title,
+        meta,
+        subtitle,
+        chips,
+        columns: VARIANTS[variant] || VARIANTS.overall,
+        rows,
+        highlight: (row) => Boolean(row.highlighted),
+        emptyMessage: emptyMessage || 'No ranked players yet.',
+        footerRight,
     });
-
-    body.push(
-        footer(height, {
-            right:
-                footerNote !== undefined
-                    ? footerNote
-                    : total === null
-                      ? null
-                      : `${total} ranked player${total === 1 ? '' : 's'}`,
-        }),
-    );
-
-    return { svg: svgDocument(theme.width, height, body.join('')), width: theme.width };
 }

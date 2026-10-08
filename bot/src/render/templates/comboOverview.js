@@ -1,159 +1,49 @@
-import { contentWidth, footer, header, layout } from '../card.js';
-import { fitText, rect, svgDocument, text, theme } from '../theme.js';
+import { contentWidth, footer, footerHeight, formatCount, header, nameText, numText, rankCell, table, tableHeight } from '../card.js';
+import { svgDocument, text, theme } from '../theme.js';
 
-// The combo board's front page: every active category stacked, each showing its
-// top few holders. Unlike the list cards this has no uniform row grid — the
-// height is summed from the sections — so it doesn't use cardHeight/rowY.
+// Every combo category's top few on one card, two boards per row.
+// categories: [{ label, total, entries: [{ rank, name, combo }] }].
+const GAP_X = 32;
+const GAP_Y = 30;
+const TITLE_H = 34;
 
-const SECTION_LABEL_HEIGHT = 36;
-const ROW_HEIGHT = 42;
-const ROW_GAP = 6;
-const SECTION_GAP = 20;
-const COUNT_COLUMN = 130;
-const NAME_X = layout.padding + 58;
+export function renderComboOverviewCard({ categories, perCategory, omitted = 0 }) {
+    const head = header({ eyebrow: 'Wasans · Combo leaderboards', title: 'Combos', meta: `Top ${perCategory} per category` });
+    const boardWidth = (contentWidth - GAP_X) / 2;
+    const boardHeight = TITLE_H + tableHeight(perCategory);
+    const parts = [head.svg];
 
-function sectionHeight(rowCount) {
-    const rows = Math.max(rowCount, 1);
-    return SECTION_LABEL_HEIGHT + rows * ROW_HEIGHT + (rows - 1) * ROW_GAP;
-}
+    categories.forEach((category, index) => {
+        const column = index % 2;
+        const rowIndex = Math.floor(index / 2);
+        const x = theme.padding + column * (boardWidth + GAP_X);
+        const y = head.bottom + 8 + rowIndex * (boardHeight + GAP_Y);
 
-function miniRankBadge(x, cy, rank) {
-    const medal = [theme.gold, theme.silver, theme.bronze][rank - 1];
+        parts.push(text(category.label, { x, y: y + 22, fill: theme.text, family: 'display', weight: 700, size: 24, letterSpacing: 0.6, upper: true }));
+        if (category.total !== null) {
+            parts.push(text(`${category.total} ranked`, { x: x + boardWidth, y: y + 22, fill: theme.subtle, anchor: 'end', family: 'display', weight: 600, size: 13, letterSpacing: 1, upper: true }));
+        }
 
-    if (medal) {
-        return [
-            `<circle cx="${x}" cy="${cy}" r="13" fill="${medal}" />`,
-            text(String(rank), { x, y: cy + 5, size: 13, weight: 900, fill: '#14140f', anchor: 'middle' }),
-        ].join('');
-    }
-
-    return [
-        `<circle cx="${x}" cy="${cy}" r="13" fill="${theme.panelStrong}" stroke="${theme.panelBorder}" stroke-width="1" />`,
-        text(String(rank), { x, y: cy + 4, size: 12, weight: 700, fill: theme.muted, anchor: 'middle' }),
-    ].join('');
-}
-
-export function renderComboOverviewCard({ categories = [], perCategory = 3, omitted = 0 }) {
-    const height =
-        layout.headerHeight
-        + categories.reduce((sum, category) => sum + sectionHeight(category.entries.length), 0)
-        + Math.max(categories.length - 1, 0) * SECTION_GAP
-        + layout.footerHeight
-        + layout.padding;
-
-    const totalRanked = categories.reduce((sum, category) => sum + (category.total || 0), 0);
-
-    const body = [
-        header({
-            eyebrow: 'WASANS · Combo Leaderboards',
-            title: 'Combo Board',
-            subtitle:
-                categories.length === 0
-                    ? 'No combo categories are currently active'
-                    : `Top ${perCategory} in each of ${categories.length} categor${categories.length === 1 ? 'y' : 'ies'}`
-                      + (omitted > 0 ? ` · ${omitted} more via /combos category` : ''),
-            badge: 'Overview',
-        }),
-    ];
-
-    let y = layout.headerHeight;
-
-    categories.forEach((category, categoryIndex) => {
-        if (categoryIndex > 0) y += SECTION_GAP;
-
-        body.push(
-            text(String(category.label).toUpperCase(), {
-                x: layout.padding,
-                y: y + 20,
-                size: 12,
-                weight: 900,
-                fill: theme.accent,
-                letterSpacing: 2,
-            }),
+        const rows = category.entries;
+        parts.push(
+            table({
+                top: y + TITLE_H,
+                left: x,
+                width: boardWidth,
+                rows,
+                emptyMessage: 'No approved combos yet.',
+                columns: [
+                    { label: 'Pos', width: 34, cell: (row, box) => rankCell(row.rank, box) },
+                    { label: 'Player', flex: true, cell: (row, box) => nameText(row.name, box, { size: 16 }).svg },
+                    { label: 'Combo', width: 110, align: 'right', cell: (row, box) => numText(formatCount(row.combo), box, { weight: 600 }) },
+                ],
+            }).svg,
         );
-
-        if (category.total !== null && category.total !== undefined) {
-            body.push(
-                text(`${category.total} ranked`, {
-                    x: theme.width - layout.padding,
-                    y: y + 20,
-                    size: 12,
-                    weight: 600,
-                    fill: theme.dim,
-                    anchor: 'end',
-                }),
-            );
-        }
-
-        const rowsTop = y + SECTION_LABEL_HEIGHT;
-
-        if (category.entries.length === 0) {
-            body.push(
-                rect({
-                    x: layout.padding,
-                    y: rowsTop,
-                    width: contentWidth,
-                    height: ROW_HEIGHT,
-                    rx: 12,
-                    fill: theme.panel,
-                    stroke: theme.panelBorder,
-                }),
-                text('No approved combos yet', {
-                    x: theme.width / 2,
-                    y: rowsTop + ROW_HEIGHT / 2 + 5,
-                    size: 14,
-                    weight: 500,
-                    fill: theme.muted,
-                    anchor: 'middle',
-                }),
-            );
-        }
-
-        category.entries.forEach((entry, index) => {
-            const rowTop = rowsTop + index * (ROW_HEIGHT + ROW_GAP);
-            const centerY = rowTop + ROW_HEIGHT / 2;
-
-            body.push(
-                rect({
-                    x: layout.padding,
-                    y: rowTop,
-                    width: contentWidth,
-                    height: ROW_HEIGHT,
-                    rx: 12,
-                    fill: index === 0 ? theme.panelStrong : theme.panel,
-                    stroke: index === 0 ? theme.accentDim : theme.panelBorder,
-                }),
-            );
-            body.push(miniRankBadge(layout.padding + 30, centerY, entry.rank));
-            body.push(
-                text(fitText(entry.name, 17, theme.width - layout.padding - COUNT_COLUMN - NAME_X, 600), {
-                    x: NAME_X,
-                    y: centerY + 6,
-                    size: 17,
-                    weight: 600,
-                    fill: theme.text,
-                }),
-            );
-            body.push(
-                text(entry.stat, {
-                    x: theme.width - layout.padding - 18,
-                    y: centerY + 6,
-                    size: 17,
-                    weight: 900,
-                    fill: theme.accent,
-                    anchor: 'end',
-                }),
-            );
-        });
-
-        y = rowsTop + sectionHeight(category.entries.length) - SECTION_LABEL_HEIGHT;
     });
 
-    body.push(
-        footer(height, {
-            right: `${totalRanked} combo best${totalRanked === 1 ? '' : 's'}`,
-        }),
-    );
+    const rowsOfBoards = Math.max(Math.ceil(categories.length / 2), 1);
+    const height = head.bottom + 8 + rowsOfBoards * boardHeight + (rowsOfBoards - 1) * GAP_Y + footerHeight() + 10;
+    parts.push(footer(height, { right: omitted > 0 ? `+${omitted} more: /leaderboard board:<category>` : null }));
 
-    return { svg: svgDocument(theme.width, height, body.join('')), width: theme.width };
+    return { svg: svgDocument(theme.width, height, parts.join('')), width: theme.width };
 }

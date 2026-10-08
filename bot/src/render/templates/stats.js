@@ -1,194 +1,137 @@
-import { footer, layout } from '../card.js';
-import { nameInitials } from '../avatar.js';
-import { fitText, pill, rect, svgDocument, text, theme } from '../theme.js';
+import { avatar, contentWidth, footer, footerHeight, formatCount, formatDate, formatScore, formatTime, numText, statusBadge, table, tableHeight, tierText, wrBadge } from '../card.js';
+import { fit, rect, styles, svgDocument, text, textWidth, theme } from '../theme.js';
 
-// The stats card is a profile sheet rather than a list: identity block on top,
-// a row of headline tiles, then the player's most recent run.
-const HEIGHT = 476;
-const AVATAR_R = 52;
-const AVATAR_CX = layout.padding + 68;
-const AVATAR_CY = 104;
-const IDENTITY_X = AVATAR_CX + AVATAR_R + 28;
-const TILE_Y = 214;
-const TILE_HEIGHT = 96;
-const LATEST_Y = 330;
-const LATEST_HEIGHT = 76;
+// A player's profile sheet, modelled on the site's profile header: avatar,
+// name, tier, score and rank, progress to the next tier, headline numbers,
+// then their latest runs.
+const LEFT = theme.padding;
+const RIGHT = theme.width - theme.padding;
+const AVATAR = 112;
+const TILE_H = 96;
 
-function avatar(dataUri, name) {
-    const clip = [
-        '<clipPath id="avatar-clip">',
-        `<circle cx="${AVATAR_CX}" cy="${AVATAR_CY}" r="${AVATAR_R}" />`,
-        '</clipPath>',
-    ].join('');
+function tierBar(tier, next, score, y) {
+    const parts = [rect({ x: LEFT, y, width: contentWidth, height: 6, fill: theme.surface3 })];
+    const floor = tier.min;
+    const ceiling = next ? next.tier.min : 1;
+    const progress = next ? Math.min(Math.max((score - floor) / (ceiling - floor), 0), 1) : 1;
+    parts.push(rect({ x: LEFT, y, width: Math.max(contentWidth * progress, 4), height: 6, fill: tier.color }));
 
-    const ring = `<circle cx="${AVATAR_CX}" cy="${AVATAR_CY}" r="${AVATAR_R + 3}" fill="none" stroke="${theme.accent}" stroke-width="3" />`;
-
-    if (dataUri) {
-        return [
-            clip,
-            `<image x="${AVATAR_CX - AVATAR_R}" y="${AVATAR_CY - AVATAR_R}" width="${AVATAR_R * 2}" height="${AVATAR_R * 2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatar-clip)" xlink:href="${dataUri}" />`,
-            ring,
-        ].join('');
+    parts.push(tierText(tier, LEFT, y + 30, { size: 14 }));
+    if (next) {
+        const label = `${next.needed.toFixed(3)} to `;
+        const labelStyle = styles.body(14, 400);
+        const nextWidth = textWidth(next.tier.name, { family: 'display', weight: 700, size: 14, letterSpacing: 14 * 0.08, upper: true });
+        parts.push(text(label, { x: RIGHT - nextWidth - 4, y: y + 30, fill: theme.muted, anchor: 'end', ...labelStyle }));
+        parts.push(tierText(next.tier, RIGHT, y + 30, { size: 14, anchor: 'end' }));
+    } else {
+        parts.push(text('Top tier', { x: RIGHT, y: y + 30, fill: theme.muted, anchor: 'end', ...styles.body(14, 400) }));
     }
-
-    return [
-        `<circle cx="${AVATAR_CX}" cy="${AVATAR_CY}" r="${AVATAR_R}" fill="${theme.panelStrong}" />`,
-        text(nameInitials(name), {
-            x: AVATAR_CX,
-            y: AVATAR_CY + 13,
-            size: 36,
-            weight: 900,
-            fill: theme.muted,
-            anchor: 'middle',
-        }),
-        ring,
-    ].join('');
+    return parts.join('');
 }
 
-function tile(index, count, label, value, { accent = false } = {}) {
-    const available = theme.width - layout.padding * 2;
+function tiles(items, y) {
     const gap = 12;
-    const width = (available - gap * (count - 1)) / count;
-    const x = layout.padding + index * (width + gap);
+    const width = (contentWidth - gap * (items.length - 1)) / items.length;
 
-    return [
-        rect({ x, y: TILE_Y, width, height: TILE_HEIGHT, rx: 16, fill: theme.panel, stroke: theme.panelBorder }),
-        text(String(label).toUpperCase(), {
-            x: x + 18,
-            y: TILE_Y + 32,
-            size: 11,
-            weight: 900,
-            fill: theme.muted,
-            letterSpacing: 1.6,
-        }),
-        text(fitText(value, 28, width - 36, 900), {
-            x: x + 18,
-            y: TILE_Y + 72,
-            size: 28,
-            weight: 900,
-            fill: accent ? theme.accent : theme.text,
-        }),
-    ].join('');
+    return items
+        .map((item, index) => {
+            const x = LEFT + index * (width + gap);
+            const valueStyle = styles.num(30, 600);
+            const value = fit(item.value, valueStyle, width - 36);
+            const parts = [
+                rect({ x, y, width, height: TILE_H, fill: theme.surface, stroke: theme.line }),
+                text(item.label, { x: x + 18, y: y + 32, fill: theme.subtle, ...styles.caps(14) }),
+                text(value, { x: x + 18, y: y + 74, fill: item.color || theme.text, ...valueStyle }),
+            ];
+            if (item.suffix) {
+                parts.push(text(item.suffix, { x: x + 18 + textWidth(value, valueStyle) + 8, y: y + 74, fill: theme.subtle, ...styles.body(15, 400) }));
+            }
+            return parts.join('');
+        })
+        .join('');
 }
 
-export function renderStatsCard({
-    name,
-    handle = null,
-    avatarDataUri = null,
-    score,
-    rank = null,
-    tiles = [],
-    latest = null,
-}) {
-    const identityLimit = theme.width - layout.padding - 240 - IDENTITY_X;
+// {
+//   name, avatarDataUri, tier, next, score, rank, totalPlayers, joined, badges: [string],
+//   tiles: [{ label, value, suffix?, color? }],
+//   recent: [{ state, label, value, date, kind, isWr }],
+// }
+export function renderStatsCard({ name, avatarDataUri, tier, next, score, rank, totalPlayers, joined, lastPb, tiles: tileItems, recent }) {
+    const parts = [];
+    const caps = styles.caps(15);
 
-    const body = [
-        avatar(avatarDataUri, name),
-
-        text('WASANS · PLAYER PROFILE', {
-            x: IDENTITY_X,
-            y: 72,
-            size: 12,
-            weight: 900,
-            fill: theme.accent,
-            letterSpacing: 2.4,
-        }),
-        text(fitText(name, 36, identityLimit, 900), {
-            x: IDENTITY_X,
-            y: 112,
-            size: 36,
-            weight: 900,
-            fill: theme.text,
-        }),
-        handle
-            ? text(fitText(handle, 15, identityLimit, 500), {
-                  x: IDENTITY_X,
-                  y: 138,
-                  size: 15,
-                  weight: 500,
-                  fill: theme.muted,
-              })
-            : '',
-
-        text('SCORE', {
-            x: theme.width - layout.padding,
-            y: 72,
-            size: 12,
-            weight: 900,
-            fill: theme.muted,
-            letterSpacing: 2.4,
-            anchor: 'end',
-        }),
-        text(score, {
-            x: theme.width - layout.padding,
-            y: 122,
-            size: 46,
-            weight: 900,
-            fill: theme.accent,
-            anchor: 'end',
-        }),
-        rank
-            ? pill(rank, {
-                  x: theme.width - layout.padding,
-                  y: 138,
-                  anchor: 'end',
-                  height: 26,
-                  size: 12,
-                  fill: theme.accentSoft,
-                  stroke: theme.accentDim,
-                  color: '#ff8a8a',
-              })
-            : '',
-
-        rect({ x: layout.padding, y: 182, width: theme.width - layout.padding * 2, height: 1, fill: theme.panelBorder }),
-    ];
-
-    tiles.forEach((entry, index) => {
-        body.push(tile(index, tiles.length, entry.label, entry.value, { accent: entry.accent }));
-    });
-
-    body.push(
-        rect({
-            x: layout.padding,
-            y: LATEST_Y,
-            width: theme.width - layout.padding * 2,
-            height: LATEST_HEIGHT,
-            rx: 16,
-            fill: theme.panel,
-            stroke: theme.panelBorder,
-        }),
-        rect({ x: layout.padding + 1, y: LATEST_Y + 16, width: 3, height: LATEST_HEIGHT - 32, rx: 1.5, fill: theme.accent }),
-        text('LATEST SUBMISSION', {
-            x: layout.padding + 24,
-            y: LATEST_Y + 30,
-            size: 11,
-            weight: 900,
-            fill: theme.muted,
-            letterSpacing: 1.6,
-        }),
-        text(fitText(latest?.label || 'No submissions yet', 20, theme.width - layout.padding * 2 - 220, 700), {
-            x: layout.padding + 24,
-            y: LATEST_Y + 60,
-            size: 20,
-            weight: 700,
-            fill: latest ? theme.text : theme.dim,
-        }),
-    );
-
-    if (latest?.time) {
-        body.push(
-            text(latest.time, {
-                x: theme.width - layout.padding - 24,
-                y: LATEST_Y + 52,
-                size: 26,
-                weight: 900,
-                fill: theme.accent,
-                anchor: 'end',
-            }),
-        );
+    parts.push(text('Player', { x: LEFT, y: 56, fill: theme.subtle, ...caps }));
+    if (rank) {
+        parts.push(text(totalPlayers ? `Rank #${rank} of ${formatCount(totalPlayers)}` : `Rank #${rank}`, { x: RIGHT, y: 56, fill: theme.subtle, anchor: 'end', ...caps }));
     }
 
-    body.push(footer(HEIGHT, {}));
+    const top = 80;
+    parts.push(avatar({ id: 'stats-avatar', x: LEFT, y: top, size: AVATAR, dataUri: avatarDataUri, name }));
 
-    return { svg: svgDocument(theme.width, HEIGHT, body.join('')), width: theme.width };
+    const scoreStyle = styles.num(52, 600);
+    const scoreText = formatScore(score);
+    const scoreWidth = textWidth(scoreText, scoreStyle);
+    parts.push(text('Score', { x: RIGHT, y: top + 20, fill: theme.subtle, anchor: 'end', ...styles.caps(14) }));
+    parts.push(text(scoreText, { x: RIGHT, y: top + 72, fill: theme.text, anchor: 'end', ...scoreStyle }));
+
+    const nameX = LEFT + AVATAR + 24;
+    const nameStyle = { family: 'display', weight: 700, size: 58 };
+    parts.push(text(fit(name, nameStyle, RIGHT - scoreWidth - 32 - nameX), { x: nameX, y: top + 62, fill: theme.text, ...nameStyle }));
+
+    // Tier, joined, last PB -- the site's profile meta line.
+    let metaX = nameX;
+    const metaY = top + 100;
+    parts.push(tierText(tier, metaX, metaY, { size: 17 }));
+    metaX += textWidth(tier.name, { family: 'display', weight: 700, size: 17, letterSpacing: 17 * 0.08, upper: true }) + 20;
+    const metaStyle = styles.body(15, 400);
+    for (const [label, value] of [['Joined', joined], ['Last PB', lastPb]]) {
+        if (!value) continue;
+        parts.push(text(`${label} `, { x: metaX, y: metaY, fill: theme.muted, ...metaStyle }));
+        const labelWidth = textWidth(`${label} `, metaStyle);
+        parts.push(text(value, { x: metaX + labelWidth, y: metaY, fill: theme.text, ...metaStyle }));
+        metaX += labelWidth + textWidth(value, metaStyle) + 20;
+    }
+
+    let y = top + AVATAR + 32;
+    parts.push(tierBar(tier, next, Number(score) || 0, y));
+    y += 62;
+
+    parts.push(tiles(tileItems, y));
+    y += TILE_H + 36;
+
+    parts.push(text('Latest runs', { x: LEFT, y, fill: theme.text, family: 'display', weight: 700, size: 22, letterSpacing: 0.6, upper: true }));
+    y += 12;
+
+    const recentTable = table({
+        top: y,
+        rows: recent,
+        emptyMessage: 'No runs yet.',
+        columns: [
+            { label: 'Status', width: 112, cell: (row, box) => statusBadge(row.state, box.x, box.cy).svg },
+            {
+                label: 'Run',
+                flex: true,
+                cell: (row, box) => {
+                    const style = { family: 'display', weight: 700, size: 19, letterSpacing: 0.6, upper: true };
+                    const shown = fit(row.label, style, box.w - 60);
+                    return text(shown, { x: box.x, y: box.baseline, fill: theme.text, ...style })
+                        + (row.isWr ? wrBadge(box.x + textWidth(shown, style) + 10, box.cy, { size: 12 }).svg : '');
+                },
+            },
+            { label: 'Date', width: 110, cell: (row, box) => text(formatDate(row.date), { x: box.x, y: box.baseline, fill: theme.subtle, ...styles.body(14, 400) }) },
+            {
+                label: 'Result',
+                width: 120,
+                align: 'right',
+                cell: (row, box) => numText(row.kind === 'combo' ? formatCount(row.value) : formatTime(row.value), box, { weight: 600, fill: row.isWr ? theme.gold : theme.text }),
+            },
+        ],
+    });
+    parts.push(recentTable.svg);
+    y += tableHeight(recent.length);
+
+    const height = y + 12 + footerHeight();
+    parts.push(footer(height));
+
+    return { svg: svgDocument(theme.width, height, parts.join('')), width: theme.width };
 }

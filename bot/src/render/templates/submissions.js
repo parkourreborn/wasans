@@ -1,100 +1,55 @@
-import { cardHeight, emptyState, footer, header, layout, rowPanel, rowY, stateDot } from '../card.js';
-import { fitText, pill, svgDocument, text, theme } from '../theme.js';
+import { formatCount, formatDate, formatTime, nameText, numText, statusBadge, wrBadge } from '../card.js';
+import { fit, styles, text, textWidth, theme } from '../theme.js';
+import { renderListCard } from './list.js';
 
-// A submission row leads with a state dot so pending/denied entries are
-// scannable at a glance, then trial, player, and the time on the right.
-//
-// Rows carry label/value rather than trial/time specifically, so combo
-// submissions (category + combo count) reuse this template. `trial` and `time`
-// stay accepted as the trial-side names.
-const DOT_X = layout.padding + 26;
-const TRIAL_X = layout.padding + 48;
-const TRIAL_COLUMN = 200;
-const TIME_COLUMN = 150;
-
-export function renderSubmissionsCard({
-    player = null,
-    submissions = [],
-    page = 1,
-    totalPages = 1,
-    total = null,
-    eyebrow = 'WASANS',
-    title = null,
-    subtitle = null,
-    emptyMessage = null,
-    noun = 'submission',
-}) {
-    const height = cardHeight(submissions.length);
-    const playerX = TRIAL_X + TRIAL_COLUMN;
-    const playerLimit = theme.width - layout.padding - TIME_COLUMN - playerX - 90;
-
-    const body = [
-        header({
-            eyebrow,
-            title: title || (player ? `${player}'s Submissions` : 'Recent Submissions'),
-            subtitle: subtitle || (player ? 'Newest runs first' : 'The newest runs across every player'),
-            badge: `Page ${page}/${totalPages}`,
-        }),
+// A list of runs, newest first: status, trial (or combo category), player,
+// date and the time (or combo count) on the right. Rows:
+// { state, label, player, date, value, isWr, kind: 'trial' | 'combo' }.
+export function renderSubmissionsCard({ eyebrow, title, meta, chips, rows, emptyMessage, footerRight, kind = 'trial', showPlayer = true }) {
+    const columns = [
+        { label: 'Status', width: 112, cell: (row, box) => statusBadge(row.state, box.x, box.cy).svg },
+        {
+            label: kind === 'combo' ? 'Category' : 'Trial',
+            width: showPlayer ? 200 : 360,
+            flex: !showPlayer,
+            cell: (row, box) => {
+                const style = { family: 'display', weight: 700, size: 19, letterSpacing: 0.6, upper: true };
+                const reserve = row.isWr ? 50 : 0;
+                const shown = fit(row.label, style, box.w - reserve);
+                const parts = [text(shown, { x: box.x, y: box.baseline, fill: theme.text, ...style })];
+                if (row.isWr) parts.push(wrBadge(box.x + textWidth(shown, style) + 10, box.cy, { size: 12 }).svg);
+                return parts.join('');
+            },
+        },
     ];
 
-    if (submissions.length === 0) {
-        body.push(
-            emptyState(
-                emptyMessage || (player ? 'No submissions found for this player.' : 'No submissions found.'),
-            ),
-        );
+    if (showPlayer) {
+        columns.push({ label: 'Player', flex: true, cell: (row, box) => nameText(row.player, box, { size: 16 }).svg });
     }
 
-    submissions.forEach((submission, index) => {
-        const centerY = rowY(index) + layout.rowHeight / 2;
-        const color = stateDot(submission.state);
+    columns.push(
+        { label: 'Date', width: 110, cell: (row, box) => text(formatDate(row.date), { x: box.x, y: box.baseline, fill: theme.subtle, ...styles.body(14, 400) }) },
+        {
+            label: kind === 'combo' ? 'Combo' : 'Time',
+            width: 120,
+            align: 'right',
+            cell: (row, box) =>
+                numText(kind === 'combo' ? formatCount(row.value) : formatTime(row.value), box, {
+                    weight: 600,
+                    fill: row.isWr ? theme.gold : row.state === 'denied' ? theme.subtle : theme.text,
+                }),
+        },
+    );
 
-        body.push(rowPanel(index));
-        body.push(`<circle cx="${DOT_X}" cy="${centerY}" r="5" fill="${color}" />`);
-        body.push(
-            text(fitText(submission.label ?? submission.trial, 18, TRIAL_COLUMN - 20, 700), {
-                x: TRIAL_X,
-                y: centerY + 6,
-                size: 18,
-                weight: 700,
-                fill: theme.text,
-            }),
-        );
-        body.push(
-            text(fitText(submission.player, 16, playerLimit, 500), {
-                x: playerX,
-                y: centerY + 6,
-                size: 16,
-                weight: 500,
-                fill: theme.muted,
-            }),
-        );
-        body.push(
-            pill(String(submission.state).toUpperCase(), {
-                x: theme.width - layout.padding - TIME_COLUMN + 10,
-                y: centerY - 11,
-                anchor: 'end',
-                height: 22,
-                size: 10,
-                paddingX: 10,
-                fill: theme.panelStrong,
-                stroke: theme.panelBorder,
-                color,
-            }),
-        );
-        body.push(
-            text(submission.value ?? submission.time, {
-                x: theme.width - layout.padding - 20,
-                y: centerY + 7,
-                size: 18,
-                weight: 900,
-                fill: theme.accent,
-                anchor: 'end',
-            }),
-        );
+    return renderListCard({
+        eyebrow,
+        title,
+        meta,
+        chips,
+        columns,
+        rows,
+        emptyMessage: emptyMessage || 'No runs match these filters.',
+        footerRight,
     });
-
-    body.push(footer(height, { right: total === null ? null : `${total} ${noun}${total === 1 ? '' : 's'}` }));
-
-    return { svg: svgDocument(theme.width, height, body.join('')), width: theme.width };
 }
+

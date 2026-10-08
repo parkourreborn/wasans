@@ -1,72 +1,52 @@
-// Shared visual language for every rendered card. Keeping the palette and the
-// text primitives in one place is what lets each command own a small template
-// file instead of repeating the same chrome.
+// The site's "Timing board" look (src/app/globals.css), translated to SVG: a
+// true-neutral black ground, hairline rows, condensed uppercase labels in
+// Saira Condensed over IBM Plex, and magenta for "this one" highlights. Gold,
+// silver and bronze mean records and the top three, nothing else; tier colors
+// only ever label tiers.
+
+import { measure } from './metrics.js';
 
 export const theme = {
-    width: 920,
-    radius: 28,
+    width: 1000,
+    padding: 40,
+    radius: 6,
 
-    background: '#0a0a0c',
-    backgroundEdge: '#101014',
-    border: '#26262d',
+    background: '#080808',
+    surface: '#0e0e0e',
+    surface2: '#141414',
+    surface3: '#1b1b1b',
+    line: '#262626',
+    lineStrong: '#333333',
+    rowLine: '#1c1c1c',
 
-    panel: '#141418',
-    panelBorder: '#212128',
-    panelStrong: '#1b1b21',
+    text: '#f7f7f7',
+    muted: '#b1b1b1',
+    subtle: '#868686',
+    faint: '#5a5a5a',
 
-    accent: '#e02222',
-    accentDim: '#8d1616',
-    accentSoft: '#2a1113',
+    primary: '#f960cf',
+    primaryTint: '#1f1019',
+    success: '#5edb81',
+    destructive: '#ff645f',
 
-    text: '#ffffff',
-    muted: '#8a8a95',
-    dim: '#5a5a66',
-
-    gold: '#f0c245',
-    silver: '#c6cad4',
-    bronze: '#cd8244',
-
-    approved: '#3fb950',
-    pending: '#d99a26',
-    denied: '#e5534b',
+    gold: '#f7c747',
+    silver: '#c5cbd2',
+    bronze: '#da915f',
 };
 
-export const font = "Inter, 'DejaVu Sans', sans-serif";
+// The Saira Condensed files name a family per weight -- and the Bold one
+// calls itself "Saira Condensed Condensed". Its licence reserves the name, so
+// the files are used as they are and each weight is picked by that family.
+const DISPLAY_FAMILIES = {
+    600: 'Saira Condensed SemiBold',
+    700: 'Saira Condensed Condensed',
+    800: 'Saira Condensed ExtraBold',
+};
 
-// Rough per-glyph advance widths (as a fraction of font size) for Inter.
-// resvg gives us no measuring API, so this is what ellipsis truncation and
-// right-aligned pill sizing are based on. It only has to be close enough that
-// text never overruns its box.
-const NARROW = new Set([...`iIl1.,:;'"|!/\\()[]{}ijtfr `]);
-const WIDE = new Set([...'MWmw@%']);
-
-export function textWidth(value, fontSize, weight = 400) {
-    const text = String(value ?? '');
-    let units = 0;
-
-    for (const char of text) {
-        if (NARROW.has(char)) units += 0.32;
-        else if (WIDE.has(char)) units += 0.88;
-        else if (char >= '0' && char <= '9') units += 0.6;
-        else if (char === char.toUpperCase() && char !== char.toLowerCase()) units += 0.68;
-        else units += 0.56;
-    }
-
-    // Heavier weights are noticeably wider in Inter.
-    const weightFactor = weight >= 900 ? 1.06 : weight >= 600 ? 1.03 : 1;
-    return units * fontSize * weightFactor;
-}
-
-export function fitText(value, fontSize, maxWidth, weight = 400) {
-    const text = String(value ?? '');
-    if (textWidth(text, fontSize, weight) <= maxWidth) return text;
-
-    let result = text;
-    while (result.length > 1 && textWidth(`${result}…`, fontSize, weight) > maxWidth) {
-        result = result.slice(0, -1);
-    }
-
-    return `${result.trimEnd()}…`;
+function familyAttr(family, weight) {
+    if (family === 'display') return `'${DISPLAY_FAMILIES[weight] || DISPLAY_FAMILIES[700]}'`;
+    if (family === 'mono') return "'IBM Plex Mono'";
+    return "'IBM Plex Sans'";
 }
 
 export function escapeXml(value) {
@@ -78,102 +58,71 @@ export function escapeXml(value) {
         .replace(/'/g, '&apos;');
 }
 
-export function text(value, options = {}) {
-    const {
-        x = 0,
-        y = 0,
-        size = 16,
-        weight = 400,
-        fill = theme.text,
-        anchor = 'start',
-        letterSpacing = 0,
-        opacity = 1,
-    } = options;
+// Text styles used across the cards, named after the site's utilities.
+export const styles = {
+    // .label-caps: Saira 600, 0.08em tracking, uppercase.
+    caps: (size = 14) => ({ family: 'display', weight: 600, size, letterSpacing: size * 0.08, upper: true }),
+    title: (size = 60) => ({ family: 'display', weight: 800, size, upper: true }),
+    // .num: Plex Mono, tabular.
+    num: (size = 17, weight = 500) => ({ family: 'mono', weight, size }),
+    body: (size = 16, weight = 500) => ({ family: 'sans', weight, size }),
+};
 
+function prepare(value, style) {
+    const raw = String(value ?? '');
+    return style.upper ? raw.toUpperCase() : raw;
+}
+
+export function textWidth(value, style) {
+    return measure(prepare(value, style), style);
+}
+
+// Ellipsises `value` so it fits in `maxWidth` when set in `style`.
+export function fit(value, style, maxWidth) {
+    const raw = prepare(value, style);
+    if (measure(raw, style) <= maxWidth) return raw;
+
+    const chars = [...raw];
+    while (chars.length > 1 && measure(`${chars.join('')}…`, style) > maxWidth) chars.pop();
+    return `${chars.join('').trimEnd()}…`;
+}
+
+export function text(value, { x = 0, y = 0, fill = theme.text, anchor = 'start', opacity = 1, ...style } = {}) {
+    const { family = 'sans', weight = 400, size = 16, letterSpacing = 0 } = style;
     const attrs = [
         `x="${x}"`,
         `y="${y}"`,
-        `font-family="${font}"`,
+        `font-family="${familyAttr(family, weight)}"`,
         `font-size="${size}"`,
         `font-weight="${weight}"`,
         `fill="${fill}"`,
-        `text-anchor="${anchor}"`,
     ];
 
+    if (anchor !== 'start') attrs.push(`text-anchor="${anchor}"`);
     if (letterSpacing) attrs.push(`letter-spacing="${letterSpacing}"`);
     if (opacity !== 1) attrs.push(`opacity="${opacity}"`);
 
-    return `<text ${attrs.join(' ')}>${escapeXml(value)}</text>`;
+    return `<text ${attrs.join(' ')}>${escapeXml(prepare(value, style))}</text>`;
 }
 
-export function rect(options = {}) {
-    const { x = 0, y = 0, width = 0, height = 0, rx = 0, fill = 'none', stroke = null, strokeWidth = 1, opacity = 1 } = options;
-
-    const attrs = [
-        `x="${x}"`,
-        `y="${y}"`,
-        `width="${width}"`,
-        `height="${height}"`,
-        `rx="${rx}"`,
-        `fill="${fill}"`,
-    ];
-
+export function rect({ x = 0, y = 0, width = 0, height = 0, rx = 0, fill = 'none', stroke = null, strokeWidth = 1, opacity = 1 } = {}) {
+    const attrs = [`x="${x}"`, `y="${y}"`, `width="${width}"`, `height="${height}"`, `fill="${fill}"`];
+    if (rx) attrs.push(`rx="${rx}"`);
     if (stroke) attrs.push(`stroke="${stroke}"`, `stroke-width="${strokeWidth}"`);
     if (opacity !== 1) attrs.push(`opacity="${opacity}"`);
-
     return `<rect ${attrs.join(' ')} />`;
 }
 
-// A rounded label chip; width is derived from the measured text so the padding
-// stays even no matter what goes inside it.
-export function pill(label, options = {}) {
-    const {
-        x = 0,
-        y = 0,
-        height = 30,
-        size = 13,
-        weight = 700,
-        fill = theme.panelStrong,
-        stroke = null,
-        color = theme.text,
-        paddingX = 14,
-        letterSpacing = 0.4,
-        anchor = 'start',
-    } = options;
-
-    const width = Math.ceil(textWidth(label, size, weight) + letterSpacing * String(label).length + paddingX * 2);
-    const left = anchor === 'end' ? x - width : x;
-
-    return [
-        rect({ x: left, y, width, height, rx: height / 2, fill, stroke, strokeWidth: 1 }),
-        text(label, {
-            x: left + width / 2,
-            y: y + height / 2 + size * 0.36,
-            size,
-            weight,
-            fill: color,
-            anchor: 'middle',
-            letterSpacing,
-        }),
-    ].join('');
+export function hline(x, y, width, color = theme.line) {
+    return rect({ x, y, width, height: 1, fill: color });
 }
 
-export function svgDocument(width, height, body) {
+export function svgDocument(width, height, body, defs = '') {
     return [
         `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
-        '<defs>',
-        `<linearGradient id="page-bg" x1="0" y1="0" x2="0" y2="1">`,
-        `<stop offset="0" stop-color="${theme.backgroundEdge}" />`,
-        `<stop offset="1" stop-color="${theme.background}" />`,
-        '</linearGradient>',
-        `<linearGradient id="accent-fade" x1="0" y1="0" x2="1" y2="0">`,
-        `<stop offset="0" stop-color="${theme.accent}" stop-opacity="0.9" />`,
-        `<stop offset="1" stop-color="${theme.accent}" stop-opacity="0" />`,
-        '</linearGradient>',
-        '</defs>',
-        rect({ x: 0, y: 0, width, height, rx: theme.radius, fill: 'url(#page-bg)' }),
-        rect({ x: 1, y: 1, width: width - 2, height: height - 2, rx: theme.radius - 1, fill: 'none', stroke: theme.border }),
-        rect({ x: theme.radius, y: 0, width: width - theme.radius * 2, height: 3, rx: 1.5, fill: 'url(#accent-fade)' }),
+        defs ? `<defs>${defs}</defs>` : '',
+        rect({ x: 0, y: 0, width, height, rx: theme.radius, fill: theme.background }),
+        rect({ x: 0.5, y: 0.5, width: width - 1, height: height - 1, rx: theme.radius, stroke: theme.line }),
         body,
         '</svg>',
     ].join('');

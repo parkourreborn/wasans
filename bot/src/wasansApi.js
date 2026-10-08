@@ -28,7 +28,17 @@ function apiErrorFrom(parsedBody, rawBody, status) {
     return error;
 }
 
-export async function apiGet(pathname, query = undefined) {
+// The site already caches every public GET in KV for ~60s, so holding a
+// response here for a little less costs no freshness and saves the round
+// trip -- which is most of a command's latency. Paging, tab switches and
+// autocomplete all lean on this. Concurrent requests for the same URL share
+// one fetch. Failures are never cached.
+const DEFAULT_TTL_MS = 30_000;
+const MAX_CACHED = 500;
+const responseCache = new Map();
+const inFlight = new Map();
+
+function buildUrl(pathname, query) {
     const url = new URL(pathname, API_BASE_URL);
 
     if (query && typeof query === 'object') {
@@ -38,7 +48,11 @@ export async function apiGet(pathname, query = undefined) {
         }
     }
 
-    const response = await fetch(url);
+    return url;
+}
+
+async function fetchJson(url) {
+    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
     const rawBody = await response.text();
     const parsedBody = parseApiResponse(rawBody);
 
@@ -47,6 +61,31 @@ export async function apiGet(pathname, query = undefined) {
     }
 
     return parsedBody;
+}
+
+export async function apiGet(pathname, query = undefined, { ttlMs = DEFAULT_TTL_MS } = {}) {
+    const key = buildUrl(pathname, query).toString();
+
+    const hit = responseCache.get(key);
+    if (hit && hit.expiresAt > Date.now()) return hit.value;
+
+    const pending = inFlight.get(key);
+    if (pending) return pending;
+
+    const request = fetchJson(key)
+        .then((value) => {
+            if (ttlMs > 0) {
+                responseCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+                if (responseCache.size > MAX_CACHED) {
+                    responseCache.delete(responseCache.keys().next().value);
+                }
+            }
+            return value;
+        })
+        .finally(() => inFlight.delete(key));
+
+    inFlight.set(key, request);
+    return request;
 }
 
 // Authenticated client for the wasans admin/bot-only v2 routes (e.g.
@@ -83,13 +122,28 @@ export async function adminApiRequest(pathname, { method = 'GET', body } = {}) {
 // Resolves a Discord user id to their wasans player uuid via the
 // Discord-login link (see admin/players/by-discord on the wasans side),
 // rather than guessing at a display name and searching for it.
+// Discord links change rarely, and a mention is resolved on every
+// autocomplete keystroke, so answers (including "not linked") are held for a
+// few minutes.
+const DISCORD_LINK_TTL_MS = 5 * 60 * 1000;
+const discordLinkCache = new Map();
+
 export async function fetchPlayerUuidByDiscordId(discordId) {
+    const hit = discordLinkCache.get(discordId);
+    if (hit && hit.expiresAt > Date.now()) return hit.uuid;
+
     const payload = await adminApiRequest(`admin/players/by-discord/${encodeURIComponent(discordId)}`).catch((error) => {
         if (error.status === 404) return null;
         throw error;
     });
 
-    return payload?.data?.uuid || null;
+    const uuid = payload?.data?.uuid || null;
+    discordLinkCache.set(discordId, { uuid, expiresAt: Date.now() + DISCORD_LINK_TTL_MS });
+    if (discordLinkCache.size > MAX_CACHED) {
+        discordLinkCache.delete(discordLinkCache.keys().next().value);
+    }
+
+    return uuid;
 }
 
 // Joins a giveaway on a linked player's behalf -- used by the "Join

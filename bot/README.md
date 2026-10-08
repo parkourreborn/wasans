@@ -21,19 +21,26 @@ src/
   logger.js                 embeds sent to the logging channel
   discordClient.js          discord.js Client instance
   resolvers.js               URL builders, state-tag/role resolution
-  rateLimit.js              sliding-window rate limiter
+  wasansApi.js              site API client (short-lived response cache)
+  players.js                player option: name / @mention / "me" / autocomplete
+  trials.js, comboCategories.js   trial and combo category lists from the site
+  scoring.js                trial score formula and tiers, ported from the site
   discord/api.js            thin wrappers around discord.js calls
   submissions/
     formatter.js            builds submission thread titles/messages
     store.js                 in-memory submission_id -> thread_id cache
   commands/
     adminCommands.js        "!status" / "!say" / "!delete" text commands
-    slashCommands.js        /leaderboard /submissions /pbs /wrs /stats
+    slashCommands.js        registration and dispatch for the commands below
+    leaderboard.js, submissions.js, stats.js, wrs.js   one module per command
+    runCard.js              the single-submission card
+    session.js              tabs, paging and "Open a run" menus
   render/
-    theme.js, card.js       shared palette and card layout primitives
-    png.js, avatar.js       SVG -> PNG rendering, Discord avatar fetch
+    theme.js, card.js       the site's look, and shared card layout pieces
+    metrics.js              glyph widths read from the bundled fonts
+    png.js, avatar.js       SVG -> PNG rendering, avatar and preview fetches
     cache.js                LRU cache of rendered pages
-    templates/*.js          one SVG template per slash command
+    templates/*.js          one SVG template per card type
     submissionModeration.js  Approve/Deny/Pending/Change Time/Note buttons
   api/
     server.js                HTTP server: auth, logging, dispatch
@@ -392,71 +399,69 @@ runtime behavior entirely.
 
 # Slash commands
 
-These are unrelated to the HTTP API and are unchanged by the v2/v3 split.
+Four commands, each answering with a rendered card in the site's style.
+Command replies are public.
 
-Every command answers with a rendered PNG card instead of an embed, and every
-reply is **public** — nothing is ephemeral.
+| Command | What it shows |
+| --- | --- |
+| `/leaderboard [board] [player]` | `board`: Overall (the default), any trial, any combo category, or "Combos · every category" for the top 3 of each. `player` opens the page that player is on with their row highlighted. |
+| `/submissions [player] [on] [status] [run]` | Runs, newest first. `on` takes a trial or a combo category, and that choice also picks trial runs or combos. With no `on`, the card has **Trial runs / Combos** tabs. `run` opens one submission: its autocomplete lists the runs that match the other filters, and a pasted site link or id works too. When the filters match exactly one run, that run's card is shown instead of a list. |
+| `/stats [player]` | A profile card (score, tier and progress, rank, WRs, PBs, runs, best combo, latest runs), with **PBs / Combos / Runs / Combo runs** tabs. Defaults to whoever ran it. |
+| `/wrs [trial]` | Every trial's world record, or with `trial`, that trial's WR history: each record, its improvement, and how long it stood. |
 
-- `/leaderboard [trial]` — overall or per-trial leaderboard, paginated.
-- `/submissions [player]` — recent submissions, optionally filtered by player
-  (name or `@mention`).
-- `/pbs <player>` — a player's personal best per trial.
-- `/wrs` — current world records per trial.
-- `/stats <player>` — a profile card: score, rank, submission and PB counts,
-  world records held, and the player's most recent submission.
+Every `player` option takes a wasans name, an `@mention`, or `me`. It also
+autocompletes: typing a name searches wasans players, and typing `@` searches
+the server's members, so mentions still work from inside the autocomplete box.
+Mentions are resolved through the account's linked Discord login, never by
+guessing a name.
 
-The command replies themselves are public; the button and select-menu replies
-underneath them are not. Submission links (the "get submission URL" select
-menu, and the button on `/stats`) come back ephemerally to whoever clicked,
-as do the pagination guard rails ("this interaction is no longer available",
-"only the original command user can control this pagination"). Pagination
-itself stays scoped to the user who ran the command.
+The `board` and `on` options list trials and combo categories together. The
+lists come from the site (`/v2/trials`, `/v2/combo-categories`), so new or
+retired ones show up without a redeploy.
+
+The buttons and menus under a reply respond only to whoever clicked:
+
+- Paging and tab buttons only work for the person who ran the command.
+- **Open a run…** menus show the picked run's card to the person who picked it.
+- **Play video here** posts the run's video link, which Discord embeds as a
+  player, again only for the clicker.
+- **Open on wasans** / **Profile on wasans** link to the site.
 
 ## Card rendering
 
-Cards are built as SVG and rasterised with [`@resvg/resvg-js`][resvg]. There is
-one template per command, all sharing a palette and a set of layout helpers:
+Cards are built as SVG and rasterised with [`@resvg/resvg-js`][resvg]. They
+follow the site's "Timing board" design (`src/app/globals.css`): the same
+palette, Saira Condensed for labels and titles, and IBM Plex Sans/Mono for
+names and numbers. The fonts are bundled under `assets/fonts` (OFL), so
+rendering looks the same everywhere, including the slim Docker image. Text is
+measured from the fonts' real glyph widths (`src/render/metrics.js`), so long
+names are cut off with an ellipsis instead of running into other columns.
 
-```
-assets/fonts/               Inter (OFL) — bundled so rendering is identical
-                            everywhere, including the slim Docker image
-src/render/
-  theme.js                  palette, text/rect/pill primitives, width estimation
-  card.js                   header/row/footer layout shared by the list cards
-  png.js                    SVG -> PNG, rendered at 2x for crisp downscaling
-  avatar.js                 Discord avatar -> data URI (falls back to initials)
-  templates/
-    leaderboard.js          /leaderboard
-    submissions.js          /submissions
-    pbs.js                  /pbs
-    wrs.js                  /wrs
-    stats.js                /stats  (a profile card, not a list)
-```
+To change how a card looks, edit its template in `src/render/templates/`. Each
+template takes plain data and returns `{ svg, width }`.
 
-To change how a command looks, edit its template — each one takes plain data
-and returns `{ svg, width }`, which `renderAttachment` turns into the file
-Discord receives. Paging re-renders from data already held in memory, so it
-never re-hits the website API.
+## Speed
 
-### Rate limiting
+Commands defer straight away, then make as few round trips as they can:
 
-Rendering a card is CPU-bound and uploads a few hundred KB, so each user gets
-**5 cards per minute**. A command reply and a page turn each cost one; going
-over gets an ephemeral "try again in Ns" instead of an image. The limit is
-per user — there is no server-wide cap — and it is a sliding window, so budget
-frees up gradually rather than all at once on the minute.
+- `src/wasansApi.js` keeps site responses for 30 seconds and shares in-flight
+  requests. The site already caches these routes for about 60 seconds, so this
+  doesn't make anything staler, and it makes paging, tab switches and
+  autocomplete mostly free.
+- Long lists load one page at a time, so a command answers as soon as its
+  first ten rows are ready. Paging goes all the way down a board instead of
+  stopping at 100 rows.
+- Avatars, run previews, Discord account links, and the trial and category
+  lists are cached for a few minutes.
+- Rendered pages are cached too (`src/render/cache.js`, 64 entries, LRU).
 
-Tunable without a code change:
+There is no per-user rate limit on cards any more. The
+`CARD_RATE_LIMIT_USER*` variables are no longer read.
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `CARD_RATE_LIMIT_USER` | `5` | cards one user may request per window |
-| `CARD_RATE_LIMIT_USER_WINDOW_MS` | `60000` | window length in milliseconds |
-
-Rendered pages are also cached (`src/render/cache.js`, 64 entries, LRU), so
-flipping back and forth through a card's pages re-rasterises nothing. A
-pagination context's rows are snapshotted when the command runs and never
-change, so a cache hit is byte-identical to a fresh render.
+The trial score formula and its thresholds (`src/scoring.js`) are copied from
+the site, because the Pi only checks out `bot/`. When a trial is added or
+rebalanced in `src/lib/trials.ts`, update them here too. A trial missing from
+the table shows no score rather than a wrong one.
 
 [resvg]: https://github.com/yisibl/resvg-js
 
