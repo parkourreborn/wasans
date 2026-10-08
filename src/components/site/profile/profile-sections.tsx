@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { LockIcon, PlayIcon } from "lucide-react"
+import { LockIcon, PlayIcon, SearchIcon, XIcon } from "lucide-react"
 import { apiV2 } from "@/lib/api"
 import { formatCount, formatDate, formatDays, formatDelta, formatScore, formatTime } from "@/lib/format"
 import { rememberRunList, type ComboRun, type RunListResponse, type TrialRun } from "@/lib/moderation"
@@ -14,6 +14,7 @@ import { useComboCategories } from "@/hooks/use-combo-categories"
 import { normalizeRunState, StatusBadge, WrBadge } from "@/components/site/status-badge"
 import { TierLabel } from "@/components/site/tier-label"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   formatAgo,
@@ -391,14 +392,16 @@ type RunKindTab = "trial" | "combo"
 type StateFilter = "all" | "approved" | "pending" | "denied"
 const RUNS_PER_PAGE = 20
 
-function runsUrl(kind: RunKindTab, playerUuid: string, state: StateFilter, page: number, limit = RUNS_PER_PAGE) {
+// `query` matches part of a trial's name (or a combo category's).
+function runsUrl(kind: RunKindTab, playerUuid: string, state: StateFilter, page: number, query: string, limit = RUNS_PER_PAGE) {
   const params = new URLSearchParams({ player_uuid: playerUuid, page: String(page), limit: String(limit) })
   if (state !== "all") params.set("state", state)
+  if (query) params.set(kind === "trial" ? "trial_search" : "category_search", query)
   return `${apiV2(kind === "trial" ? "/submissions" : "/combo-submissions")}?${params.toString()}`
 }
 
-function useRunCount(kind: RunKindTab, playerUuid: string, state: StateFilter) {
-  const { data } = useApi<RunListResponse<unknown>>(runsUrl(kind, playerUuid, state, 1, 1))
+function useRunCount(kind: RunKindTab, playerUuid: string, state: StateFilter, query: string) {
+  const { data } = useApi<RunListResponse<unknown>>(runsUrl(kind, playerUuid, state, 1, query, 1))
   return data?.meta?.count
 }
 
@@ -406,13 +409,26 @@ export function RunsSection({ playerUuid, wrUuids, now }: { playerUuid: string; 
   const [kind, setKind] = useState<RunKindTab>("trial")
   const [state, setState] = useState<StateFilter>("all")
   const [page, setPage] = useState(1)
+  const [search, setSearch] = useState("")
+  const [query, setQuery] = useState("")
   const counts = {
-    all: useRunCount(kind, playerUuid, "all"),
-    approved: useRunCount(kind, playerUuid, "approved"),
-    pending: useRunCount(kind, playerUuid, "pending"),
-    denied: useRunCount(kind, playerUuid, "denied"),
+    all: useRunCount(kind, playerUuid, "all", query),
+    approved: useRunCount(kind, playerUuid, "approved", query),
+    pending: useRunCount(kind, playerUuid, "pending", query),
+    denied: useRunCount(kind, playerUuid, "denied", query),
   }
-  const { data, loading } = useApi<RunListResponse<TrialRun | ComboRun>>(runsUrl(kind, playerUuid, state, page))
+  const { data, loading } = useApi<RunListResponse<TrialRun | ComboRun>>(runsUrl(kind, playerUuid, state, page, query))
+
+  // Filter a beat after the last key rather than on every keystroke.
+  useEffect(() => {
+    const next = search.trim()
+    if (next === query) return
+    const timer = window.setTimeout(() => {
+      setQuery(next)
+      setPage(1)
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [search, query])
   const runs = data?.data ?? []
   const total = data?.meta?.count ?? 0
   const pages = Math.max(1, Math.ceil(total / RUNS_PER_PAGE))
@@ -432,6 +448,8 @@ export function RunsSection({ playerUuid, wrUuids, now }: { playerUuid: string; 
               onChange={(next) => {
                 setKind(next)
                 setPage(1)
+                setSearch("")
+                setQuery("")
               }}
               options={[
                 { value: "trial", label: "Trials" },
@@ -455,6 +473,30 @@ export function RunsSection({ playerUuid, wrUuids, now }: { playerUuid: string; 
           </div>
         }
       />
+      <label className="relative block w-full sm:max-w-xs">
+        <span className="sr-only">{kind === "trial" ? "Search runs by trial" : "Search combos by category"}</span>
+        <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setSearch("")
+          }}
+          placeholder={kind === "trial" ? "Search by trial" : "Search by category"}
+          className="h-9 pl-9 pr-9 [&::-webkit-search-cancel-button]:hidden"
+        />
+        {search ? (
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            aria-label="Clear search"
+            className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+          >
+            <XIcon className="size-3.5" />
+          </button>
+        ) : null}
+      </label>
       <div className="border-t border-line">
         {loading ? (
           <div className="flex flex-col gap-2 py-3">
@@ -463,7 +505,11 @@ export function RunsSection({ playerUuid, wrUuids, now }: { playerUuid: string; 
             ))}
           </div>
         ) : runs.length === 0 ? (
-          <p className="py-6 text-sm text-muted-foreground">No runs here.</p>
+          <p className="py-6 text-sm text-muted-foreground">
+            {query
+              ? `No ${state === "all" ? "" : `${state} `}${kind === "trial" ? "runs on a trial" : "combos in a category"} matching “${query}”.`
+              : "No runs here."}
+          </p>
         ) : (
           <ol className="m-0 list-none p-0">
             {runs.map((run) => {

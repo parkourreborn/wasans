@@ -42,6 +42,8 @@ export async function listSubmissions(
     playerUuid?: string | null
     videoStatus?: string | null
     search?: string
+    // Part of a trial's name only (a player's profile filters by this).
+    trialSearch?: string
     // "asc" serves the review queue oldest first; lists default to newest.
     order?: "asc" | "desc"
   }
@@ -63,6 +65,11 @@ export async function listSubmissions(
   if (options.videoStatus && ["processing", "ready", "failed"].includes(options.videoStatus)) {
     whereConditions.push("submissions.video_status = ?")
     bindValues.push(options.videoStatus)
+  }
+
+  if (options.trialSearch) {
+    whereConditions.push("LOWER(submissions.trial_name) LIKE ?")
+    bindValues.push(`%${options.trialSearch.toLowerCase()}%`)
   }
 
   if (options.search) {

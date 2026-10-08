@@ -24,11 +24,12 @@ export const GET = withV2Context(async (ctx) => {
   const playerUuid = url.searchParams.get("player_uuid")
   const videoStatus = url.searchParams.get("video_status")
   const search = String(url.searchParams.get("search") || "").trim().toLowerCase()
+  const trialSearch = String(url.searchParams.get("trial_search") || "").trim().toLowerCase()
   const order = url.searchParams.get("order") === "asc" ? "asc" : "desc"
 
-  const key = await cacheKey(ctx.cache, "submissions", "list", page, limit, state || "-", playerUuid || "-", videoStatus || "-", search || "-", order)
+  const key = await cacheKey(ctx.cache, "submissions", "list", page, limit, state || "-", playerUuid || "-", videoStatus || "-", search || "-", trialSearch || "-", order)
   const { value } = await readThroughCache(ctx.cache, key, 60, () =>
-    listSubmissions(ctx.db, { limit, offset, state, playerUuid, videoStatus, search: search || undefined, order })
+    listSubmissions(ctx.db, { limit, offset, state, playerUuid, videoStatus, search: search || undefined, trialSearch: trialSearch || undefined, order })
   )
 
   return jsonOk(value.results, { meta: { page, limit, count: value.total }, requestId: ctx.requestId })

@@ -23,6 +23,7 @@ export const GET = withV2Context(async (ctx) => {
   const category = url.searchParams.get("category")
   const playerUuid = url.searchParams.get("player_uuid")
   const search = String(url.searchParams.get("search") || "").trim().toLowerCase()
+  const categorySearch = String(url.searchParams.get("category_search") || "").trim().toLowerCase()
   const order = url.searchParams.get("order") === "asc" ? "asc" : "desc"
 
   const key = await cacheKey(
@@ -35,10 +36,11 @@ export const GET = withV2Context(async (ctx) => {
     category || "-",
     playerUuid || "-",
     search || "-",
+    categorySearch || "-",
     order
   )
   const { value } = await readThroughCache(ctx.cache, key, 60, () =>
-    listComboSubmissions(ctx.db, { limit, offset, state, category, playerUuid, search: search || undefined, order })
+    listComboSubmissions(ctx.db, { limit, offset, state, category, playerUuid, search: search || undefined, categorySearch: categorySearch || undefined, order })
   )
 
   return jsonOk(value.results, { meta: { page, limit, count: value.total }, requestId: ctx.requestId })

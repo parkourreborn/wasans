@@ -46,6 +46,8 @@ export async function listComboSubmissions(
     category?: string | null
     playerUuid?: string | null
     search?: string
+    // Part of a category's name or slug (a player's profile filters by this).
+    categorySearch?: string
     // "asc" serves the review queue oldest first; lists default to newest.
     order?: "asc" | "desc"
   }
@@ -67,6 +69,13 @@ export async function listComboSubmissions(
   if (options.playerUuid) {
     whereConditions.push("combo_submissions.player_uuid = ?")
     bindValues.push(options.playerUuid)
+  }
+
+  if (options.categorySearch) {
+    whereConditions.push(
+      "(LOWER(combo_submissions.category_slug) LIKE ? OR combo_submissions.category_slug IN (SELECT slug FROM combo_categories WHERE LOWER(label) LIKE ?))"
+    )
+    bindValues.push(`%${options.categorySearch.toLowerCase()}%`, `%${options.categorySearch.toLowerCase()}%`)
   }
 
   if (options.search) {

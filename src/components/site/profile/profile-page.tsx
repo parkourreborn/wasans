@@ -25,15 +25,13 @@ import {
   activityFor,
   formatAgo,
   median,
-  MEDALS,
   medalFor,
   recordsFor,
   type HistoryEntry,
-  type Medal,
   type ProfileAnalytics,
   type ProfilePlayer,
 } from "./profile-data"
-import { ActivitySection, CombosSection, GainsSection, MedalSwatch, RecordsSection, RunsSection, TrialsSection, type TrialRow } from "./profile-sections"
+import { ActivitySection, CombosSection, GainsSection, RecordsSection, RunsSection, TrialsSection, type TrialRow } from "./profile-sections"
 
 type PlayerResponse = { data?: { player?: ProfilePlayer | null } }
 type HistoryResponse = { data?: HistoryEntry[] }
@@ -114,7 +112,6 @@ export function ProfilePage({ uuid }: { uuid: string }) {
             <RankScore profile={profile} analytics={stats} total={playersData?.meta?.total} />
             <ChartPanel analytics={stats} loading={analytics.loading} now={now} />
           </div>
-          <MedalStrip rows={trialRows} />
           <div className="grid grid-cols-2 gap-px border-t border-line bg-line lg:grid-cols-4">
             <Tile label="World records" value={String(held.length)} sub={`${allTime} all-time`} highlight={held.length > 0} muted={held.length === 0} />
             <Tile label="Median trial rank" value={medianRank ? `#${formatCount(medianRank)}` : "—"} sub={`across ${pbs.size} ${pbs.size === 1 ? "trial" : "trials"}`} />
@@ -428,40 +425,6 @@ function ChartPanel({ analytics, loading, now }: { analytics?: ProfileAnalytics;
           now={now}
         />
       )}
-    </div>
-  )
-}
-
-function MedalStrip({ rows }: { rows: TrialRow[] }) {
-  const counts: Record<Medal, number> = { wr: 0, platinum: 0, bronze: 0, none: 0, unplayed: 0 }
-  for (const row of rows) counts[row.medal] += 1
-  const cells = [...rows].sort((a, b) => MEDALS[a.medal].order - MEDALS[b.medal].order || b.score - a.score)
-  const summary = (Object.keys(counts) as Medal[]).map((medal) => `${counts[medal]} ${MEDALS[medal].label}`).join(", ")
-
-  return (
-    <div className="flex flex-col gap-3 border-t border-line px-5 py-4 lg:px-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h2 className="label-caps text-[15px] text-muted-foreground">Medals across {rows.length} trials</h2>
-        <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1.5 p-0">
-          {(Object.keys(counts) as Medal[]).map((medal) => (
-            <li key={medal} className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-              <MedalSwatch medal={medal} />
-              {MEDALS[medal].label}
-              <span className={cn("num font-semibold", counts[medal] ? "text-foreground" : "text-subtle-foreground")}>{counts[medal]}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div role="img" aria-label={summary} className="grid gap-[3px]" style={{ gridTemplateColumns: `repeat(${Math.max(cells.length, 1)}, minmax(0, 1fr))` }}>
-        {cells.map((row) => (
-          <span
-            key={row.trial}
-            title={`${row.trial} · ${MEDALS[row.medal].label}${row.pb ? ` · ${formatTime(row.pb.time)}` : ""}`}
-            className="h-5 rounded-[2px] md:h-[22px]"
-            style={{ background: MEDALS[row.medal].fill, boxShadow: MEDALS[row.medal].ring }}
-          />
-        ))}
-      </div>
     </div>
   )
 }
