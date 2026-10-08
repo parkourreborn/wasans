@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { ClipboardCheckIcon, FileTextIcon, ListVideoIcon, LogOutIcon, Settings2Icon, ShieldIcon, UserIcon } from "lucide-react"
+import { ClipboardCheckIcon, ListVideoIcon, LogOutIcon, Settings2Icon, ShieldIcon, UserIcon } from "lucide-react"
 import type { AuthSessionUser } from "@/lib/auth-session"
 import { logout, permissionLabel } from "@/lib/auth-actions"
 import { formatScore } from "@/lib/format"
@@ -128,23 +128,12 @@ export function AccountMenu({
             </DropdownMenuItem>
           </>
         ) : null}
-        {user.permission >= 2 ? (
-          <>
-            <DropdownMenuItem asChild className={itemClass}>
-              <Link href="/logs">
-                <FileTextIcon className="size-4 text-muted-foreground" aria-hidden />
-                Logs
-                {newErrors ? <Dot label="New error" /> : null}
-              </Link>
-            </DropdownMenuItem>
-          </>
-        ) : null}
-        {user.permission >= 4 ? (
+        {user.permission >= 1 ? (
           <DropdownMenuItem asChild className={itemClass}>
             <Link href="/admin">
               <ShieldIcon className="size-4 text-muted-foreground" aria-hidden />
               Admin
-              {pendingCandidates > 0 ? <Dot label={`${pendingCandidates} to review`} /> : null}
+              {newErrors ? <Dot label="New error" /> : pendingCandidates > 0 ? <Dot label={`${pendingCandidates} to review`} /> : null}
             </Link>
           </DropdownMenuItem>
         ) : null}

@@ -20,6 +20,10 @@ const FEATURE_FLAG_DEFAULTS: Record<FeatureFlagKey, boolean> = {
   require_roblox_link: false,
 }
 
+export function getFeatureFlagDefault(key: FeatureFlagKey) {
+  return FEATURE_FLAG_DEFAULTS[key]
+}
+
 export type FeatureFlagRow = {
   key: FeatureFlagKey
   enabled: number

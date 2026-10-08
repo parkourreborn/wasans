@@ -1,4 +1,4 @@
-import { buildAuditLogStatement } from "@/lib/server/audit"
+import { buildAuditLogStatement, insertAuditLog } from "@/lib/server/audit"
 import { jsonOk, requireV2Owner, withV2Context } from "@/lib/server/v2/http"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 
@@ -20,6 +20,7 @@ export const POST = withV2Context(async (ctx) => {
 
   const duplicateUuids = (duplicates.results || []).map((row) => row.uuid)
   if (duplicateUuids.length === 0) {
+    await insertAuditLog(ctx.db, "duplicates_removed", "maintenance", null, { actor, details: { deleted_count: 0 } })
     return jsonOk({ deletedCount: 0, deletedSubmissions: [] }, { requestId: ctx.requestId })
   }
 
@@ -36,6 +37,10 @@ export const POST = withV2Context(async (ctx) => {
         details: { reason: "duplicate_removal" },
       })
     ),
+    buildAuditLogStatement(ctx.db, "duplicates_removed", "maintenance", null, {
+      actor,
+      details: { deleted_count: duplicateUuids.length },
+    }),
   ])
 
   await bumpCacheGeneration(ctx.cache)

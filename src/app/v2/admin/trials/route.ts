@@ -1,22 +1,21 @@
 import { jsonError, validationError } from "@/lib/server/http"
 import { insertAuditLog } from "@/lib/server/audit"
-import {
-  TrialLifecycleError,
-  createTrial,
-  listTrialLifecycles,
-} from "@/lib/server/repositories/trial-repository"
+import { listAdminTrials } from "@/lib/server/repositories/admin-repository"
+import { TrialLifecycleError, createTrial } from "@/lib/server/repositories/trial-repository"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
-import { jsonOk, requireV2Moderator, withV2Context } from "@/lib/server/v2/http"
+import { jsonOk, requireV2Moderator, requireV2Owner, withV2Context } from "@/lib/server/v2/http"
 
 export const GET = withV2Context(async (ctx) => {
   await requireV2Moderator(ctx)
 
-  const results = await listTrialLifecycles(ctx.db)
+  const results = await listAdminTrials(ctx.db)
   return jsonOk(results, { requestId: ctx.requestId })
 })
 
+// Changing trials moves every score, so only owners can (moderators can
+// still read the list above).
 export const POST = withV2Context(async (ctx) => {
-  const user = await requireV2Moderator(ctx)
+  const user = await requireV2Owner(ctx)
 
   const body = await ctx.request.json().catch(() => null) as { name?: unknown } | null
   const name = typeof body?.name === "string" ? body.name.trim() : ""

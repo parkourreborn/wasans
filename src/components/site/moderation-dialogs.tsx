@@ -378,6 +378,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   busy = false,
+  tone = "destructive",
   onConfirm,
 }: {
   open: boolean
@@ -386,6 +387,8 @@ export function ConfirmDialog({
   description: React.ReactNode
   confirmLabel: string
   busy?: boolean
+  // "default" for confirmations that aren't destructive (running a repair).
+  tone?: "destructive" | "default"
   onConfirm: () => void
 }) {
   return (
@@ -399,7 +402,7 @@ export function ConfirmDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button type="button" variant="destructive" onClick={onConfirm} disabled={busy} className="sm:min-w-28">
+          <Button type="button" variant={tone} onClick={onConfirm} disabled={busy} className="sm:min-w-28">
             {busy ? <Spinner className="size-4" /> : null}
             {confirmLabel}
           </Button>

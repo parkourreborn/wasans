@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
       { source: "/combos/new", destination: "/submit?type=combo", permanent: false },
       // Compare and the calculator are one page now, called Calculator.
       { source: "/compare", destination: "/calculator", permanent: false },
+      { source: "/logs", destination: "/admin/logs", permanent: false },
       // The account that used to be stored as player "0" (migration 0021).
       { source: "/players/0", destination: "/players/54779346-1692-4dee-bfaf-69ed84464e63", permanent: true },
     ];

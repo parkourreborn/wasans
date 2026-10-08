@@ -65,7 +65,7 @@ type ImproverRow = {
 // "Improved over the last N days" = current score vs. their earliest
 // score_history row at/after the cutoff. A player with no score-changing
 // event in the window is correctly excluded (score_change would be 0).
-async function getBiggestImprovers(db: D1Database, days: number, limit = 5) {
+export async function getBiggestImprovers(db: D1Database, days: number, limit = 5) {
   const cutoff = Math.floor(Date.now() / 1000) - days * 86400
 
   const { results } = await db

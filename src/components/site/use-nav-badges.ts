@@ -21,7 +21,7 @@ function readStorage(key: string) {
   }
 }
 
-// The /prizes and /logs pages write these keys and fire these events when
+// The /prizes and /admin/logs pages write these keys and fire these events when
 // they mark things as seen; other tabs hear about it through `storage`.
 function subscribeToSeenKeys(listener: () => void) {
   window.addEventListener("storage", listener)

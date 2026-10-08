@@ -58,7 +58,7 @@ type GiveawayWithDetails = Giveaway & { winners: GiveawayWinner[]; entry_count: 
 type GiveawaysResponse = { data?: Giveaway[] }
 type GiveawayDetailResponse = { data?: { giveaway: Giveaway; winners: GiveawayWinner[]; entry_count: number; viewer_has_joined: boolean } }
 
-// Mirrors the "unseen error" badge on /logs (see site/use-nav-badges.ts): the
+// Mirrors the "unseen error" badge on /admin/logs (see site/use-nav-badges.ts): the
 // sidebar polls the same active prizes/giveaways endpoints to decide whether
 // to show the dot, and this key is what marks them as seen once visited.
 const lastSeenPrizeStorageKey = "wasans:last-seen-prize-at"
