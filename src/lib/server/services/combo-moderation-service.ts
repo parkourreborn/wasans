@@ -101,8 +101,16 @@ export async function patchComboSubmission(
     // moderation response shouldn't wait on.
     context.ctx.waitUntil((async () => {
       try {
+        // Same ordering and deactivated-account filter as the combo
+        // leaderboard, so "#1" here always matches what the site shows.
         const rank1 = await env.wasans.prepare(
-          `SELECT player_uuid FROM combo_pbs WHERE category_slug = ? ORDER BY combo_count DESC, date ASC, uuid ASC LIMIT 1`
+          `SELECT combo_pbs.player_uuid
+           FROM combo_pbs
+           JOIN players ON players.uuid = combo_pbs.player_uuid
+           WHERE combo_pbs.category_slug = ?
+             AND COALESCE(players.account_status, 'active') != 'deactivated'
+           ORDER BY combo_pbs.combo_count DESC, combo_pbs.date ASC, players.player_name ASC
+           LIMIT 1`
         ).bind(submission.category_slug).first<{ player_uuid: string }>()
 
         if (rank1?.player_uuid === submission.player_uuid) {
