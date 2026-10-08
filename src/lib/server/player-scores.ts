@@ -23,6 +23,11 @@ type PlayerRow = {
 
 type DiscordUpdateMode = "none" | "changed" | "all"
 
+// D1 caps a single query at 100 bound parameters, and the fallback
+// submissions read below binds every uuid plus 3 timestamps, so larger
+// player lists are refreshed in chunks of this size.
+const MAX_PLAYERS_PER_REFRESH = 90
+
 // Per-player exception to the batch's default historyReason/submission --
 // used when one refreshPlayerScores call covers players whose score moved
 // for different reasons (e.g. a WR change: the new record holder gets
@@ -63,6 +68,14 @@ export async function refreshPlayerScores(
 
   if (!uniquePlayerUuids.length) {
     return [] as Array<{ uuid: string; score: number }>
+  }
+
+  if (uniquePlayerUuids.length > MAX_PLAYERS_PER_REFRESH) {
+    const refreshedPlayers: Array<{ uuid: string; score: number }> = []
+    for (let i = 0; i < uniquePlayerUuids.length; i += MAX_PLAYERS_PER_REFRESH) {
+      refreshedPlayers.push(...await refreshPlayerScores(db, uniquePlayerUuids.slice(i, i + MAX_PLAYERS_PER_REFRESH), options))
+    }
+    return refreshedPlayers
   }
 
   const now = Math.floor(Date.now() / 1000)
@@ -218,7 +231,7 @@ export async function refreshAllPlayerScores(
   db: D1Database,
   options: { discordUpdateMode?: Extract<DiscordUpdateMode, "none" | "all"> } = {}
 ) {
-  const BATCH_SIZE = 100
+  const BATCH_SIZE = MAX_PLAYERS_PER_REFRESH
   let offset = 0
   let hasMore = true
 
