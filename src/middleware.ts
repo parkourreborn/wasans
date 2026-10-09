@@ -1,18 +1,30 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const allowedDomains = ["tully.sh", "parkourreborn.com"]
+// The exact origins allowed to make credentialed cross-origin requests to
+// the v2 API. Matched as whole hostnames, never as a domain suffix: a suffix
+// test like `.tully.sh` trusts every sibling subdomain, including
+// assets.wasans.tully.sh — the public R2 bucket, which can serve
+// attacker-uploaded HTML — and since those hosts are same-site, the
+// SameSite=Lax auth cookie is sent with their requests too, so the one thing
+// that would otherwise blunt a reflected-credentials policy doesn't apply.
+// The site itself calls /v2 same-origin (see src/lib/api.ts), so this list
+// only needs the genuine cross-origin callers; add a host here deliberately.
+const allowedHosts = new Set([
+  "wasans.tully.sh",
+  "parkourreborn.com",
+  "www.parkourreborn.com",
+])
 
 function isAllowedOrigin(origin: string) {
   try {
     const { hostname, protocol } = new URL(origin)
 
-    if (protocol !== "https:" && hostname !== "localhost" && hostname !== "127.0.0.1") {
-      return false
+    // localhost (any port, http included) is for local development only.
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return true
     }
 
-    return allowedDomains.some(
-      (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
-    )
+    return protocol === "https:" && allowedHosts.has(hostname)
   } catch {
     return false
   }

@@ -1,9 +1,13 @@
-// PoC (local only): public list endpoints build their KV cache key from raw
-// query parameters (e.g. ?search=), with no rate limit. Every distinct value
-// is a cache miss: one D1 query plus one KV write per anonymous request.
-// readThroughCache awaits kv.put with no try/catch, so once KV writes start
-// failing (the free plan allows 1,000/day) every cache miss on the site
-// becomes a 500.
+// Regression guard for F-02 (fixed on this branch). Two properties:
+//
+//  1. readThroughCache is best-effort — a failing KV write (quota/outage) now
+//     degrades to an uncached response instead of throwing a 500. Before the
+//     fix this threw, which is what turned cache-key amplification into a DoS.
+//  2. The raw helper still writes one entry per distinct key. That is exactly
+//     why the list routes must NOT pass free-text search terms through it:
+//     after the fix, GET /v2/submissions and /v2/combo-submissions bypass the
+//     cache entirely when a search param is present (see those routes), and a
+//     per-IP enforcePublicReadLimit caps the request volume on top.
 //
 // Run: node --conditions=react-server --import tsx --test poc/cache-amplification.test.ts
 import test from "node:test"
@@ -26,25 +30,24 @@ class FakeKV {
   }
 }
 
-// Mirrors GET /v2/combo-submissions: the search term goes straight into the key.
-async function listComboSubmissions(kv: FakeKV, search: string, dbQueries: { n: number }) {
-  const key = await cacheKey(kv as unknown as KVNamespace, "combo-submissions", "list", 1, 50, "-", "-", "-", search || "-", "-", "desc")
-  return readThroughCache(kv as unknown as KVNamespace, key, 60, async () => {
-    dbQueries.n += 1
-    return { results: [], total: 0 }
-  })
-}
-
-test("each unique ?search= value costs one D1 query and one KV write", async () => {
-  const kv = new FakeKV()
-  const db = { n: 0 }
-  for (let i = 0; i < 500; i++) await listComboSubmissions(kv, `x${i}`, db)
-  assert.equal(db.n, 500)
-  assert.equal(kv.puts, 500)
-})
-
-test("once KV writes fail, ordinary cache misses throw (served as 500)", async () => {
+test("a failing KV write degrades to an uncached response instead of throwing", async () => {
   const kv = new FakeKV()
   kv.failPutsAfter = 0
-  await assert.rejects(listComboSubmissions(kv, "", { n: 0 }), /limit exceeded/)
+  const key = await cacheKey(kv as unknown as KVNamespace, "x")
+  let computed = 0
+  const result = await readThroughCache(kv as unknown as KVNamespace, key, 60, async () => {
+    computed += 1
+    return { ok: true }
+  })
+  assert.deepEqual(result, { value: { ok: true }, hit: false })
+  assert.equal(computed, 1)
+})
+
+test("the helper writes one entry per distinct key (why routes must not cache free-text)", async () => {
+  const kv = new FakeKV()
+  for (let i = 0; i < 50; i++) {
+    const key = await cacheKey(kv as unknown as KVNamespace, "list", `term-${i}`)
+    await readThroughCache(kv as unknown as KVNamespace, key, 60, async () => ({ i }))
+  }
+  assert.equal(kv.puts, 50)
 })

@@ -4,7 +4,7 @@ import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-reposit
 import { getSubmissionBan } from "@/lib/server/repositories/submission-ban-repository"
 import { createSubmissions } from "@/lib/server/services/submission-write-service"
 import { isMissingRequiredRobloxLink, robloxLinkRequiredMessage } from "@/lib/server/services/linked-accounts-service"
-import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
+import { enforcePublicReadLimit, enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import {
   buildRequestHash,
   lookupIdempotentResponse,
@@ -18,6 +18,12 @@ import { bumpCacheGeneration, cacheKey, readThroughCache } from "@/lib/server/v2
 import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 
 export const GET = withV2Context(async (ctx) => {
+  const limited = await enforcePublicReadLimit(ctx.db, ctx.request, "v2:submissions:list", {
+    actorUuid: ctx.auth?.uuid,
+    requestId: ctx.requestId,
+  })
+  if (limited) return limited
+
   const url = new URL(ctx.request.url)
   const { page, limit, offset } = parsePagination(url, { page: 1, limit: 50, maxLimit: 100 })
   const state = url.searchParams.get("state")
@@ -27,10 +33,21 @@ export const GET = withV2Context(async (ctx) => {
   const trialSearch = String(url.searchParams.get("trial_search") || "").trim().toLowerCase()
   const order = url.searchParams.get("order") === "asc" ? "asc" : "desc"
 
-  const key = await cacheKey(ctx.cache, "submissions", "list", page, limit, state || "-", playerUuid || "-", videoStatus || "-", search || "-", trialSearch || "-", order)
-  const { value } = await readThroughCache(ctx.cache, key, 60, () =>
+  const query = () =>
     listSubmissions(ctx.db, { limit, offset, state, playerUuid, videoStatus, search: search || undefined, trialSearch: trialSearch || undefined, order })
-  )
+
+  // Free-text search skips the KV cache: each distinct term is a near-certain
+  // cache miss, so caching one is a KV write for an entry rarely read twice —
+  // the amplification lever in F-02. The bounded filters (state / player /
+  // video_status / page) are still cached.
+  const value = (search || trialSearch)
+    ? await query()
+    : (await readThroughCache(
+        ctx.cache,
+        await cacheKey(ctx.cache, "submissions", "list", page, limit, state || "-", playerUuid || "-", videoStatus || "-", "-", "-", order),
+        60,
+        query
+      )).value
 
   return jsonOk(value.results, { meta: { page, limit, count: value.total }, requestId: ctx.requestId })
 })

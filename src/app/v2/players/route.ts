@@ -1,9 +1,16 @@
 import { parsePagination } from "@/lib/server/http"
 import { listPlayers } from "@/lib/server/repositories/player-repository"
+import { enforcePublicReadLimit } from "@/lib/server/services/rate-limit-service"
 import { cacheKey, readThroughCache } from "@/lib/server/v2/cache"
 import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 
 export const GET = withV2Context(async (ctx) => {
+  const limited = await enforcePublicReadLimit(ctx.db, ctx.request, "v2:players:list", {
+    actorUuid: ctx.auth?.uuid,
+    requestId: ctx.requestId,
+  })
+  if (limited) return limited
+
   const url = new URL(ctx.request.url)
   const { limit, offset, page } = parsePagination(url, { page: 1, limit: 50, maxLimit: 200 })
   const search = String(url.searchParams.get("search") || "").trim()

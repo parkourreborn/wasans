@@ -4,7 +4,7 @@ import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-reposit
 import { getSubmissionBan } from "@/lib/server/repositories/submission-ban-repository"
 import { createComboSubmissionFromRequest, type IncomingComboSubmission } from "@/lib/server/services/combo-submission-write-service"
 import { isMissingRequiredRobloxLink, robloxLinkRequiredMessage } from "@/lib/server/services/linked-accounts-service"
-import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
+import { enforcePublicReadLimit, enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import {
   buildRequestHash,
   lookupIdempotentResponse,
@@ -17,6 +17,12 @@ import { bumpCacheGeneration, cacheKey, readThroughCache } from "@/lib/server/v2
 import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 
 export const GET = withV2Context(async (ctx) => {
+  const limited = await enforcePublicReadLimit(ctx.db, ctx.request, "v2:combo-submissions:list", {
+    actorUuid: ctx.auth?.uuid,
+    requestId: ctx.requestId,
+  })
+  if (limited) return limited
+
   const url = new URL(ctx.request.url)
   const { page, limit, offset } = parsePagination(url, { page: 1, limit: 50, maxLimit: 100 })
   const state = url.searchParams.get("state")
@@ -26,22 +32,21 @@ export const GET = withV2Context(async (ctx) => {
   const categorySearch = String(url.searchParams.get("category_search") || "").trim().toLowerCase()
   const order = url.searchParams.get("order") === "asc" ? "asc" : "desc"
 
-  const key = await cacheKey(
-    ctx.cache,
-    "combo-submissions",
-    "list",
-    page,
-    limit,
-    state || "-",
-    category || "-",
-    playerUuid || "-",
-    search || "-",
-    categorySearch || "-",
-    order
-  )
-  const { value } = await readThroughCache(ctx.cache, key, 60, () =>
+  const query = () =>
     listComboSubmissions(ctx.db, { limit, offset, state, category, playerUuid, search: search || undefined, categorySearch: categorySearch || undefined, order })
-  )
+
+  // Free-text search (and category search) skip the KV cache: each distinct
+  // term is a near-certain cache miss, so caching one is a KV write for an
+  // entry rarely read twice — the amplification lever in F-02. The bounded
+  // filters (state / category / player / page) are still cached.
+  const value = (search || categorySearch)
+    ? await query()
+    : (await readThroughCache(
+        ctx.cache,
+        await cacheKey(ctx.cache, "combo-submissions", "list", page, limit, state || "-", category || "-", playerUuid || "-", "-", "-", order),
+        60,
+        query
+      )).value
 
   return jsonOk(value.results, { meta: { page, limit, count: value.total }, requestId: ctx.requestId })
 })

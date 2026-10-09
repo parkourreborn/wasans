@@ -1,10 +1,17 @@
 import { jsonError, parsePagination } from "@/lib/server/http"
 import { getTrialLeaderboardEntry, listTrialLeaderboard } from "@/lib/server/repositories/leaderboard-repository"
 import { trials } from "@/lib/trials"
+import { enforcePublicReadLimit } from "@/lib/server/services/rate-limit-service"
 import { cacheKey, readThroughCache } from "@/lib/server/v2/cache"
 import { jsonOk, withV2Params } from "@/lib/server/v2/http"
 
 export const GET = withV2Params<{ trial: string }>(async (ctx, { trial }) => {
+  const limited = await enforcePublicReadLimit(ctx.db, ctx.request, "v2:leaderboards:trial", {
+    actorUuid: ctx.auth?.uuid,
+    requestId: ctx.requestId,
+  })
+  if (limited) return limited
+
   const trialName = trial.trim()
   if (!trials.includes(trialName as (typeof trials)[number])) {
     return jsonError("Invalid trial", 400, { code: "validation_error", requestId: ctx.requestId })
