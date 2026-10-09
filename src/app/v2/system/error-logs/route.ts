@@ -47,7 +47,7 @@ export const POST = withV2Context(async (ctx) => {
   }
 
   try {
-    const user = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request).catch(() => null) : null
+    const user = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request, { executionCtx: ctx.ctx }).catch(() => null) : null
     await insertSiteErrorLog(ctx.db, {
       source: "client",
       message: textValue(body.message, 1000) || "Unknown client error",

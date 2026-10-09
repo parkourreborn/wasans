@@ -32,7 +32,7 @@ export const GET = withV2Context(async (ctx) => {
     return jsonOk({ user: null, submission_ban: null, roblox_link_required: false }, { requestId: ctx.requestId, headers: noStore })
   }
 
-  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request)
+  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request, { executionCtx: ctx.ctx })
   const [ban, robloxLinkRequired] = user
     ? await Promise.all([getSubmissionBan(ctx.db, user.uuid), isMissingRequiredRobloxLink(ctx.db, user.uuid)])
     : [null, false]

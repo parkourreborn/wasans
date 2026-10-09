@@ -105,19 +105,6 @@ export async function setPlayerPermission(db: D1Database, uuid: string, permissi
   await db.prepare(`UPDATE players SET permission = ? WHERE uuid = ?`).bind(permission, uuid).run()
 }
 
-export async function getPlayerRank(db: D1Database, score: number) {
-  const rank = await db.prepare(
-    `SELECT COUNT(*) + 1 AS rank
-     FROM players
-     WHERE score > ?
-       AND COALESCE(account_status, 'active') != 'deactivated'`
-  )
-    .bind(score)
-    .first<{ rank: number }>()
-
-  return Number(rank?.rank ?? 1)
-}
-
 // The player's row number in the leaderboard ordering (score, then name),
 // which is where "jump to me" has to page to. Unlike getPlayerRank it never
 // ties.
@@ -132,6 +119,23 @@ export async function getPlayerPosition(db: D1Database, score: number, playerNam
     .first<{ position: number }>()
 
   return Number(row?.position ?? 1)
+}
+
+// rank (shared on ties) and position (the tie-free row number) in one query
+// rather than two round trips, since the profile always needs both and both
+// are counts over the same filtered players table.
+export async function getPlayerRankAndPosition(db: D1Database, score: number, playerName: string) {
+  const row = await db.prepare(
+    `SELECT
+       SUM(CASE WHEN score > ? THEN 1 ELSE 0 END) + 1 AS rank,
+       SUM(CASE WHEN score > ? OR (score = ? AND player_name < ?) THEN 1 ELSE 0 END) + 1 AS position
+     FROM players
+     WHERE COALESCE(account_status, 'active') != 'deactivated'`
+  )
+    .bind(score, score, score, playerName)
+    .first<{ rank: number; position: number }>()
+
+  return { rank: Number(row?.rank ?? 1), position: Number(row?.position ?? 1) }
 }
 
 // Each PB with where it stands on its trial (rank among active players'

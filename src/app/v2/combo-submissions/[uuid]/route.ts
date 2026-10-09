@@ -83,7 +83,7 @@ export const DELETE = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
     return jsonError("Authentication is required", 401, { code: "unauthorized", requestId: ctx.requestId })
   }
 
-  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request)
+  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request, { executionCtx: ctx.ctx })
   if (!user) {
     return jsonError("Authentication is required", 401, { code: "unauthorized", requestId: ctx.requestId })
   }

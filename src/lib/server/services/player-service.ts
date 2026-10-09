@@ -2,9 +2,8 @@ import "server-only"
 import {
   getPlayerByUuid,
   getPlayerPbs,
-  getPlayerPosition,
   getPlayerPrizeWins,
-  getPlayerRank,
+  getPlayerRankAndPosition,
   getPlayerSubmissions,
 } from "@/lib/server/repositories/player-repository"
 import { listComboPbsForPlayer } from "@/lib/server/repositories/combo-submission-repository"
@@ -26,9 +25,8 @@ export async function buildPlayerDetail(
     return null
   }
 
-  const [rank, position, pbs, comboPbs, recentSubmissions, prizes] = await Promise.all([
-    getPlayerRank(db, Number(player.score || 0)),
-    getPlayerPosition(db, Number(player.score || 0), String(player.player_name)),
+  const [rankAndPosition, pbs, comboPbs, recentSubmissions, prizes] = await Promise.all([
+    getPlayerRankAndPosition(db, Number(player.score || 0), String(player.player_name)),
     options.includePbs ? getPlayerPbs(db, uuid) : Promise.resolve(undefined),
     // combo_pbs is the combo analog of pbs: one row per category the player has
     // an approved submission in, already ordered by the category sort order.
@@ -41,8 +39,8 @@ export async function buildPlayerDetail(
 
   return {
     ...player,
-    rank,
-    position,
+    rank: rankAndPosition.rank,
+    position: rankAndPosition.position,
     pbs,
     combo_pbs: comboPbs,
     recent_submissions: recentSubmissions,

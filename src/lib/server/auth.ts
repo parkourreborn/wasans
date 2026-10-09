@@ -25,7 +25,7 @@ export async function loadAuthUserByUuid(
   db: D1Database,
   playerUuid: string,
   request: Request,
-  options?: { readFromPrimary?: boolean }
+  options?: { readFromPrimary?: boolean; executionCtx?: { waitUntil(promise: Promise<unknown>): void } }
 ) {
   const reader = options?.readFromPrimary ? db.withSession("first-primary") : db
 
@@ -53,7 +53,16 @@ export async function loadAuthUserByUuid(
     .first<AuthUser>()
 
   if (user) {
-    await trackPlayerIp(db, playerUuid, request)
+    // IP tracking is a best-effort side effect, not part of the response. When
+    // the caller hands us the request's execution context, run it in the
+    // background so it never adds latency to the response; otherwise fall back
+    // to awaiting it (e.g. unit tests, or callers without a context).
+    const tracking = trackPlayerIp(db, playerUuid, request)
+    if (options?.executionCtx) {
+      options.executionCtx.waitUntil(tracking.catch((error) => console.error("trackPlayerIp failed:", error)))
+    } else {
+      await tracking
+    }
   }
 
   return user

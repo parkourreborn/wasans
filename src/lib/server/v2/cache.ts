@@ -14,15 +14,44 @@ import "server-only"
 const GENERATION_KEY = "v2:cachegen"
 const MIN_TTL_SECONDS = 60
 
+// The generation counter was read from KV on every cached read (via cacheKey)
+// AND again inside bumpCacheGeneration on every write. Memoize it per isolate
+// for a few seconds so a burst of requests on one isolate shares a single KV
+// read. Workers keeps module state alive across requests on the same isolate,
+// so this is safe; the cost is that a write's invalidation can take up to this
+// long to be seen by *other* isolates, which is well under the 60s floor the
+// cache entries already live by.
+const GENERATION_MEMO_MS = 5_000
+let memoizedGeneration: { value: number; readAt: number } | null = null
+
 export async function getCacheGeneration(kv: KVNamespace): Promise<number> {
-  const value = await kv.get(GENERATION_KEY)
-  return value ? Number(value) || 0 : 0
+  const now = Date.now()
+  if (memoizedGeneration && now - memoizedGeneration.readAt < GENERATION_MEMO_MS) {
+    return memoizedGeneration.value
+  }
+
+  try {
+    const raw = await kv.get(GENERATION_KEY)
+    const value = raw ? Number(raw) || 0 : 0
+    memoizedGeneration = { value, readAt: now }
+    return value
+  } catch (error) {
+    // Keep serving the last known generation on a KV read failure rather than
+    // snapping to 0, which would momentarily resurrect a whole generation of
+    // orphaned entries.
+    console.error("Failed to read cache generation:", error)
+    return memoizedGeneration?.value ?? 0
+  }
 }
 
 export async function bumpCacheGeneration(kv: KVNamespace): Promise<void> {
   try {
     const current = await getCacheGeneration(kv)
-    await kv.put(GENERATION_KEY, String(current + 1))
+    const next = current + 1
+    await kv.put(GENERATION_KEY, String(next))
+    // Reflect our own bump immediately so this isolate reads the new
+    // generation for the rest of the request instead of a memoized stale one.
+    memoizedGeneration = { value: next, readAt: Date.now() }
   } catch (error) {
     // A failed bump only means some cached reads stay live until their TTL
     // (at most 60s) instead of being orphaned immediately. That is far

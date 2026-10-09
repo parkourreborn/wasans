@@ -41,6 +41,11 @@ type RefreshPlayerScoreOptions = {
   historyTrialName?: string | null
   historySubmissionUuid?: string | null
   historyOverrides?: Map<string, HistoryOverride>
+  // Internal: the WR map and counted-trial total are identical for every
+  // player in one refresh, so when a run is split into chunks the parent
+  // fetches them once and hands them to each chunk instead of each chunk
+  // re-reading the whole wrs table. Not part of the public contract.
+  _shared?: { wrs: Map<TrialName, number>; trialCount: number }
 }
 
 type PlayerScoreRow = {
@@ -71,9 +76,24 @@ export async function refreshPlayerScores(
   }
 
   if (uniquePlayerUuids.length > MAX_PLAYERS_PER_REFRESH) {
+    // Fetch the run-wide reads (the WR table and the counted-trial total)
+    // once here and share them with every chunk, instead of each chunk
+    // re-reading the whole wrs table and recounting trials.
+    const sharedNow = Math.floor(Date.now() / 1000)
+    const shared = options._shared ?? await (async () => {
+      const [wrResult, trialCount] = await Promise.all([
+        db.prepare(`SELECT trial_name, time FROM wrs`).all<WorldRecordRow>(),
+        getCountedTrialCount(db, sharedNow),
+      ])
+      return {
+        wrs: new Map((wrResult.results || []).map((row) => [row.trial_name, Number(row.time)])),
+        trialCount,
+      }
+    })()
+
     const refreshedPlayers: Array<{ uuid: string; score: number; oldScore: number }> = []
     for (let i = 0; i < uniquePlayerUuids.length; i += MAX_PLAYERS_PER_REFRESH) {
-      refreshedPlayers.push(...await refreshPlayerScores(db, uniquePlayerUuids.slice(i, i + MAX_PLAYERS_PER_REFRESH), options))
+      refreshedPlayers.push(...await refreshPlayerScores(db, uniquePlayerUuids.slice(i, i + MAX_PLAYERS_PER_REFRESH), { ...options, _shared: shared }))
     }
     return refreshedPlayers
   }
@@ -81,33 +101,56 @@ export async function refreshPlayerScores(
   const now = Math.floor(Date.now() / 1000)
   const placeholders = uniquePlayerUuids.map(() => "?").join(",")
   const fallbackValidSql = validSubmissionSql("submissions", "t")
-  // The 4 raw reads below are independent of each other, so they go in one
-  // D1 batch round trip; trialCount goes through trial-repository's own
-  // query, so it's fired concurrently alongside the batch instead.
-  const [[wrResult, pbsResult, fallbackResult, currentScoresResult], trialCount] = await Promise.all([
-    db.batch([
-      db.prepare(`SELECT trial_name, time FROM wrs`),
-      db.prepare(`SELECT player_uuid, trial_name, time FROM pbs WHERE player_uuid IN (${placeholders})`).bind(...uniquePlayerUuids),
-      db.prepare(
-        `SELECT submissions.player_uuid AS player_uuid, submissions.trial_name AS trial_name, MIN(submissions.time) as time
-         FROM submissions
-         JOIN trials AS t ON t.name = submissions.trial_name
-         WHERE submissions.player_uuid IN (${placeholders})
-           AND submissions.state = 'approved'
-           AND ${fallbackValidSql}
-         GROUP BY submissions.player_uuid, submissions.trial_name`
-      ).bind(...uniquePlayerUuids, now, now, now),
-      db.prepare(`SELECT uuid, score, player_name FROM players WHERE uuid IN (${placeholders})`).bind(...uniquePlayerUuids),
-    ]),
-    getCountedTrialCount(db, now),
-  ])
 
-  const wrRows = (wrResult.results || []) as WorldRecordRow[]
+  // The player-specific reads (PBs, the approved-submission fallback, and
+  // current scores) always run. The WR table and counted-trial total are the
+  // same for every player in the run, so a chunked parent passes them in via
+  // _shared and we skip re-reading them here.
+  const pbsStatement = db
+    .prepare(`SELECT player_uuid, trial_name, time FROM pbs WHERE player_uuid IN (${placeholders})`)
+    .bind(...uniquePlayerUuids)
+  const fallbackStatement = db
+    .prepare(
+      `SELECT submissions.player_uuid AS player_uuid, submissions.trial_name AS trial_name, MIN(submissions.time) as time
+       FROM submissions
+       JOIN trials AS t ON t.name = submissions.trial_name
+       WHERE submissions.player_uuid IN (${placeholders})
+         AND submissions.state = 'approved'
+         AND ${fallbackValidSql}
+       GROUP BY submissions.player_uuid, submissions.trial_name`
+    )
+    .bind(...uniquePlayerUuids, now, now, now)
+  const currentScoresStatement = db
+    .prepare(`SELECT uuid, score, player_name FROM players WHERE uuid IN (${placeholders})`)
+    .bind(...uniquePlayerUuids)
+
+  let wrs: Map<TrialName, number>
+  let trialCount: number
+  let pbsResult: D1Result
+  let fallbackResult: D1Result
+  let currentScoresResult: D1Result
+
+  if (options._shared) {
+    wrs = options._shared.wrs
+    trialCount = options._shared.trialCount
+    const batched = await db.batch([pbsStatement, fallbackStatement, currentScoresStatement])
+    ;[pbsResult, fallbackResult, currentScoresResult] = batched
+  } else {
+    // All four reads are independent, so they go in one D1 batch round trip;
+    // the counted-trial total goes through trial-repository's own query, so
+    // it's fired concurrently alongside the batch.
+    const [batched, countedTrials] = await Promise.all([
+      db.batch([db.prepare(`SELECT trial_name, time FROM wrs`), pbsStatement, fallbackStatement, currentScoresStatement]),
+      getCountedTrialCount(db, now),
+    ])
+    wrs = new Map(((batched[0].results || []) as WorldRecordRow[]).map((row) => [row.trial_name, Number(row.time)]))
+    trialCount = countedTrials
+    ;[, pbsResult, fallbackResult, currentScoresResult] = batched
+  }
+
   const pbsRows = (pbsResult.results || []) as BestSubmissionRowWithPlayer[]
   const fallbackRows = (fallbackResult.results || []) as BestSubmissionRowWithPlayer[]
   const currentScoresRows = (currentScoresResult.results || []) as PlayerScoreRow[]
-
-  const wrs = new Map(wrRows.map((row) => [row.trial_name, Number(row.time)]))
   const pbsByPlayer = new Map<string, BestSubmissionRow[]>()
   const fallbackByPlayer = new Map<string, BestSubmissionRow[]>()
   const currentScoresByPlayer = new Map(currentScoresRows.map((row) => [row.uuid, Number(row.score)]))

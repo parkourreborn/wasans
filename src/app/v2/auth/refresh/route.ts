@@ -95,7 +95,7 @@ export const POST = withV2Context(async (ctx) => {
 
   // Read past the replicas: a player who is still perfectly signed in must
   // never be turned away because a replica hasn't caught up with their row.
-  const user = await loadAuthUserByUuid(ctx.db, result.playerUuid, ctx.request, { readFromPrimary: true })
+  const user = await loadAuthUserByUuid(ctx.db, result.playerUuid, ctx.request, { readFromPrimary: true, executionCtx: ctx.ctx })
   if (!user) {
     await recordRefreshFailure(ctx, "account_unavailable", result.playerUuid)
 

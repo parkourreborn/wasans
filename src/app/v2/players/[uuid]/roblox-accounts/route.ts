@@ -14,7 +14,7 @@ export const GET = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   }
 
   if (!isBotApiRequest(ctx.request, ctx.env)) {
-    const viewer = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request) : null
+    const viewer = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request, { executionCtx: ctx.ctx }) : null
     if (!viewer) {
       return jsonError("Authentication required", 401, { code: "unauthorized", requestId: ctx.requestId })
     }

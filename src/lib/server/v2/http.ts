@@ -46,7 +46,7 @@ export async function requireV2User(ctx: V2Context): Promise<AuthUser> {
     throw new ApiError("Authentication required", 401, "unauthorized")
   }
 
-  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request)
+  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request, { executionCtx: ctx.ctx })
   if (!user) {
     throw new ApiError("Authentication required", 401, "unauthorized")
   }

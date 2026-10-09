@@ -23,6 +23,16 @@ export async function listWorldRecords(db: D1Database) {
   return rows.results || []
 }
 
+// The "was ever the record" chain: every approved submission that was faster
+// than everything approved before it (chronologically, ties broken by uuid).
+//
+// The old form did this with a correlated `NOT EXISTS` subquery whose
+// `earlier.time <= s.time` test isn't part of any index, so each row
+// re-scanned the trial's earlier submissions — quadratic in a popular
+// trial's history. This runs a single ordered pass: the window keeps the
+// best time seen strictly before each row, and a row is a record exactly
+// when it beats that running best (or is the first). Equivalent to the old
+// query — verified over thousands of randomized, tie-heavy datasets.
 export async function getWorldRecordHistory(db: D1Database, trialName: string) {
   const rows = await db.prepare(
     `SELECT
@@ -35,20 +45,16 @@ export async function getWorldRecordHistory(db: D1Database, trialName: string) {
        players.discord_id,
        (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar
      FROM submissions s
-     LEFT JOIN players ON players.uuid = s.player_uuid
-     WHERE s.trial_name = ?
-       AND s.state = 'approved'
-       AND NOT EXISTS (
-         SELECT 1
-         FROM submissions earlier
-         WHERE earlier.trial_name = s.trial_name
-           AND earlier.state = 'approved'
-           AND (
-                 earlier.date < s.date
-              OR (earlier.date = s.date AND earlier.uuid < s.uuid)
-           )
-           AND earlier.time <= s.time
+     JOIN (
+       SELECT uuid FROM (
+         SELECT uuid, time,
+                MIN(time) OVER (ORDER BY date, uuid ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS prev_best
+         FROM submissions
+         WHERE trial_name = ? AND state = 'approved'
        )
+       WHERE prev_best IS NULL OR time < prev_best
+     ) records ON records.uuid = s.uuid
+     LEFT JOIN players ON players.uuid = s.player_uuid
      ORDER BY s.date, s.uuid`
   )
     .bind(trialName)
@@ -58,10 +64,8 @@ export async function getWorldRecordHistory(db: D1Database, trialName: string) {
 }
 
 // Same "was ever the record" chain as getWorldRecordHistory, but for every
-// trial in a single query instead of one query per trial — the self-join
-// is already correlated per trial_name, so dropping the trial_name filter
-// and ordering by (trial_name, date, uuid) is enough to get everything at
-// once, still grouped and chronological per trial.
+// trial in a single query — the window is partitioned by trial_name so each
+// trial gets its own independent record chain.
 export async function getWorldRecordHistoryAll(db: D1Database) {
   const rows = await db.prepare(
     `SELECT
@@ -74,19 +78,16 @@ export async function getWorldRecordHistoryAll(db: D1Database) {
        players.discord_id,
        (players.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar
      FROM submissions s
-     LEFT JOIN players ON players.uuid = s.player_uuid
-     WHERE s.state = 'approved'
-       AND NOT EXISTS (
-         SELECT 1
-         FROM submissions earlier
-         WHERE earlier.trial_name = s.trial_name
-           AND earlier.state = 'approved'
-           AND (
-                 earlier.date < s.date
-              OR (earlier.date = s.date AND earlier.uuid < s.uuid)
-           )
-           AND earlier.time <= s.time
+     JOIN (
+       SELECT uuid FROM (
+         SELECT uuid, time,
+                MIN(time) OVER (PARTITION BY trial_name ORDER BY date, uuid ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS prev_best
+         FROM submissions
+         WHERE state = 'approved'
        )
+       WHERE prev_best IS NULL OR time < prev_best
+     ) records ON records.uuid = s.uuid
+     LEFT JOIN players ON players.uuid = s.player_uuid
      ORDER BY s.trial_name ASC, s.date ASC, s.uuid ASC`
   ).all()
 

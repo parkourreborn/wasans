@@ -11,7 +11,7 @@ export const POST = withV2Context(async (ctx) => {
     return jsonError("Authentication required", 401, { code: "unauthorized", requestId: ctx.requestId })
   }
 
-  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request)
+  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request, { executionCtx: ctx.ctx })
   if (!user) {
     return jsonError("Authentication required", 401, { code: "unauthorized", requestId: ctx.requestId })
   }

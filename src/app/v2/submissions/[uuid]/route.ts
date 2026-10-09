@@ -41,7 +41,7 @@ export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   // Session moderators authenticate via the v2 JWT cookie; the Discord bot
   // (no browser session) authenticates via its bot API key + a discordId in
   // the body, resolved to a moderator account here.
-  const sessionUser = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request) : null
+  const sessionUser = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request, { executionCtx: ctx.ctx }) : null
   const moderatorLookup = await resolveModeratorUser(ctx.request, ctx.env, sessionUser, body?.discordId, ctx.requestId)
 
   if (moderatorLookup.error || !moderatorLookup.user) {
@@ -106,7 +106,7 @@ export const DELETE = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
     return jsonError("Authentication is required", 401, { code: "unauthorized", requestId: ctx.requestId })
   }
 
-  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request)
+  const user = await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request, { executionCtx: ctx.ctx })
   if (!user) {
     return jsonError("Authentication is required", 401, { code: "unauthorized", requestId: ctx.requestId })
   }

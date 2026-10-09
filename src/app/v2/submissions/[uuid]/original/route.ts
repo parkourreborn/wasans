@@ -14,7 +14,7 @@ export const GET = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
     return validationError("Invalid submission uuid", ctx.requestId)
   }
 
-  const user = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request) : null
+  const user = ctx.auth ? await loadAuthUserByUuid(ctx.db, ctx.auth.uuid, ctx.request, { executionCtx: ctx.ctx }) : null
   if (!user) {
     return jsonError("Authentication is required", 401, { code: "unauthorized", requestId: ctx.requestId })
   }

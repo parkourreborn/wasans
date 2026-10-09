@@ -22,15 +22,15 @@ export async function checkTrialWrPrizeCandidates(
     const prizes = await listActiveTrialWrPrizes(db, event.trialName)
     const nowSeconds = Math.floor(Date.now() / 1000)
 
-    for (const prize of prizes) {
-      await createPrizeCandidate(db, {
+    await Promise.all(prizes.map((prize) =>
+      createPrizeCandidate(db, {
         prizeUuid: prize.uuid,
         playerUuid: event.playerUuid,
         playerName: event.playerName,
         eventDetails: { trial_name: event.trialName, submission_uuid: event.submissionUuid, time: event.time },
         nowSeconds,
       })
-    }
+    ))
   } catch (error) {
     console.error("Trial WR prize candidate check failed:", error)
   }
@@ -44,15 +44,15 @@ export async function checkComboWrPrizeCandidates(
     const prizes = await listActiveComboWrPrizes(db, event.categorySlug)
     const nowSeconds = Math.floor(Date.now() / 1000)
 
-    for (const prize of prizes) {
-      await createPrizeCandidate(db, {
+    await Promise.all(prizes.map((prize) =>
+      createPrizeCandidate(db, {
         prizeUuid: prize.uuid,
         playerUuid: event.playerUuid,
         playerName: event.playerName,
         eventDetails: { category_slug: event.categorySlug, submission_uuid: event.submissionUuid, combo_count: event.comboCount },
         nowSeconds,
       })
-    }
+    ))
   } catch (error) {
     console.error("Combo WR prize candidate check failed:", error)
   }
@@ -70,22 +70,24 @@ export async function checkScoreReachedPrizeCandidates(
     const prizes = await listActiveScoreReachedPrizes(db)
     const nowSeconds = Math.floor(Date.now() / 1000)
 
-    for (const prize of prizes) {
-      if (prize.criteria_score_target == null) {
-        continue
-      }
-      // Only fires the instant the target is crossed upward, not on every
-      // score refresh afterward.
-      if (event.oldScore < prize.criteria_score_target && event.newScore >= prize.criteria_score_target) {
-        await createPrizeCandidate(db, {
-          prizeUuid: prize.uuid,
-          playerUuid: event.playerUuid,
-          playerName: event.playerName,
-          eventDetails: { old_score: event.oldScore, new_score: event.newScore, target: prize.criteria_score_target },
-          nowSeconds,
-        })
-      }
-    }
+    // Only fires the instant the target is crossed upward, not on every score
+    // refresh afterward.
+    const crossed = prizes.filter(
+      (prize) =>
+        prize.criteria_score_target != null &&
+        event.oldScore < prize.criteria_score_target &&
+        event.newScore >= prize.criteria_score_target
+    )
+
+    await Promise.all(crossed.map((prize) =>
+      createPrizeCandidate(db, {
+        prizeUuid: prize.uuid,
+        playerUuid: event.playerUuid,
+        playerName: event.playerName,
+        eventDetails: { old_score: event.oldScore, new_score: event.newScore, target: prize.criteria_score_target },
+        nowSeconds,
+      })
+    ))
   } catch (error) {
     console.error("Score-reached prize candidate check failed:", error)
   }
@@ -103,21 +105,21 @@ export async function checkRankupPrizeCandidates(
     const prizes = await listActiveRankupPrizes(db)
     const nowSeconds = Math.floor(Date.now() / 1000)
 
-    for (const prize of prizes) {
-      // null criteria_target_role_id means "any promotion"; otherwise the
-      // new role must match the prize's configured target tier exactly.
-      if (prize.criteria_target_role_id != null && prize.criteria_target_role_id !== event.newRoleId) {
-        continue
-      }
+    // null criteria_target_role_id means "any promotion"; otherwise the new
+    // role must match the prize's configured target tier exactly.
+    const matching = prizes.filter(
+      (prize) => prize.criteria_target_role_id == null || prize.criteria_target_role_id === event.newRoleId
+    )
 
-      await createPrizeCandidate(db, {
+    await Promise.all(matching.map((prize) =>
+      createPrizeCandidate(db, {
         prizeUuid: prize.uuid,
         playerUuid: event.playerUuid,
         playerName: event.playerName,
         eventDetails: { new_role_id: event.newRoleId },
         nowSeconds,
       })
-    }
+    ))
   } catch (error) {
     console.error("Rank-up prize candidate check failed:", error)
   }
