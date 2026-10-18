@@ -163,7 +163,7 @@ state/WR tags, and rewrites the starter message content.
   "moderator_note": "",
   "thread_id": null,
   "previous_wr": { "player_name": "OldChamp", "time": 12.5, "thread_id": null },
-  "options": { "send_wr_ping": true, "create_if_missing": true }
+  "options": { "announce_wr": true, "send_wr_ping": true, "create_if_missing": true }
 }
 ```
 
@@ -183,7 +183,8 @@ state/WR tags, and rewrites the starter message content.
 | `moderator_note` | string | no | Rendered as `Moderator note: <note>` (or `N/A`). |
 | `thread_id` | string | no | Existing thread to update. If omitted, the bot looks up a thread it previously created for this `submission_id`; if none is known and `options.create_if_missing` is true, a new thread is created. |
 | `previous_wr.player_name`, `.time`, `.thread_id` | — | no | Only used when `is_wr && state === 'approved'`. If `thread_id` is set, a `<#thread_id>` link is shown instead of the plain text line. |
-| `options.send_wr_ping` | boolean | no | If true and the submission is an approved WR, pings `wr_ping_role_id` in the thread. |
+| `options.announce_wr` | boolean | no | If true and the submission is an approved WR, posts "New world record: <thread>!" in `rank_milestones_channel_id`, with a `Previous wr:` line (thread link, or time and name) and the run's link. The site sets it only when a moderation makes the run the WR. |
+| `options.send_wr_ping` | boolean | no | With `announce_wr`, starts that post with a `wr_ping_role_id` ping. The thread itself is never pinged. |
 | `options.create_if_missing` | boolean | no | If true, creates a new thread when no existing one is found. Otherwise returns `404`. |
 
 ### The new `average_score_change` argument

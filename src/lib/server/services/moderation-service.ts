@@ -346,12 +346,15 @@ export async function patchSubmission(
     )
   }
 
-  // Approving a run, or changing an approved run's time, can make it a WR,
-  // and the moderator decides whether that pings the WR role. Other changes
-  // (notes, denials) never ping.
+  // A run becoming the WR (approving it, or a time edit that makes an
+  // approved non-WR run the WR) is announced in Discord, and the moderator
+  // decides whether that pings the WR role. Correcting the current WR's
+  // time, notes and denials announce nothing.
   const wrPing = typeof payload?.wr_ping === "boolean" ? payload.wr_ping : null
-  const canMakeWr = (state ?? previousState) === "approved"
-    && (previousState !== "approved" || (time !== null && time !== submission.time))
+  const canMakeWr = (state ?? previousState) === "approved" && (
+    previousState !== "approved"
+    || (time !== null && time !== submission.time && !(await wouldBeAnnouncedWr(env.wasans, uuid, Number(submission.time))))
+  )
   if (canMakeWr && wrPing === null && await wouldBeAnnouncedWr(env.wasans, uuid, time ?? Number(submission.time))) {
     throw new WrPingChoiceRequiredError()
   }
@@ -607,6 +610,7 @@ export async function patchSubmission(
           discordUserId: oldPlayer?.discord_id ?? undefined,
           averageScoreChange,
           is_wr: announceAsWr,
+          announce_wr: canMakeWr,
           send_wr_ping: sendWrPing,
           previous_wr_submission_uuid: previousToShow?.submission_uuid,
           previous_wr_time: previousToShow?.time,
@@ -659,6 +663,7 @@ export async function patchSubmission(
         discordUserId: oldPlayer?.discord_id ?? undefined,
         averageScoreChange,
         is_wr: announceAsWr,
+        announce_wr: canMakeWr,
         send_wr_ping: sendWrPing,
         previous_wr_submission_uuid: replacedWr?.submission_uuid,
         previous_wr_time: replacedWr?.time,

@@ -8,7 +8,6 @@ import {
     fetchThreadById,
     sendDirectMessage,
     sendMessageToChannel,
-    sendMessageToThread,
     setThreadTags,
     updateNickname,
     updateThreadName,
@@ -17,7 +16,7 @@ import {
 import { badRequest, discordError, notFound } from './errors.js';
 import { logger } from '../logger.js';
 import { resolveRoleScope, resolveRolesForRankingScore, resolveStateTags } from '../resolvers.js';
-import { buildSubmissionMessage, buildSubmissionTitle } from '../submissions/formatter.js';
+import { buildSubmissionMessage, buildSubmissionTitle, buildWrAnnouncement } from '../submissions/formatter.js';
 import { deleteSubmissionThread, getThreadIdBySubmissionId, setSubmissionThread } from '../submissions/store.js';
 
 function asSet(values) {
@@ -54,6 +53,7 @@ export async function executeSubmissionSync(body, options = {}) {
     const { includeAverageScoreChange = false } = options;
     const syncOptions = body.options || {};
     const createIfMissing = syncOptions.create_if_missing === true;
+    const announceWr = syncOptions.announce_wr === true;
     const sendWrPing = syncOptions.send_wr_ping === true;
 
     await logger.log('Submission sync started', `Submission ${body.submission_id}`);
@@ -92,10 +92,18 @@ export async function executeSubmissionSync(body, options = {}) {
 
     await setThreadTags(thread, tags);
 
+    // A run that just became the WR is announced in the rank milestones
+    // channel, with the WR role ping if the moderator chose it. The thread
+    // itself is never pinged.
     let wrPingSent = false;
-    if (sendWrPing && body.is_wr && body.state === 'approved' && botConfig.wr_ping_role_id) {
-        await sendMessageToThread(thread, `<@&${botConfig.wr_ping_role_id}>`);
-        wrPingSent = true;
+    if (announceWr && body.is_wr && body.state === 'approved' && botConfig.rank_milestones_channel_id) {
+        const pingRoleId = sendWrPing ? botConfig.wr_ping_role_id || null : null;
+        try {
+            await sendMessageToChannel(botConfig.rank_milestones_channel_id, buildWrAnnouncement(body, threadId, pingRoleId));
+            wrPingSent = Boolean(pingRoleId);
+        } catch (error) {
+            await logger.warn('Submission sync note', `Failed to send WR announcement: ${error.message}`);
+        }
     }
 
     setSubmissionThread(body.submission_id, threadId);

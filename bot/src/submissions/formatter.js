@@ -81,3 +81,25 @@ export function buildSubmissionMessage(body, options = {}) {
         components: buildSubmissionModerationComponentsForSubmission(body.submission_id, body.state),
     };
 }
+
+// The rank milestones channel post for a run that just became the WR. Only
+// the WR role can be pinged by it (player names are plain text).
+export function buildWrAnnouncement(body, threadId, pingRoleId) {
+    const lines = [`${pingRoleId ? `<@&${pingRoleId}> ` : ''}New world record: <#${threadId}>!`];
+
+    const previous = body.previous_wr;
+    if (previous?.thread_id) {
+        if (previous.thread_id !== threadId) {
+            lines.push(`Previous wr: <#${previous.thread_id}>`);
+        }
+    } else if (previous?.time !== undefined && previous?.player_name) {
+        lines.push(`Previous wr: ${previous.time.toFixed(3)} by ${previous.player_name}`);
+    }
+
+    lines.push(resolveSubmissionUrl(body.submission_id));
+
+    return {
+        content: lines.join('\n'),
+        allowedMentions: { parse: [], roles: pingRoleId ? [pingRoleId] : [] },
+    };
+}

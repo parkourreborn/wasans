@@ -16,7 +16,9 @@ export type ApprovedHighScoreRun = {
   discord_discriminator?: string | null
   averageScoreChange?: number
   is_wr: boolean
-  // The moderator chose to ping the WR role for this change.
+  // This change made the run the WR, so it's announced in Discord, with the
+  // WR role ping if the moderator chose it.
+  announce_wr?: boolean
   send_wr_ping?: boolean
   // optional previous WR info (when this run becomes a WR)
   previous_wr_submission_uuid?: string
@@ -138,6 +140,9 @@ type SubmissionSyncPayload = {
   moderator_note?: string
   thread_id?: string
   options?: {
+    // Post "New world record" in the rank milestones channel; send_wr_ping
+    // adds the WR role ping to that post.
+    announce_wr?: boolean
     send_wr_ping?: boolean
     create_if_missing?: boolean
   }
@@ -412,7 +417,8 @@ export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ thre
       },
       options: {
         create_if_missing: true,
-        send_wr_ping: run.is_wr && run.send_wr_ping === true,
+        announce_wr: run.is_wr && run.announce_wr === true,
+        send_wr_ping: run.is_wr && run.announce_wr === true && run.send_wr_ping === true,
       },
     })
     const threadId = response.thread?.id || null
@@ -455,7 +461,8 @@ export async function updateSubmissionThreadContent(
       thread_id: threadId,
       options: {
         create_if_missing: true,
-        send_wr_ping: state === "approved" && run.is_wr && run.send_wr_ping === true,
+        announce_wr: state === "approved" && run.is_wr && run.announce_wr === true,
+        send_wr_ping: state === "approved" && run.is_wr && run.announce_wr === true && run.send_wr_ping === true,
       },
     })
     return Boolean(response.ok)

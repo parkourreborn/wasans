@@ -40,6 +40,7 @@ export function validateSubmissionSyncBody(body) {
     }
 
     const options = parseRequestOptions(body.options);
+    assertOptionalBoolean(options.announce_wr, 'options.announce_wr');
     assertOptionalBoolean(options.send_wr_ping, 'options.send_wr_ping');
     assertOptionalBoolean(options.create_if_missing, 'options.create_if_missing');
 
