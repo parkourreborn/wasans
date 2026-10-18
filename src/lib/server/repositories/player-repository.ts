@@ -136,10 +136,12 @@ export async function getPlayerPosition(db: D1Database, score: number, playerNam
 
 // Each PB with where it stands on its trial (rank among active players'
 // PBs, ties shared, as on the trial leaderboard) and its video's state, so
-// the profile can use the run's poster frame.
+// the profile can use the run's poster frame. old_version marks a PB set
+// before the trial was changed, still counting during the grace period.
 export async function getPlayerPbs(db: D1Database, playerUuid: string) {
   const rows = await db.prepare(
     `SELECT pbs.trial_name, pbs.time, pbs.submission_uuid, pbs.date, submissions.video_status,
+            (submissions.trial_version != trials.version) AS old_version,
             (SELECT COUNT(*)
              FROM pbs faster
              JOIN players ON players.uuid = faster.player_uuid
@@ -153,6 +155,7 @@ export async function getPlayerPbs(db: D1Database, playerUuid: string) {
                AND COALESCE(players.account_status, 'active') != 'deactivated') AS holders
      FROM pbs
      LEFT JOIN submissions ON submissions.uuid = pbs.submission_uuid
+     LEFT JOIN trials ON trials.name = pbs.trial_name
      WHERE pbs.player_uuid = ?
      ORDER BY pbs.trial_name ASC`
   )

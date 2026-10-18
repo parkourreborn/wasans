@@ -60,7 +60,7 @@ type RunDraft = {
   autoFilled: boolean
 }
 
-type PlayerPb = { trial_name: string; time: number; submission_uuid: string }
+type PlayerPb = { trial_name: string; time: number; submission_uuid: string; old_version?: number | null }
 type PlayerDetailResponse = { data?: { player?: { score?: number; pbs?: PlayerPb[] } | null } }
 type CreatedRun = { uuid: string; trial_name: string; video_status: string }
 type CreateResponse = { data?: { results?: CreatedRun[] }; error?: { message?: string } }
@@ -142,7 +142,9 @@ export function TrialRunsForm({ user, blocked }: { user: AuthSessionUser; blocke
   const { data: playerData } = useApi<PlayerDetailResponse>(playerUrl)
   const records = wrData?.data ?? []
   const pbList = playerData?.data?.player?.pbs ?? []
-  const pbs = new Map(pbList.map((pb) => [pb.trial_name, Number(pb.time)]))
+  // A PB from before a trial was changed still counts toward the score
+  // estimate during the grace period, but doesn't limit new runs.
+  const pbs = new Map(pbList.filter((pb) => !pb.old_version).map((pb) => [pb.trial_name, Number(pb.time)]))
   const wrs = new Map(records.map((record) => [record.trial_name, record]))
   const score = Number(playerData?.data?.player?.score ?? user.score ?? 0)
 

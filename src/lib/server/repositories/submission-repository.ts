@@ -117,6 +117,8 @@ export async function findPlayerByUuid(db: D1Database, playerUuid: string) {
     .first<PlayerSubmissionContext>()
 }
 
+// Only runs on the trial's current version count: once a trial is changed,
+// times from the old version don't stop a player submitting a slower one.
 export async function findPersonalBestByTrials(db: D1Database, playerUuid: string, trials: string[]) {
   if (!trials.length) {
     return new Map<string, number>()
@@ -124,12 +126,14 @@ export async function findPersonalBestByTrials(db: D1Database, playerUuid: strin
 
   const placeholders = trials.map(() => "?").join(",")
   const { results } = await db.prepare(
-    `SELECT trial_name, MIN(time) AS time
+    `SELECT submissions.trial_name, MIN(submissions.time) AS time
      FROM submissions
-     WHERE player_uuid = ?
-       AND state != 'denied'
-       AND trial_name IN (${placeholders})
-     GROUP BY trial_name`
+     JOIN trials ON trials.name = submissions.trial_name
+     WHERE submissions.player_uuid = ?
+       AND submissions.state != 'denied'
+       AND submissions.trial_name IN (${placeholders})
+       AND submissions.trial_version = trials.version
+     GROUP BY submissions.trial_name`
   )
     .bind(playerUuid, ...trials)
     .all<{ trial_name: string; time: number }>()

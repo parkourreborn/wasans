@@ -217,11 +217,15 @@ export async function deleteOldVideoUploads(db: D1Database, before: number) {
 
 // The PB the player had on this trial before this submission, for the
 // Discord pending-run post (which used to be sent at creation time, before
-// the new submission existed).
+// the new submission existed). Only runs on the trial's current version
+// count, so the first run after a trial change has no previous PB.
 export async function findPreviousPersonalBest(db: D1Database, playerUuid: string, trialName: string, excludeUuid: string) {
   const row = await db.prepare(
-    `SELECT MIN(time) AS time FROM submissions
-     WHERE player_uuid = ? AND trial_name = ? AND state != 'denied' AND uuid != ?`
+    `SELECT MIN(submissions.time) AS time
+     FROM submissions
+     JOIN trials ON trials.name = submissions.trial_name
+     WHERE submissions.player_uuid = ? AND submissions.trial_name = ? AND submissions.state != 'denied'
+       AND submissions.uuid != ? AND submissions.trial_version = trials.version`
   )
     .bind(playerUuid, trialName, excludeUuid)
     .first<{ time: number | null }>()
