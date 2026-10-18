@@ -43,6 +43,41 @@ export async function listCurrentVersionWrs(db: D1Database, trialName: string) {
   return results || []
 }
 
+const runValidSql = validSubmissionSql("s", "t")
+
+// Whether this run, once approved with `time`, would be announced as a WR:
+// nothing counted beats it, or (while a changed trial is in its grace
+// period) nothing on the current version does. Same order as wrs and
+// listCurrentVersionWrs, so it agrees with what moderation then announces.
+export async function wouldBeAnnouncedWr(db: D1Database, submissionUuid: string, time: number) {
+  const now = Math.floor(Date.now() / 1000)
+  const row = await db.prepare(
+    `SELECT ${runValidSql} AS counted,
+            EXISTS (
+              SELECT 1
+              FROM submissions AS better
+              JOIN trials AS tb ON tb.name = better.trial_name
+              WHERE better.trial_name = s.trial_name
+                AND better.uuid != s.uuid
+                AND better.state = 'approved'
+                AND ${betterValidSql}
+                AND (s.trial_version != t.version OR better.trial_version = tb.version)
+                AND (
+                  better.time < ?
+                  OR (better.time = ? AND better.date < s.date)
+                  OR (better.time = ? AND better.date = s.date AND better.uuid < s.uuid)
+                )
+            ) AS beaten
+     FROM submissions AS s
+     JOIN trials AS t ON t.name = s.trial_name
+     WHERE s.uuid = ?`
+  )
+    .bind(now, now, now, now, now, now, time, time, time, submissionUuid)
+    .first<{ counted: number; beaten: number }>()
+
+  return Boolean(row?.counted) && !row?.beaten
+}
+
 export async function refreshWorldRecords(db: D1Database, trialName?: string, actor?: AuditActor | null) {
   const now = Math.floor(Date.now() / 1000)
 

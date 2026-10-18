@@ -21,6 +21,10 @@ const ACTION_NOTE = 'note';
 const ACTION_TIME_MODAL = 'time-modal';
 const ACTION_NOTE_MODAL = 'note-modal';
 const ACTION_DENY_MODAL = 'deny-modal';
+// Buttons on the private "send a WR ping?" prompt. The change they confirm
+// rides after "=": "approve", or the new time ("wr-ping=12.345").
+const ACTION_WR_PING = 'wr-ping';
+const ACTION_WR_NO_PING = 'wr-no-ping';
 const MODERATOR_NOTE_PREFIX = 'Moderator note:';
 
 function buildCustomId(action, submissionId) {
@@ -180,6 +184,7 @@ async function patchSubmission(submissionId, body) {
             `Request failed with status ${response.status}`;
         const error = new Error(apiMessage);
         error.apiMessage = apiMessage;
+        error.apiCode = parsedBody?.error?.code;
         error.status = response.status;
         throw error;
     }
@@ -187,8 +192,39 @@ async function patchSubmission(submissionId, body) {
     return parsedBody;
 }
 
-async function sendModerationRequest(interaction, submissionId, payload, successMessage) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+// The site refuses a change that would make the run the WR until the
+// moderator says whether to ping the WR role, so ask them privately.
+function buildWrPingPrompt(submissionId, change) {
+    const verb = change === 'approve' ? 'Approve' : 'Save';
+    const content = change === 'approve'
+        ? 'Approving this run makes it the world record. Send a WR ping?'
+        : `With a time of ${change} this run will be the world record. Send a WR ping?`;
+
+    return {
+        content,
+        components: [
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(buildCustomId(`${ACTION_WR_PING}=${change}`, submissionId))
+                    .setLabel(`${verb} and ping`)
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(buildCustomId(`${ACTION_WR_NO_PING}=${change}`, submissionId))
+                    .setLabel(`${verb} without ping`)
+                    .setStyle(ButtonStyle.Secondary),
+            ),
+        ],
+    };
+}
+
+// fromPrompt: the interaction is a button on the WR ping prompt, which is
+// edited in place rather than answered with a new message.
+async function sendModerationRequest(interaction, submissionId, payload, successMessage, { fromPrompt = false } = {}) {
+    if (fromPrompt) {
+        await interaction.deferUpdate();
+    } else {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    }
 
     const body = {
         discordId: interaction.user.id,
@@ -197,12 +233,18 @@ async function sendModerationRequest(interaction, submissionId, payload, success
 
     try {
         await patchSubmission(submissionId, body);
-        await interaction.editReply({ content: successMessage });
+        await interaction.editReply({ content: successMessage, components: [] });
         await logger.log('Submission moderated', `Submission ${submissionId}`, {
             moderator_id: interaction.user.id,
             fields: Object.keys(payload).join(', '),
         }).catch(() => {});
     } catch (error) {
+        const change = payload.state === 'approved' ? 'approve' : payload.time !== undefined ? String(payload.time) : null;
+        if (error.apiCode === 'wr_ping_required' && payload.wr_ping === undefined && change) {
+            await interaction.editReply(buildWrPingPrompt(submissionId, change));
+            return true;
+        }
+
         console.error('Submission moderation failed:', error);
         await logger.error('Submission moderation failed', error.message, {
             submission_id: submissionId,
@@ -210,6 +252,7 @@ async function sendModerationRequest(interaction, submissionId, payload, success
         }).catch(() => {});
         await interaction.editReply({
             content: buildApiErrorMessage(error, 'Failed to update submission'),
+            components: [],
         });
     }
 
@@ -319,6 +362,36 @@ async function handleButtonInteraction(interaction, parsed) {
     if (parsed.action === ACTION_NOTE) {
         await interaction.showModal(buildNoteModal(parsed.submissionId, getCurrentNoteValue(interaction)));
         return true;
+    }
+
+    const [promptAction, change] = parsed.action.split('=');
+    if ((promptAction === ACTION_WR_PING || promptAction === ACTION_WR_NO_PING) && change) {
+        const wrPing = promptAction === ACTION_WR_PING;
+        const pingNote = wrPing ? 'with a WR ping' : 'without a WR ping';
+
+        if (change === 'approve') {
+            return await sendModerationRequest(
+                interaction,
+                parsed.submissionId,
+                { state: 'approved', wr_ping: wrPing },
+                `Submission approved ${pingNote}.`,
+                { fromPrompt: true },
+            );
+        }
+
+        const time = Number(change);
+        if (!Number.isFinite(time) || time <= 0) {
+            await replyEphemeral(interaction, 'Failed to update submission: time must be a positive number.');
+            return true;
+        }
+
+        return await sendModerationRequest(
+            interaction,
+            parsed.submissionId,
+            { time, wr_ping: wrPing },
+            `Submission time updated ${pingNote}.`,
+            { fromPrompt: true },
+        );
     }
 
     return false;

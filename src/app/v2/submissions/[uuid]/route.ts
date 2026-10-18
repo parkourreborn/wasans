@@ -2,7 +2,12 @@ import { jsonError, validationError } from "@/lib/server/http"
 import { canModerate, isOwner, loadAuthUserByUuid } from "@/lib/server/auth"
 import { getSubmissionWithScore } from "@/lib/server/repositories/submission-repository"
 import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-repository"
-import { deleteSubmission, patchSubmission, resolveModeratorUser } from "@/lib/server/services/moderation-service"
+import {
+  deleteSubmission,
+  patchSubmission,
+  resolveModeratorUser,
+  WrPingChoiceRequiredError,
+} from "@/lib/server/services/moderation-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
 import { bumpCacheGeneration, cacheKey, readThroughCache } from "@/lib/server/v2/cache"
@@ -33,6 +38,7 @@ export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
     state?: unknown
     moderator_note?: unknown
     time?: unknown
+    wr_ping?: unknown
   } | null
   if (!body) {
     return validationError("Invalid JSON request body", ctx.requestId)
@@ -88,6 +94,9 @@ export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
 
     return jsonOk({ results: updated ? [updated] : [] }, { requestId: ctx.requestId })
   } catch (error) {
+    if (error instanceof WrPingChoiceRequiredError) {
+      return jsonError(error.message, 409, { code: "wr_ping_required", requestId: ctx.requestId })
+    }
     const message = getSubmissionErrorMessage(error instanceof Error ? error.message : null, "Unable to patch submission")
     const status = getSubmissionErrorStatus(message)
     return jsonError(message, status, {

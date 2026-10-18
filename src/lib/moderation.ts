@@ -55,6 +55,23 @@ export type ModerationPatch = {
   state?: "approved" | "denied" | "pending"
   moderator_note?: string
   time?: string
+  // Whether a change that makes the run the WR pings the WR role. The server
+  // refuses such a change without it (see needsWrPingChoice).
+  wr_ping?: boolean
+}
+
+export class ModerationRequestError extends Error {
+  code: string | null
+
+  constructor(message: string, code: string | null) {
+    super(message)
+    this.code = code
+  }
+}
+
+// The change would make the run the WR and didn't say whether to ping.
+export function needsWrPingChoice(error: unknown) {
+  return error instanceof ModerationRequestError && error.code === "wr_ping_required"
 }
 
 // The server keeps notes to 500 characters after collapsing whitespace.
@@ -81,12 +98,23 @@ export async function patchRun<T>(kind: RunKind, uuid: string, patch: Moderation
     body: JSON.stringify(patch),
     keepalive: options.keepalive,
   })
-  const json = (await response.json().catch(() => null)) as (RunResponse<T> & { error?: { message?: string } }) | null
+  const json = (await response.json().catch(() => null)) as (RunResponse<T> & { error?: { message?: string; code?: string } }) | null
   if (!response.ok) {
-    throw new Error(getSubmissionErrorMessage(json?.error, "Couldn't save that change"))
+    throw new ModerationRequestError(getSubmissionErrorMessage(json?.error, "Couldn't save that change"), json?.error?.code ?? null)
   }
   refreshRunCaches(kind)
   return json?.data?.results?.[0] ?? null
+}
+
+// Whether approving this trial run would make it the WR, asked before the
+// review queue holds an approval for its undo window.
+export async function checkWouldBeWr(uuid: string) {
+  const response = await fetch(apiV2(`/submissions/${encodeURIComponent(uuid)}/wr-check`))
+  const json = (await response.json().catch(() => null)) as { data?: { would_be_wr?: boolean }; error?: { message?: string } } | null
+  if (!response.ok) {
+    throw new Error(getSubmissionErrorMessage(json?.error, "Couldn't check the world record"))
+  }
+  return json?.data?.would_be_wr === true
 }
 
 export async function deleteRun(kind: RunKind, uuid: string) {

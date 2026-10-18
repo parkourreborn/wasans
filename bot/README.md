@@ -41,7 +41,8 @@ src/
     png.js, avatar.js       SVG -> PNG rendering, avatar and preview fetches
     cache.js                LRU cache of rendered pages
     templates/*.js          one SVG template per card type
-    submissionModeration.js  Approve/Deny/Pending/Change Time/Note buttons
+    submissionModeration.js  Approve/Deny/Pending/Change Time/Note buttons, plus the private
+                             "send a WR ping?" prompt when the site says a change makes a WR
   api/
     server.js                HTTP server: auth, logging, dispatch
     errors.js / http.js / assertions.js   shared low-level helpers

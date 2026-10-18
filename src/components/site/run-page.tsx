@@ -24,6 +24,7 @@ import {
   canDeleteRun,
   canModerateKind,
   deleteRun,
+  needsWrPingChoice,
   patchRun,
   type ComboRun,
   type ModerationPatch,
@@ -40,7 +41,7 @@ import { useRunNeighbours } from "@/hooks/use-run-list"
 import { useComboCategoryLabel } from "@/hooks/use-combo-categories"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { useAuthSession } from "@/components/custom/use-auth-session"
-import { ConfirmDialog, DenyDialog, EditTimeDialog, NoteDialog } from "@/components/site/moderation-dialogs"
+import { ConfirmDialog, DenyDialog, EditTimeDialog, NoteDialog, WrPingDialog } from "@/components/site/moderation-dialogs"
 import { RobloxAccounts } from "@/components/site/roblox-accounts"
 import { RunVideo } from "@/components/site/run-video"
 import { normalizeRunState, StatusBadge, WrBadge, type RunState } from "@/components/site/status-badge"
@@ -249,7 +250,7 @@ function NoteBlock({ note, by }: { note?: string | null; by?: string | null }) {
   )
 }
 
-type Dialog = "deny" | "note" | "time" | "delete" | null
+type Dialog = "deny" | "note" | "time" | "delete" | "wr-ping" | null
 
 // What a moderator can do to a run, plus delete for whoever may.
 function ModerationPanel({
@@ -341,6 +342,9 @@ function useRunModeration<T extends TrialRun | ComboRun>(kind: RunKind, run: T) 
   const router = useRouter()
   const [dialog, setDialog] = useState<Dialog>(null)
   const [busy, setBusy] = useState(false)
+  // A change that would make the run the WR comes back asking whether to
+  // ping; it waits here while the moderator decides.
+  const [wrPingChange, setWrPingChange] = useState<{ patch: ModerationPatch; done: string } | null>(null)
   const url = kind === "trial" ? trialRunUrl(run.uuid) : comboRunUrl(run.uuid)
 
   const save = async (patch: ModerationPatch, done: string) => {
@@ -351,10 +355,19 @@ function useRunModeration<T extends TrialRun | ComboRun>(kind: RunKind, run: T) 
       setDialog(null)
       toast.success(done)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't save that change")
+      if (needsWrPingChoice(error) && patch.wr_ping === undefined) {
+        setWrPingChange({ patch, done })
+        setDialog("wr-ping")
+      } else {
+        toast.error(error instanceof Error ? error.message : "Couldn't save that change")
+      }
     } finally {
       setBusy(false)
     }
+  }
+
+  const chooseWrPing = (ping: boolean) => {
+    if (wrPingChange) void save({ ...wrPingChange.patch, wr_ping: ping }, wrPingChange.done)
   }
 
   const remove = async () => {
@@ -370,7 +383,7 @@ function useRunModeration<T extends TrialRun | ComboRun>(kind: RunKind, run: T) 
     }
   }
 
-  return { dialog, setDialog, busy, save, remove }
+  return { dialog, setDialog, busy, save, remove, wrPingChange, chooseWrPing }
 }
 
 function TrialRunView({ run }: { run: TrialRun }) {
@@ -560,6 +573,14 @@ function TrialRunView({ run }: { run: TrialRun }) {
         wrTime={wr ? Number(wr.time) : null}
         busy={moderation.busy}
         onConfirm={(next) => void moderation.save({ time: next }, "Time updated")}
+      />
+      <WrPingDialog
+        open={moderation.dialog === "wr-ping"}
+        onOpenChange={(open) => moderation.setDialog(open ? "wr-ping" : null)}
+        runLabel={runLabel}
+        actionLabel={moderation.wrPingChange?.patch.state === "approved" ? "Approve" : "Save"}
+        busy={moderation.busy}
+        onChoose={moderation.chooseWrPing}
       />
       <ConfirmDialog
         open={moderation.dialog === "delete"}

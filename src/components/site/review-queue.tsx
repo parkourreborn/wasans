@@ -10,6 +10,7 @@ import calculateScore from "@/lib/calc-score"
 import { formatCount, formatDateTime, formatDelta, formatScore, formatTime, formatWaiting } from "@/lib/format"
 import {
   canModerateKind,
+  checkWouldBeWr,
   patchRun,
   rememberRunList,
   type ComboRun,
@@ -28,7 +29,7 @@ import { useComboCategoryLabel } from "@/hooks/use-combo-categories"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { useAuthSession } from "@/components/custom/use-auth-session"
 import { useLoginDialog } from "@/components/site/login-dialog"
-import { DenyDialog, EditTimeDialog, NoteDialog } from "@/components/site/moderation-dialogs"
+import { DenyDialog, EditTimeDialog, NoteDialog, WrPingDialog } from "@/components/site/moderation-dialogs"
 import { RobloxAccounts } from "@/components/site/roblox-accounts"
 import { RunVideo } from "@/components/site/run-video"
 import { TierLabel } from "@/components/site/tier-label"
@@ -259,7 +260,7 @@ function useStagedDecisions(onFailed: (uuid: string) => void) {
   return { stage, undoLatest }
 }
 
-type DialogName = "deny" | "note" | "time" | null
+type DialogName = "deny" | "note" | "time" | "wr-ping" | null
 
 function QueueView({ kind, list }: { kind: RunKind; list: ApiState<RunListResponse<QueueItem>> }) {
   const now = useMinuteClock()
@@ -270,6 +271,9 @@ function QueueView({ kind, list }: { kind: RunKind; list: ApiState<RunListRespon
   const [selected, setSelected] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogName>(null)
   const [busy, setBusy] = useState(false)
+  // The run the WR ping dialog was opened for, in case the list moves on
+  // underneath it (another moderator handled the run).
+  const [wrPingFor, setWrPingFor] = useState<string | null>(null)
   const visible = items.filter((item) => !hidden.includes(item.uuid))
   const currentIndex = Math.max(
     0,
@@ -313,6 +317,40 @@ function QueueView({ kind, list }: { kind: RunKind; list: ApiState<RunListRespon
     stage({ kind, uuid: item.uuid, patch, label: `${verb} ${label(item)}`, undo: () => restore(item.uuid) })
   }
 
+  // An approval that would make the run the WR asks about the WR ping before
+  // it's held for the undo window. If the check fails, the server still
+  // refuses a WR approval without a choice and the run comes back here.
+  const approve = async () => {
+    if (!current || busy) return
+    if (!("trial_name" in current)) {
+      decide({ state: "approved" }, "Approved")
+      return
+    }
+    setBusy(true)
+    let wouldBeWr = false
+    try {
+      wouldBeWr = await checkWouldBeWr(current.uuid)
+    } catch {
+      // Staged without a choice; see above.
+    } finally {
+      setBusy(false)
+    }
+    if (wouldBeWr) {
+      setWrPingFor(current.uuid)
+      setDialog("wr-ping")
+    } else {
+      decide({ state: "approved" }, "Approved")
+    }
+  }
+
+  const chooseWrPing = (ping: boolean) => {
+    if (current?.uuid !== wrPingFor) {
+      setDialog(null)
+      return
+    }
+    decide({ state: "approved", wr_ping: ping }, ping ? "Approved with WR ping" : "Approved without WR ping")
+  }
+
   // Notes and time edits stay on the run, so they're sent right away.
   const saveNow = async (patch: ModerationPatch, done: string) => {
     if (!current) return
@@ -343,7 +381,7 @@ function QueueView({ kind, list }: { kind: RunKind; list: ApiState<RunListRespon
         return
       }
       if (!current) return
-      if (key === "a" && videoReady) decide({ state: "approved" }, "Approved")
+      if (key === "a" && videoReady) void approve()
       else if (key === "d") setDialog("deny")
       else if (key === "n") setDialog("note")
       else if (key === "e" && kind === "trial") setDialog("time")
@@ -434,9 +472,9 @@ function QueueView({ kind, list }: { kind: RunKind; list: ApiState<RunListRespon
           <Button
             type="button"
             size="lg"
-            disabled={!videoReady}
+            disabled={!videoReady || busy}
             title={videoReady ? undefined : "The video has to finish processing first"}
-            onClick={() => decide({ state: "approved" }, "Approved")}
+            onClick={() => void approve()}
             className="bg-success text-background hover:bg-success/85"
           >
             <CheckIcon />
@@ -530,6 +568,13 @@ function QueueView({ kind, list }: { kind: RunKind; list: ApiState<RunListRespon
           onConfirm={(time) => void saveNow({ time }, "Time updated")}
         />
       ) : null}
+      <WrPingDialog
+        open={dialog === "wr-ping"}
+        onOpenChange={(open) => setDialog(open ? "wr-ping" : null)}
+        runLabel={label(current)}
+        actionLabel="Approve"
+        onChoose={chooseWrPing}
+      />
     </div>
   )
 }

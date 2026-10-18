@@ -16,6 +16,8 @@ export type ApprovedHighScoreRun = {
   discord_discriminator?: string | null
   averageScoreChange?: number
   is_wr: boolean
+  // The moderator chose to ping the WR role for this change.
+  send_wr_ping?: boolean
   // optional previous WR info (when this run becomes a WR)
   previous_wr_submission_uuid?: string
   previous_wr_time?: number
@@ -315,7 +317,7 @@ export function reportMissingApprovedThread(run: ApprovedHighScoreRun) {
       discord_user_id: run.discordUserId,
       trial_name: run.trial_name,
       is_wr: run.is_wr,
-      wr_ping: run.is_wr ? WR_PING : undefined,
+      wr_ping: run.is_wr && run.send_wr_ping ? WR_PING : undefined,
     },
     time_change: {
       old_time: run.oldTime,
@@ -410,7 +412,7 @@ export async function postApprovedRun(run: ApprovedHighScoreRun): Promise<{ thre
       },
       options: {
         create_if_missing: true,
-        send_wr_ping: run.is_wr,
+        send_wr_ping: run.is_wr && run.send_wr_ping === true,
       },
     })
     const threadId = response.thread?.id || null
@@ -453,7 +455,7 @@ export async function updateSubmissionThreadContent(
       thread_id: threadId,
       options: {
         create_if_missing: true,
-        send_wr_ping: state === "approved" && run.is_wr,
+        send_wr_ping: state === "approved" && run.is_wr && run.send_wr_ping === true,
       },
     })
     return Boolean(response.ok)

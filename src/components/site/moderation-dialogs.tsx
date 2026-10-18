@@ -370,6 +370,50 @@ function EditTimeForm({
   )
 }
 
+// Asked when a change would make the run the WR: whether Discord pings the
+// WR role for it. Closing the dialog changes nothing.
+export function WrPingDialog({
+  open,
+  onOpenChange,
+  runLabel,
+  actionLabel,
+  busy = false,
+  onChoose,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  runLabel: string
+  // "Approve" or "Save", the change being confirmed.
+  actionLabel: string
+  busy?: boolean
+  onChoose: (ping: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className={contentClass}>
+        <DialogHeader className="gap-1.5">
+          <DialogTitle className={titleClass}>World record</DialogTitle>
+          <DialogDescription className="text-[15px] leading-relaxed text-muted-foreground">
+            {runLabel} will be the world record. Send a WR ping in Discord?
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="-mx-6 -mb-6 rounded-b-xl border-line bg-surface px-6 py-4">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button type="button" variant="outline" onClick={() => onChoose(false)} disabled={busy}>
+            {actionLabel} without ping
+          </Button>
+          <Button type="button" onClick={() => onChoose(true)} disabled={busy} className="sm:min-w-28">
+            {busy ? <Spinner className="size-4" /> : null}
+            {actionLabel} and ping
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // Asks before something that can't be taken back.
 export function ConfirmDialog({
   open,

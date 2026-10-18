@@ -7,6 +7,7 @@ export type ApiErrorCode =
   | "rate_limited"
   | "validation_error"
   | "internal_error"
+  | "wr_ping_required"
 
 type JsonResponseOptions = {
   headers?: HeadersInit

@@ -8,7 +8,7 @@ import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
 import { refreshPlayerScore, refreshScoresForTrial, type HistoryOverride } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
-import { listCurrentVersionWrs, refreshWorldRecords, type CurrentVersionWrRow } from "@/lib/server/wrs"
+import { listCurrentVersionWrs, refreshWorldRecords, wouldBeAnnouncedWr, type CurrentVersionWrRow } from "@/lib/server/wrs"
 import { checkTrialWrPrizeCandidates } from "@/lib/server/prize-candidate-checker"
 import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
 import { averageScoreChangeForWrChange, RANKED_PLAYER_MIN_SCORE } from "@/lib/server/average-score-change"
@@ -286,6 +286,14 @@ async function calculateAverageScoreChangeForWrChange(
   })
 }
 
+// Thrown before anything is changed when a moderation would make a WR and
+// the request didn't say whether to ping the WR role (wr_ping).
+export class WrPingChoiceRequiredError extends Error {
+  constructor() {
+    super("This run would be the world record. Choose whether to send a WR ping.")
+  }
+}
+
 export async function patchSubmission(
   context: { env: CloudflareEnv; ctx: ExecutionContext; uuid: string; user: AuthUser }
   ,
@@ -293,6 +301,7 @@ export async function patchSubmission(
     state?: unknown
     moderator_note?: unknown
     time?: unknown
+    wr_ping?: unknown
   } | null
 ) {
   const { env, ctx, uuid, user } = context
@@ -336,6 +345,17 @@ export async function patchSubmission(
         : "This submission's video failed to process, so it can't be approved"
     )
   }
+
+  // Approving a run, or changing an approved run's time, can make it a WR,
+  // and the moderator decides whether that pings the WR role. Other changes
+  // (notes, denials) never ping.
+  const wrPing = typeof payload?.wr_ping === "boolean" ? payload.wr_ping : null
+  const canMakeWr = (state ?? previousState) === "approved"
+    && (previousState !== "approved" || (time !== null && time !== submission.time))
+  if (canMakeWr && wrPing === null && await wouldBeAnnouncedWr(env.wasans, uuid, time ?? Number(submission.time))) {
+    throw new WrPingChoiceRequiredError()
+  }
+  const sendWrPing = canMakeWr && wrPing === true
 
   const updates: Array<{ field: "state" | "moderator_note" | "time" | "moderator_username"; value: string | number | null }> = []
 
@@ -587,6 +607,7 @@ export async function patchSubmission(
           discordUserId: oldPlayer?.discord_id ?? undefined,
           averageScoreChange,
           is_wr: announceAsWr,
+          send_wr_ping: sendWrPing,
           previous_wr_submission_uuid: previousToShow?.submission_uuid,
           previous_wr_time: previousToShow?.time,
           previous_wr_player_name: previousToShow?.player_name,
@@ -638,6 +659,7 @@ export async function patchSubmission(
         discordUserId: oldPlayer?.discord_id ?? undefined,
         averageScoreChange,
         is_wr: announceAsWr,
+        send_wr_ping: sendWrPing,
         previous_wr_submission_uuid: replacedWr?.submission_uuid,
         previous_wr_time: replacedWr?.time,
         previous_wr_player_name: replacedWr?.player_name,
