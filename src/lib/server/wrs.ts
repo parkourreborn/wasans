@@ -1,6 +1,6 @@
 import "server-only"
 import { insertAuditLog } from "@/lib/server/audit"
-import { validSubmissionSql } from "@/lib/server/trial-lifecycle"
+import { VALID_SUBMISSION_SQL, validSubmissionSql } from "@/lib/server/trial-lifecycle"
 
 type WrRow = {
   submission_uuid: string
@@ -17,6 +17,31 @@ type AuditActor = {
 
 const candidateValidSql = validSubmissionSql("candidate", "t")
 const betterValidSql = validSubmissionSql("better", "tb")
+
+export type CurrentVersionWrRow = WrRow & { trial_name: string; previous_thread_id: string | null }
+
+// The two fastest counted runs on the trial's current version, in WR order.
+// During the grace period after a trial is changed, the official WR (wrs)
+// can still be an old-version time; the first of these is the WR on the new
+// version and the second is the one it replaced.
+export async function listCurrentVersionWrs(db: D1Database, trialName: string) {
+  const now = Math.floor(Date.now() / 1000)
+  const { results } = await db.prepare(
+    `SELECT s.uuid AS submission_uuid, s.player_uuid, s.player_name, s.trial_name, s.time, s.date, s.thread_id AS previous_thread_id
+     FROM submissions AS s
+     JOIN trials AS t ON t.name = s.trial_name
+     WHERE s.trial_name = ?
+       AND s.state = 'approved'
+       AND s.trial_version = t.version
+       AND ${VALID_SUBMISSION_SQL}
+     ORDER BY s.time ASC, s.date ASC, s.uuid ASC
+     LIMIT 2`
+  )
+    .bind(trialName, now, now, now)
+    .all<CurrentVersionWrRow>()
+
+  return results || []
+}
 
 export async function refreshWorldRecords(db: D1Database, trialName?: string, actor?: AuditActor | null) {
   const now = Math.floor(Date.now() / 1000)

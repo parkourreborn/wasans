@@ -8,7 +8,7 @@ import { insertAuditLog } from "@/lib/server/audit"
 import type { AuditAction } from "@/lib/server/audit"
 import { refreshPlayerScore, refreshScoresForTrial, type HistoryOverride } from "@/lib/server/player-scores"
 import { refreshPlayerPbs } from "@/lib/server/pbs"
-import { refreshWorldRecords } from "@/lib/server/wrs"
+import { listCurrentVersionWrs, refreshWorldRecords, type CurrentVersionWrRow } from "@/lib/server/wrs"
 import { checkTrialWrPrizeCandidates } from "@/lib/server/prize-candidate-checker"
 import { getCountedTrialCount } from "@/lib/server/repositories/trial-repository"
 import { averageScoreChangeForWrChange, RANKED_PLAYER_MIN_SCORE } from "@/lib/server/average-score-change"
@@ -463,13 +463,27 @@ export async function patchSubmission(
 
       const submissionIsWr = wrRow?.submission_uuid === uuid
 
-      if (submissionIsWr && wrRow) {
+      // While a changed trial is in its grace period the official WR can
+      // still be an old-version time. The fastest run on the new version is
+      // announced as a WR anyway, against the new-version WR it beat, and
+      // quietly becomes the official WR once the grace period ends.
+      let versionWr: { row: CurrentVersionWrRow; replaced: CurrentVersionWrRow | null } | null = null
+      if (!submissionIsWr && isApproved) {
+        const [fastest, replaced] = await listCurrentVersionWrs(db, submission.trial_name)
+        if (fastest?.submission_uuid === uuid) {
+          versionWr = { row: fastest, replaced: replaced ?? null }
+        }
+      }
+      const announceAsWr = submissionIsWr || versionWr !== null
+      const wrHolder = submissionIsWr ? wrRow : versionWr?.row
+
+      if (announceAsWr && wrHolder) {
         await checkTrialWrPrizeCandidates(db, {
           trialName: submission.trial_name,
-          playerUuid: wrRow.player_uuid,
-          playerName: wrRow.player_name,
+          playerUuid: wrHolder.player_uuid,
+          playerName: wrHolder.player_name,
           submissionUuid: uuid,
-          time: Number(wrRow.time),
+          time: Number(wrHolder.time),
         })
       }
 
@@ -540,7 +554,7 @@ export async function patchSubmission(
         noteChanged,
       })
       const shouldCreateThread = !hasExistingThread && (
-        submissionIsWr
+        announceAsWr
         || (newState === "approved" && previousState !== "approved")
       )
 
@@ -555,7 +569,9 @@ export async function patchSubmission(
       }
 
       if (shouldUpdateThread && submission.thread_id) {
-        const previousToShow = previousWrRow?.submission_uuid === uuid ? wrRow : previousWrRow
+        const previousToShow = versionWr
+          ? versionWr.replaced
+          : previousWrRow?.submission_uuid === uuid ? wrRow : previousWrRow
         const previousWrThreadId = previousToShow?.previous_thread_id ?? undefined
         const updateOldTime = previousPbRow?.time ?? oldPb?.time
 
@@ -570,7 +586,7 @@ export async function patchSubmission(
           oldTime: updateOldTime,
           discordUserId: oldPlayer?.discord_id ?? undefined,
           averageScoreChange,
-          is_wr: submissionIsWr,
+          is_wr: announceAsWr,
           previous_wr_submission_uuid: previousToShow?.submission_uuid,
           previous_wr_time: previousToShow?.time,
           previous_wr_player_name: previousToShow?.player_name,
@@ -609,6 +625,7 @@ export async function patchSubmission(
         return
       }
 
+      const replacedWr = versionWr ? versionWr.replaced : previousWrRow
       const approvedRun = {
         submission_uuid: updatedSubmission.uuid,
         player_uuid: updatedSubmission.player_uuid,
@@ -620,11 +637,11 @@ export async function patchSubmission(
         oldTime: oldPb?.time,
         discordUserId: oldPlayer?.discord_id ?? undefined,
         averageScoreChange,
-        is_wr: submissionIsWr,
-        previous_wr_submission_uuid: previousWrRow?.submission_uuid,
-        previous_wr_time: previousWrRow?.time,
-        previous_wr_player_name: previousWrRow?.player_name,
-        previous_wr_thread_id: previousWrRow?.previous_thread_id ?? undefined,
+        is_wr: announceAsWr,
+        previous_wr_submission_uuid: replacedWr?.submission_uuid,
+        previous_wr_time: replacedWr?.time,
+        previous_wr_player_name: replacedWr?.player_name,
+        previous_wr_thread_id: replacedWr?.previous_thread_id ?? undefined,
       }
 
       if (!approvedRun.discordUserId) {
