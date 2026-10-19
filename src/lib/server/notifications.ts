@@ -140,7 +140,7 @@ type SubmissionSyncPayload = {
   moderator_note?: string
   thread_id?: string
   options?: {
-    // Post "New world record" in the rank milestones channel; send_wr_ping
+    // Announce the new WR in the rank milestones channel; send_wr_ping
     // adds the WR role ping to that post.
     announce_wr?: boolean
     send_wr_ping?: boolean

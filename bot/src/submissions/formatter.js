@@ -84,17 +84,30 @@ export function buildSubmissionMessage(body, options = {}) {
 
 // The rank milestones channel post for a run that just became the WR. Only
 // the WR role can be pinged by it (player names are plain text).
-export function buildWrAnnouncement(body, threadId, pingRoleId) {
-    const lines = [`${pingRoleId ? `<@&${pingRoleId}> ` : ''}New world record: <#${threadId}>!`];
+export function buildWrAnnouncement(body, threadId, pingRoleId, options = {}) {
+    const { includeAverageScoreChange = false } = options;
+    const lines = [];
 
-    const previous = body.previous_wr;
-    if (previous?.thread_id) {
-        if (previous.thread_id !== threadId) {
-            lines.push(`Previous wr: <#${previous.thread_id}>`);
-        }
-    } else if (previous?.time !== undefined && previous?.player_name) {
-        lines.push(`Previous wr: ${previous.time.toFixed(3)} by ${previous.player_name}`);
+    if (pingRoleId) {
+        lines.push(`<@&${pingRoleId}>`);
     }
+
+    lines.push(`<#${threadId}>`);
+
+    // A previous WR pointing at this run's own thread isn't a previous WR.
+    const previous = body.previous_wr?.thread_id === threadId ? null : body.previous_wr;
+    if (previous?.thread_id) {
+        lines.push(`Previous WR: <#${previous.thread_id}>`);
+    } else if (previous?.time !== undefined && previous?.player_name) {
+        lines.push(`Previous WR: ${previous.time.toFixed(3)} by ${previous.player_name}`);
+    } else {
+        lines.push('Previous WR: N/A');
+    }
+
+    const averageScoreChange = includeAverageScoreChange && Number.isFinite(body.average_score_change)
+        ? formatSignedFixed3(body.average_score_change)
+        : 'N/A';
+    lines.push(`Average score change: ${averageScoreChange}`);
 
     lines.push(resolveSubmissionUrl(body.submission_id));
 

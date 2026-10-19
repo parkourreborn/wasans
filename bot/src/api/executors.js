@@ -99,7 +99,10 @@ export async function executeSubmissionSync(body, options = {}) {
     if (announceWr && body.is_wr && body.state === 'approved' && botConfig.rank_milestones_channel_id) {
         const pingRoleId = sendWrPing ? botConfig.wr_ping_role_id || null : null;
         try {
-            await sendMessageToChannel(botConfig.rank_milestones_channel_id, buildWrAnnouncement(body, threadId, pingRoleId));
+            await sendMessageToChannel(
+                botConfig.rank_milestones_channel_id,
+                buildWrAnnouncement(body, threadId, pingRoleId, { includeAverageScoreChange }),
+            );
             wrPingSent = Boolean(pingRoleId);
         } catch (error) {
             await logger.warn('Submission sync note', `Failed to send WR announcement: ${error.message}`);
