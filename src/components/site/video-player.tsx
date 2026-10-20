@@ -137,14 +137,18 @@ type FrameJob = { time: number; canvas: HTMLCanvasElement }
 
 // A hidden second copy of the video that seeks around drawing frames for
 // the filmstrip and the hover preview, so the one being watched never
-// moves. One seek at a time; the hover preview jumps the queue, and only its
-// newest position is kept. The canvases are only ever displayed, never read
-// back, so the copy needs no CORS.
+// moves. One seek at a time. The hover preview jumps the queue, cutting
+// short a tile's seek if it has to, and only its newest position is kept.
+// The canvases are only ever displayed, never read back, so the copy needs
+// no CORS.
 class FrameGrabber {
   private readonly video = document.createElement("video")
   private readonly loaded: Promise<void>
   private tiles: FrameJob[] = []
   private peek: FrameJob | null = null
+  // The job whose seek is in flight, and whether it's a tile.
+  private current: FrameJob | null = null
+  private currentIsTile = false
   private running = false
   private stopped = false
 
@@ -166,6 +170,14 @@ class FrameGrabber {
   }
 
   preview(job: FrameJob) {
+    if (this.current && this.currentIsTile) {
+      // A new seek replaces the one in flight, and only it reports landing.
+      this.tiles.unshift(this.current)
+      this.current = job
+      this.currentIsTile = false
+      this.video.currentTime = job.time
+      return
+    }
     this.peek = job
     void this.run()
   }
@@ -174,6 +186,7 @@ class FrameGrabber {
     this.stopped = true
     this.tiles = []
     this.peek = null
+    this.current = null
     this.video.removeAttribute("src")
     this.video.load()
   }
@@ -186,14 +199,20 @@ class FrameGrabber {
       while (!this.stopped) {
         const job = this.peek ?? this.tiles.shift()
         if (!job) break
-        if (job === this.peek) this.peek = null
+        this.currentIsTile = job !== this.peek
+        this.peek = null
+        this.current = job
         await this.seek(job.time)
-        if (!this.stopped && drawFrame(this.video, job.canvas)) job.canvas.dataset.ready = ""
+        // A hover preview may have taken over the seek meanwhile.
+        const landed = this.current
+        this.current = null
+        if (!this.stopped && landed && drawFrame(this.video, landed.canvas)) landed.canvas.dataset.ready = ""
       }
     } catch {
       // The copy couldn't load. The strip stays blank and the player works
       // without it.
     } finally {
+      this.current = null
       this.running = false
     }
   }
@@ -521,8 +540,14 @@ export function VideoPlayer({
             setEnded(false)
             engage()
           }}
-          onPause={() => setPaused(true)}
-          onEnded={() => setEnded(true)}
+          onPause={() => {
+            setPaused(true)
+            paint()
+          }}
+          onEnded={() => {
+            setEnded(true)
+            paint()
+          }}
           onWaiting={() => setWaiting(true)}
           onPlaying={() => setWaiting(false)}
           onCanPlay={() => setWaiting(false)}
@@ -608,7 +633,7 @@ export function VideoPlayer({
 
           <div className="ml-auto flex items-center gap-1">
             <SpeedControl rate={rate} open={speedOpen} onOpenChange={setSpeedOpen} onChange={setSpeed} />
-            <div className="group/volume flex items-center">
+            <div className={cn("group/volume flex items-center", speedOpen && "max-sm:hidden")}>
               <Button
                 type="button"
                 variant="ghost"
@@ -661,7 +686,7 @@ export function VideoPlayer({
         </div>
 
         {showKeys ? (
-          <ul className="m-0 flex list-none flex-wrap gap-x-5 gap-y-2 border-t border-line p-0 pb-1 pt-2.5 text-[12px] text-muted-foreground">
+          <ul className="m-0 flex list-none flex-wrap gap-x-5 gap-y-2 border-t border-line p-0 pb-1 pt-2.5 text-[12px] text-muted-foreground max-sm:hidden">
             {SHORTCUTS.map(([keys, action]) => (
               <li key={action} className="flex items-center gap-1.5">
                 {keys.map((key) => (
@@ -922,7 +947,7 @@ function SpeedControl({
                 close()
               }}
               className={cn(
-                "num h-8 min-w-9 cursor-pointer rounded-sm px-1.5 text-[12px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                "num h-8 min-w-8 cursor-pointer rounded-sm px-1 text-[12px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring sm:min-w-9 sm:px-1.5",
                 speed === rate ? "bg-foreground text-background" : "text-muted-foreground hover:bg-surface-2 hover:text-foreground"
               )}
             >
@@ -939,7 +964,12 @@ function SpeedControl({
         aria-expanded={open}
         aria-label={`Playback speed, ${rate}×`}
         title="Playback speed (< and >)"
-        className={cn("min-w-11 px-2 font-mono text-[13px] font-medium normal-case tracking-normal tabular-nums", rate === 1 ? "text-muted-foreground" : "text-primary")}
+        className={cn(
+          "min-w-11 px-2 font-mono text-[13px] font-medium normal-case tracking-normal tabular-nums",
+          rate === 1 ? "text-muted-foreground" : "text-primary",
+          // Phones need the room; picking a speed or Escape closes the chips.
+          open && "max-sm:hidden"
+        )}
       >
         {rate}×
       </Button>
