@@ -55,22 +55,61 @@ export function parseRunTime(text: string) {
 
 export type ParsedDriveName = { trial: string | null; trialText: string; time: number | null; player: string | null }
 
-// The old Drive's names are "{lowercase trial} {time} | {player}", plus the
-// file's extension. Anything that doesn't read is left null for an owner to
-// fill in.
-export function parseDriveFileName(fileName: string, trials: readonly string[]): ParsedDriveName {
-  const name = VIDEO_EXTENSIONS.has(extensionOf(fileName)) ? fileName.replace(/\.[A-Za-z0-9]{1,5}$/, "") : fileName
-  const bar = name.indexOf("|")
-  const left = (bar >= 0 ? name.slice(0, bar) : name).replace(/\s+/g, " ").trim()
-  // Drive adds " (1)" to a second copy with the same name.
-  const player = bar >= 0 ? name.slice(bar + 1).replace(/\s*\(\d+\)\s*$/, "").trim() || null : null
+// A time with a decimal part, or failing that a whole number, standing on
+// its own (letters may touch it, other digits may not).
+const DECIMAL_TIME = /(?<![\d.,:])(?:\d+:)?\d+[.,]\d+(?![\d.,:])/
+const WHOLE_TIME = /(?<![\d.,:])(?:\d+:)?\d+(?![\d.,:])/
+// Whatever sits between the time and the player: "|", or "I" or "l" where a
+// file system wouldn't allow "|", or any other punctuation.
+const SEPARATOR = /^[^\p{L}\p{N}]*(?:[Il](?=[^\p{L}\p{N}]))?[^\p{L}\p{N}]*/u
+const SEPARATOR_ONLY = /\s*(?:[|¦｜]|\s[Il]\s)\s*/
 
-  const timed = /^(.*?)\s*((?:\d+:)?\d+(?:[.,]\d+)?)$/.exec(left)
-  const trialText = (timed ? timed[1] : left).trim()
-  const time = timed ? parseRunTime(timed[2]) : null
-  const key = trialKey(trialText)
-  const trial = key ? (trials.find((candidate) => trialKey(candidate) === key) ?? null) : null
-  return { trial, trialText, time, player }
+function trimJunk(text: string) {
+  return text.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}_)\]]+$/gu, "")
+}
+
+// The site trial `text` names: the same name, or else the longest one
+// written inside it ("wr vestibule" is Vestibule).
+function findTrial(text: string, trials: readonly string[]) {
+  const key = trialKey(text)
+  if (!key) return null
+  const exact = trials.find((candidate) => trialKey(candidate) === key)
+  if (exact) return exact
+  let best: string | null = null
+  for (const candidate of trials) {
+    const candidateKey = trialKey(candidate)
+    if (candidateKey.length >= 3 && key.includes(candidateKey) && (!best || candidateKey.length > trialKey(best).length)) best = candidate
+  }
+  return best
+}
+
+// The old Drive's names are "{trial} {time} {separator} {player}", plus the
+// file's extension, where the separator is usually "|" but can be "I" or
+// anything else, or nothing. Anything that doesn't read is left null for an
+// owner to fill in.
+export function parseDriveFileName(fileName: string, trials: readonly string[]): ParsedDriveName {
+  const name = (VIDEO_EXTENSIONS.has(extensionOf(fileName)) ? fileName.replace(/\.[A-Za-z0-9]{1,5}$/, "") : fileName)
+    // Drive adds " (1)" to a second copy with the same name.
+    .replace(/\s*\(\d+\)\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  const timed = DECIMAL_TIME.exec(name) ?? WHOLE_TIME.exec(name)
+  let left: string
+  let right: string
+  if (timed) {
+    left = name.slice(0, timed.index)
+    right = name.slice(timed.index + timed[0].length).replace(SEPARATOR, "")
+  } else {
+    const split = SEPARATOR_ONLY.exec(name)
+    left = split ? name.slice(0, split.index) : name
+    right = split ? name.slice(split.index + split[0].length) : ""
+  }
+
+  const trialText = trimJunk(left.trim())
+  const time = timed ? parseRunTime(timed[0]) : null
+  const player = trimJunk(right.trim()) || null
+  return { trial: findTrial(trialText, trials), trialText, time, player }
 }
 
 // Drive keeps two dates: when the file was uploaded (created), and when it

@@ -2,6 +2,7 @@ import "server-only"
 import { buildAuditLogStatement, insertAuditLog, type AuditActor } from "@/lib/server/audit"
 import { gameVersionExists, listGameVersions, setSubmissionGameVersion } from "@/lib/server/repositories/game-version-repository"
 import { enqueueVideoJobs } from "@/lib/server/services/video-processing-service"
+import { STUCK_PROCESSING_SECONDS } from "@/lib/server/video-processing"
 import { archiveRun, getWorldRecordRun } from "@/lib/server/services/wr-archive-service"
 import { ApiError } from "@/lib/server/v2/http"
 import { generateShortId } from "@/lib/utils"
@@ -24,6 +25,8 @@ import {
 //     and is read with the GOOGLE_DRIVE_API_KEY secret.
 //  2. Copy: each file is copied into the private uploads bucket at
 //     imports/{drive file id}, from the queue page and the daily sweep.
+//     The video container then re-encodes it there to an H.264 MP4 (a
+//     "drive" job), replacing the Drive original, so it plays in the queue.
 //  3. Review, one at a time in /admin/site/wr-imports:
 //     - Import: a new approved run with imported = 1. Its file moves to
 //       originals/{uuid} and goes through the video pipeline (reason
@@ -47,6 +50,9 @@ const SCAN_BATCH = 50
 // A claimed file that never got its run (the copy failed partway) goes back
 // in the queue after this long.
 const CLAIM_TIMEOUT_SECONDS = 10 * 60
+// Files re-encoding at once. The queue starts more as each one finishes,
+// so a big backlog never piles up on the video queue.
+const MAX_ENCODING = 12
 
 type DriveFile = { id: string; name: string; mimeType: string; size?: string; createdTime?: string; modifiedTime?: string }
 
@@ -140,6 +146,8 @@ export async function scanDriveFolder(env: CloudflareEnv, db: D1Database, folder
            folder_path = excluded.folder_path,
            mime_type = excluded.mime_type,
            staged_at = CASE WHEN wr_imports.status = 'pending' AND wr_imports.size IS NOT excluded.size THEN NULL ELSE wr_imports.staged_at END,
+           copied_at = CASE WHEN wr_imports.status = 'pending' AND wr_imports.size IS NOT excluded.size THEN NULL ELSE wr_imports.copied_at END,
+           encode_queued_at = CASE WHEN wr_imports.status = 'pending' AND wr_imports.size IS NOT excluded.size THEN NULL ELSE wr_imports.encode_queued_at END,
            size = excluded.size,
            drive_created_at = excluded.drive_created_at,
            drive_modified_at = excluded.drive_modified_at,
@@ -165,14 +173,73 @@ export async function scanDriveFolder(env: CloudflareEnv, db: D1Database, folder
 
 async function countWaitingCopies(db: D1Database) {
   const row = await db
-    .prepare(`SELECT COUNT(*) AS count FROM wr_imports WHERE status = 'pending' AND staged_at IS NULL`)
+    .prepare(`SELECT COUNT(*) AS count FROM wr_imports WHERE status = 'pending' AND staged_at IS NULL AND copied_at IS NULL`)
     .first<{ count: number }>()
   return Number(row?.count ?? 0)
 }
 
+// Queues re-encodes for copied files, up to MAX_ENCODING at once. One
+// queued long ago lost its job somewhere and is queued again.
+export async function queueDriveEncodes(env: CloudflareEnv, db: D1Database) {
+  if (!env.VIDEO_QUEUE) return 0
+  const now = Math.floor(Date.now() / 1000)
+  const stale = now - STUCK_PROCESSING_SECONDS
+  const waiting = `status = 'pending' AND copied_at IS NOT NULL AND staged_at IS NULL AND copy_error IS NULL`
+  const busy = await db
+    .prepare(`SELECT COUNT(*) AS count FROM wr_imports WHERE ${waiting} AND encode_queued_at >= ?`)
+    .bind(stale)
+    .first<{ count: number }>()
+  const room = MAX_ENCODING - Number(busy?.count ?? 0)
+  if (room <= 0) return 0
+  const { results } = await db
+    .prepare(
+      `SELECT drive_file_id FROM wr_imports
+       WHERE ${waiting} AND (encode_queued_at IS NULL OR encode_queued_at < ?)
+       ORDER BY drive_created_at ASC
+       LIMIT ?`
+    )
+    .bind(stale, room)
+    .all<{ drive_file_id: string }>()
+  const ids = (results || []).map((row) => row.drive_file_id)
+  if (ids.length === 0) return 0
+  await enqueueVideoJobs(env, ids.map((driveFileId) => ({ driveFileId, reason: "drive" as const, attempt: 1 as const })))
+  await db.batch(ids.map((id) => db.prepare(`UPDATE wr_imports SET encode_queued_at = ? WHERE drive_file_id = ?`).bind(now, id)))
+  return ids.length
+}
+
+// The video container's result for a "drive" job (see
+// /v2/internal/wr-imports/[id]). A file handled while it was re-encoding
+// doesn't need the new copy.
+export async function applyDriveEncodeResult(env: CloudflareEnv, db: D1Database, driveFileId: string, payload: { status?: unknown; error?: unknown }) {
+  if (payload.status !== "ready" && payload.status !== "failed") {
+    throw new ApiError("Invalid result", 400, "validation_error")
+  }
+  const row = await db
+    .prepare(`SELECT status, copied_at, staged_at FROM wr_imports WHERE drive_file_id = ?`)
+    .bind(driveFileId)
+    .first<{ status: ImportRowDb["status"]; copied_at: number | null; staged_at: number | null }>()
+  if (!row || row.status !== "pending") {
+    if (row?.status !== "imported") await env.UPLOADS?.delete(importKey(driveFileId))
+    return { applied: false }
+  }
+  if (row.copied_at === null || row.staged_at !== null) return { applied: false }
+
+  const now = Math.floor(Date.now() / 1000)
+  if (payload.status === "ready") {
+    await db
+      .prepare(`UPDATE wr_imports SET staged_at = ?, mime_type = 'video/mp4', encode_queued_at = NULL, copy_error = NULL WHERE drive_file_id = ?`)
+      .bind(now, driveFileId)
+      .run()
+  } else {
+    const message = `Re-encoding failed: ${String(payload.error || "the video couldn’t be processed")}`
+    await db.prepare(`UPDATE wr_imports SET copy_error = ?, encode_queued_at = NULL WHERE drive_file_id = ?`).bind(message.slice(0, 300), driveFileId).run()
+  }
+  return { applied: true }
+}
+
 // Copies the next files from the Drive into imports/, oldest first, until
-// `limit` are done or `budgetMs` has passed. Ones that failed before go
-// last, so a broken file can't hold the rest up.
+// `limit` are done or `budgetMs` has passed, and queues their re-encodes.
+// Ones that failed before go last, so a broken file can't hold the rest up.
 export async function copyDriveFiles(env: CloudflareEnv, db: D1Database, options: { limit: number; budgetMs: number }) {
   const key = driveApiKey(env)
   if (!key || !env.UPLOADS) return { copied: 0, failed: 0, remaining: 0 }
@@ -181,7 +248,7 @@ export async function copyDriveFiles(env: CloudflareEnv, db: D1Database, options
     .prepare(
       `SELECT drive_file_id, mime_type, size
        FROM wr_imports
-       WHERE status = 'pending' AND staged_at IS NULL
+       WHERE status = 'pending' AND staged_at IS NULL AND copied_at IS NULL
        ORDER BY copy_error IS NOT NULL, drive_created_at ASC
        LIMIT ?`
     )
@@ -211,7 +278,7 @@ export async function copyDriveFiles(env: CloudflareEnv, db: D1Database, options
       })
       await piping
       await db
-        .prepare(`UPDATE wr_imports SET staged_at = ?, copy_error = NULL, size = ? WHERE drive_file_id = ?`)
+        .prepare(`UPDATE wr_imports SET copied_at = ?, encode_queued_at = NULL, copy_error = NULL, size = ? WHERE drive_file_id = ?`)
         .bind(Math.floor(Date.now() / 1000), size, row.drive_file_id)
         .run()
       copied += 1
@@ -221,6 +288,12 @@ export async function copyDriveFiles(env: CloudflareEnv, db: D1Database, options
       console.error(`Copying Drive file ${row.drive_file_id} failed:`, error)
       await db.prepare(`UPDATE wr_imports SET copy_error = ? WHERE drive_file_id = ?`).bind(message.slice(0, 300), row.drive_file_id).run()
     }
+  }
+  try {
+    await queueDriveEncodes(env, db)
+  } catch (error) {
+    // Queued again on the next copy, result or daily sweep.
+    console.error("Queueing Drive re-encodes failed:", error)
   }
   return { copied, failed, remaining: await countWaitingCopies(db) }
 }
@@ -254,14 +327,19 @@ type ImportRowDb = {
   drive_created_at: number | null
   drive_modified_at: number | null
   staged_at: number | null
+  copied_at: number | null
+  encode_queued_at: number | null
   copy_error: string | null
   status: "pending" | "imported" | "merged" | "skipped"
   submission_uuid: string | null
   resolved_at: number | null
 }
 
-export type ImportQueueRow = Omit<ImportRowDb, "mime_type" | "staged_at" | "resolved_at"> & {
+export type ImportQueueRow = Omit<ImportRowDb, "mime_type" | "staged_at" | "copied_at" | "encode_queued_at" | "resolved_at"> & {
+  // Re-encoded and ready to watch and import.
   staged: boolean
+  // Copied over, and re-encoding.
+  encoding: boolean
   date: number | null
   parsed: ParsedDriveName
   version: string | null
@@ -367,11 +445,13 @@ export async function listImportQueue(env: CloudflareEnv, db: D1Database) {
   const now = Math.floor(Date.now() / 1000)
   await db
     .prepare(
-      `UPDATE wr_imports SET status = 'pending', staged_at = NULL, resolved_at = NULL, resolved_by = NULL
+      `UPDATE wr_imports SET status = 'pending', staged_at = NULL, copied_at = NULL, encode_queued_at = NULL, resolved_at = NULL, resolved_by = NULL
        WHERE status IN ('imported', 'merged') AND submission_uuid IS NULL AND COALESCE(resolved_at, 0) < ?`
     )
     .bind(now - CLAIM_TIMEOUT_SECONDS)
     .run()
+  // Files copied before re-encoding existed, or whose job got lost.
+  await queueDriveEncodes(env, db).catch((error) => console.error("Queueing Drive re-encodes failed:", error))
 
   const [{ results: rows }, { results: trialRows }, versions] = await Promise.all([
     db.prepare(`SELECT * FROM wr_imports`).all<ImportRowDb>(),
@@ -404,6 +484,7 @@ export async function listImportQueue(env: CloudflareEnv, db: D1Database) {
         status: row.status,
         submission_uuid: row.submission_uuid,
         staged: row.staged_at !== null,
+        encoding: row.staged_at === null && row.copied_at !== null && !row.copy_error,
         date: driveRecordDate(row.drive_created_at, row.drive_modified_at),
         parsed: name,
         version: versionFromFolder(row.folder_path, versionNames),
@@ -480,7 +561,7 @@ export async function importDriveFile(env: CloudflareEnv, db: D1Database, actor:
   const now = Math.floor(Date.now() / 1000)
   const row = await getImportRow(db, driveFileId)
   if (row.status !== "pending") throw new ApiError("Someone already handled this file. Reload the queue.", 409, "conflict")
-  if (row.staged_at === null) throw new ApiError("This file hasn’t been copied from the Drive yet", 409, "conflict")
+  if (row.staged_at === null) throw new ApiError("This file hasn’t been copied from the Drive and re-encoded yet", 409, "conflict")
   const { time, date, trial, player, version } = await checkInput(db, body, now)
 
   const match = await findSameRun(db, trial.name, time, player.uuid)
@@ -498,7 +579,7 @@ export async function importDriveFile(env: CloudflareEnv, db: D1Database, actor:
   }
   if (size === null) {
     await release(db, driveFileId)
-    await db.prepare(`UPDATE wr_imports SET staged_at = NULL WHERE drive_file_id = ?`).bind(driveFileId).run()
+    await db.prepare(`UPDATE wr_imports SET staged_at = NULL, copied_at = NULL, encode_queued_at = NULL WHERE drive_file_id = ?`).bind(driveFileId).run()
     throw new ApiError("The copied file is gone, so it’s being copied from the Drive again. Try again in a minute.", 409, "conflict")
   }
 
@@ -514,7 +595,7 @@ export async function importDriveFile(env: CloudflareEnv, db: D1Database, actor:
            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, 1, 'processing', 'import', ?, ?, ?, ?, 'original')`
         )
         .bind(uuid, player.uuid, trial.name, player.player_name, time, date, trial.version, note.slice(0, 500), actor.player_name, version, now, originalKey, now, originalKey, size),
-      db.prepare(`UPDATE wr_imports SET submission_uuid = ?, staged_at = NULL, copy_error = NULL WHERE drive_file_id = ?`).bind(uuid, driveFileId),
+      db.prepare(`UPDATE wr_imports SET submission_uuid = ?, staged_at = NULL, copied_at = NULL, copy_error = NULL WHERE drive_file_id = ?`).bind(uuid, driveFileId),
       buildAuditLogStatement(db, "wr_imported", "submission", uuid, {
         actor,
         details: { trial_name: trial.name, time, player_name: player.player_name, date, game_version: version, file_name: row.file_name, drive_file_id: driveFileId },
@@ -561,7 +642,7 @@ export async function matchDriveFile(env: CloudflareEnv, db: D1Database, actor: 
     )
   }
   statements.push(
-    db.prepare(`UPDATE wr_imports SET submission_uuid = ?, staged_at = NULL WHERE drive_file_id = ?`).bind(match.uuid, driveFileId),
+    db.prepare(`UPDATE wr_imports SET submission_uuid = ?, staged_at = NULL, copied_at = NULL, encode_queued_at = NULL WHERE drive_file_id = ?`).bind(match.uuid, driveFileId),
     buildAuditLogStatement(db, "wr_import_matched", "submission", match.uuid, {
       actor,
       details: {
@@ -608,7 +689,7 @@ export async function skipDriveFile(env: CloudflareEnv, db: D1Database, actor: A
   const row = await getImportRow(db, driveFileId)
   await claim(db, driveFileId, "skipped", actor, now)
   await db.batch([
-    db.prepare(`UPDATE wr_imports SET staged_at = NULL WHERE drive_file_id = ?`).bind(driveFileId),
+    db.prepare(`UPDATE wr_imports SET staged_at = NULL, copied_at = NULL, encode_queued_at = NULL WHERE drive_file_id = ?`).bind(driveFileId),
     buildAuditLogStatement(db, "wr_import_skipped", "wr_import", driveFileId, { actor, details: { file_name: row.file_name } }),
   ])
   await env.UPLOADS.delete(importKey(driveFileId))

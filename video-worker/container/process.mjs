@@ -6,6 +6,9 @@
 //   (<=1080p, <=60fps) -> thumbnail -> publish to scores/{uuid}.mp4 and
 //   scores/{uuid}-preview.jpg
 //
+// A "drive" job (a file in the WR import queue) stops after the encode and
+// replaces the file it read instead, with no thumbnail.
+//
 // Like render.mjs, the container holds no credentials. Every read and write
 // goes through http://media.internal, whose Worker handlers derive every
 // object key from this container's own job, so the container can't read or
@@ -275,6 +278,10 @@ async function obtainOriginal(job, source) {
     throw new PermanentError("The imported file is missing.")
   }
 
+  if (job.reason === "drive") {
+    throw new PermanentError("The copied file is missing.")
+  }
+
   if (job.reason === "medal") {
     const video = await fetchMedalVideo(job.medalUrl)
     const declared = Number(video.headers.get("content-length") || "0")
@@ -349,6 +356,18 @@ async function main(job) {
   await rm(source, { force: true })
 
   const result = await probe(output)
+  const facts = {
+    width: result.width,
+    height: result.height,
+    fps: Math.round(result.fps * 1000) / 1000,
+    duration_seconds: Math.round(result.duration * 1000) / 1000,
+  }
+
+  if (job.reason === "drive") {
+    const sizeBytes = await uploadMultipart(`${MEDIA_BASE}/original/multipart`, output, { contentType: "video/mp4" })
+    return { status: "ready", mode, ...facts, size_bytes: sizeBytes }
+  }
+
   await thumbnail(output, result.duration, preview)
 
   const sizeBytes = await uploadMultipart(`${MEDIA_BASE}/published/multipart`, output, { contentType: "video/mp4" })
@@ -363,10 +382,7 @@ async function main(job) {
     status: "ready",
     mode,
     original_kept: from === "original" || mode === "transcode",
-    width: result.width,
-    height: result.height,
-    fps: Math.round(result.fps * 1000) / 1000,
-    duration_seconds: Math.round(result.duration * 1000) / 1000,
+    ...facts,
     size_bytes: sizeBytes,
   }
 }

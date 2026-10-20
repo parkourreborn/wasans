@@ -67,12 +67,16 @@ export function isUploadConsumable(
 }
 
 // "import": a world record from the old WR Drive, whose file is already at
-// originals/{uuid} (see wr-import-service.ts).
+// originals/{uuid} (see wr-import-service.ts). "drive": that file while it
+// waits in the import queue.
 export type VideoJobMessage =
   | { submissionUuid: string; reason: "upload"; incomingKey: string; attempt: 1 }
   | { submissionUuid: string; reason: "medal"; medalUrl: string; attempt: 1 }
   | { submissionUuid: string; reason: "backfill"; attempt: 1 }
   | { submissionUuid: string; reason: "import"; attempt: 1 }
+  // A file waiting in the WR import queue, re-encoded in place at
+  // imports/{driveFileId}.
+  | { driveFileId: string; reason: "drive"; attempt: 1 }
 
 // Rebuilds the queue message for a submission from what's stored on it,
 // for the stuck-job sweep. Null when there's nothing to rebuild from.
