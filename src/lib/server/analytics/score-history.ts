@@ -92,7 +92,7 @@ export async function getPlayerScoreHistory(db: D1Database, playerUuid: string, 
       `SELECT score, reason, recorded_at, trial_name, submission_uuid
        FROM player_score_history
        WHERE player_uuid = ?
-       ORDER BY recorded_at DESC
+       ORDER BY recorded_at DESC, id DESC
        LIMIT ?`
     )
     .bind(playerUuid, limit)

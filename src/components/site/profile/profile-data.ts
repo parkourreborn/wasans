@@ -1,3 +1,4 @@
+import { HISTORY_START } from "@/lib/history-start"
 import { bronze, plats, type TrialName } from "@/lib/trials"
 import { tierForScore } from "@/lib/tiers"
 
@@ -75,7 +76,8 @@ export type RecordHeld = { trial: string; time: number; since: number; submissio
 export type RecordLost = { trial: string; time: number; set: number; held: number; takenBy: string; takenByUuid: string }
 
 // Walks every trial's chain of records: the player's entries that are still
-// the record, and the ones somebody later beat.
+// the record, and the ones somebody later beat. Records beaten before the
+// profile's history starts are left out.
 export function recordsFor(history: readonly HistoryEntry[], playerUuid: string, currentWrUuids: ReadonlySet<string>) {
   const byTrial = new Map<string, HistoryEntry[]>()
   for (const entry of history) {
@@ -85,6 +87,7 @@ export function recordsFor(history: readonly HistoryEntry[], playerUuid: string,
   }
   const held: RecordHeld[] = []
   const lost: RecordLost[] = []
+  let selfBeaten = 0
   for (const [trial, chain] of byTrial) {
     chain.forEach((entry, index) => {
       if (entry.player_uuid !== playerUuid) return
@@ -93,25 +96,18 @@ export function recordsFor(history: readonly HistoryEntry[], playerUuid: string,
         if (currentWrUuids.has(entry.uuid)) held.push({ trial, time: Number(entry.time), since: entry.date, submission_uuid: entry.uuid })
         return
       }
+      if (next.date < HISTORY_START) return
       // Beating your own record isn't losing it.
-      if (next.player_uuid === playerUuid) return
+      if (next.player_uuid === playerUuid) {
+        selfBeaten += 1
+        return
+      }
       lost.push({ trial, time: Number(entry.time), set: entry.date, held: next.date - entry.date, takenBy: next.player_name, takenByUuid: next.player_uuid })
     })
   }
   held.sort((a, b) => b.since - a.since)
   lost.sort((a, b) => b.set + b.held - (a.set + a.held))
-  return { held, lost, allTime: held.length + lost.length + countSelfBeaten(byTrial, playerUuid) }
-}
-
-function countSelfBeaten(byTrial: Map<string, HistoryEntry[]>, playerUuid: string) {
-  let count = 0
-  for (const chain of byTrial.values()) {
-    chain.forEach((entry, index) => {
-      const next = chain[index + 1]
-      if (entry.player_uuid === playerUuid && next && next.player_uuid === playerUuid) count += 1
-    })
-  }
-  return count
+  return { held, lost, allTime: held.length + lost.length + selfBeaten }
 }
 
 export type ActivityEvent = {

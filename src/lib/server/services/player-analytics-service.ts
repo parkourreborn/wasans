@@ -1,4 +1,5 @@
 import "server-only"
+import { HISTORY_START_DATE, rankHistoryFromStart, scoreHistoryFromStart } from "@/lib/history-start"
 import { getPlayerActivityHeatmap, getTimeSinceLastPb } from "@/lib/server/analytics/activity"
 import { getPlayerScoreHistory } from "@/lib/server/analytics/score-history"
 import { getPlayerPeakRank, getPlayerRankHistory } from "@/lib/server/analytics/rank-snapshot"
@@ -24,14 +25,14 @@ export async function buildPlayerAnalytics(db: D1Database, uuid: string) {
     getPlayerRankHistory(db, uuid),
     getPlayerActivityHeatmap(db, uuid),
     getTimeSinceLastPb(db, uuid),
-    getPlayerPeakRank(db, uuid),
+    getPlayerPeakRank(db, uuid, HISTORY_START_DATE),
   ])
 
   return {
     player_found: true as const,
     trial_distributions: trialDistributions,
-    score_history: scoreHistory,
-    rank_history: rankHistory,
+    score_history: scoreHistoryFromStart(scoreHistory),
+    rank_history: rankHistoryFromStart(rankHistory),
     activity_heatmap: activityHeatmap,
     last_pb_at: lastPbAt,
     peak_rank: peakRank,
