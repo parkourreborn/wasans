@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
   ArchiveIcon,
@@ -53,7 +53,7 @@ type ImportRow = {
   status: "pending" | "imported" | "merged" | "skipped"
   submission_uuid: string | null
   staged: boolean
-  encoding: boolean
+  copying: boolean
   date: number | null
   parsed: { trial: string | null; trialText: string; time: number | null; player: string | null }
   version: string | null
@@ -105,7 +105,7 @@ export function AdminWrImportsPage() {
   const [lastVersion, setLastVersion] = useState<string | null>(null)
 
   const imports = queue?.imports ?? []
-  const encoding = imports.some((row) => row.status === "pending" && row.encoding)
+  const copying = imports.some((row) => row.status === "pending" && !row.staged && !row.copy_error)
   const lists: Record<View, ImportRow[]> = {
     review: imports.filter((row) => row.status === "pending"),
     player: imports.filter((row) => row.status === "pending" && row.players.length !== 1),
@@ -121,12 +121,12 @@ export function AdminWrImportsPage() {
     if (target) setSelected(target.drive_file_id)
   }
 
-  // Re-encodes finish on the server, so check back while any are running.
+  // Copies happen on the server, so check back while any are left.
   useEffect(() => {
-    if (!encoding) return
+    if (!copying) return
     const timer = window.setInterval(refetch, 20 * 1000)
     return () => window.clearInterval(timer)
-  }, [encoding, refetch])
+  }, [copying, refetch])
 
   const setQueue = (next: QueueData) => setApiData(QUEUE_URL, { ...data, data: next })
 
@@ -235,7 +235,7 @@ export function AdminWrImportsPage() {
                         {row.parsed.player ?? "No player in the name"}
                       </span>
                       <span className={cn("text-right text-[12px]", row.copy_error ? "text-destructive" : "text-subtle-foreground")}>
-                        {row.status === "imported" ? "Imported" : row.status === "merged" ? "Matched" : row.status === "skipped" ? "Skipped" : row.staged ? "Ready" : row.copy_error ? "Copy failed" : row.encoding ? "Re-encoding" : "Not copied"}
+                        {row.status === "imported" ? "Imported" : row.status === "merged" ? "Matched" : row.status === "skipped" ? "Skipped" : row.staged ? "Ready" : row.copy_error ? "Copy failed" : row.copying ? "Copying" : "Waiting"}
                       </span>
                     </button>
                   </li>
@@ -260,7 +260,7 @@ export function AdminWrImportsPage() {
                     onMove={move}
                   />
                 ) : (
-                  <ResolvedDetail row={current} onRestored={() => resolved(current, { status: "pending", staged: false, encoding: false })} />
+                  <ResolvedDetail row={current} onRestored={() => resolved(current, { status: "pending", staged: false, copying: false })} />
                 )}
               </section>
             </div>
@@ -275,12 +275,11 @@ export function AdminWrImportsPage() {
 function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => void }) {
   const [folder, setFolder] = useState(queue.default_folder)
   const [scanning, setScanning] = useState(false)
-  const [copying, setCopying] = useState(false)
-  const stopping = useRef(false)
+  const [retrying, setRetrying] = useState(false)
   const pending = queue.imports.filter((row) => row.status === "pending")
   const copied = pending.filter((row) => row.staged).length
   const failed = pending.filter((row) => !row.staged && row.copy_error).length
-  const reencoding = pending.filter((row) => row.encoding).length
+  const inProgress = pending.filter((row) => row.copying).length
 
   const scan = async () => {
     setScanning(true)
@@ -301,24 +300,17 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
     }
   }
 
-  // A batch at a time until none are left, a batch copies nothing (only
-  // failing files remain), or Stop is pressed.
-  const copyAll = async () => {
-    setCopying(true)
-    stopping.current = false
-    let total = 0
+  // Failed copies go back in line. The rest copy on their own.
+  const retry = async () => {
+    setRetrying(true)
     try {
-      for (;;) {
-        const result = await adminRequest<{ copied: number; failed: number; remaining: number }>("/admin/wr-imports/copy", { fallback: "Copying failed" })
-        total += result?.copied ?? 0
-        onChanged()
-        if (!result || result.remaining === 0 || result.copied === 0 || stopping.current) break
-      }
-      toast.success(`Copied ${formatCount(total)} ${total === 1 ? "file" : "files"}`)
+      await adminRequest("/admin/wr-imports/copy", { fallback: "Couldn’t retry the copies" })
+      toast.success(`Copying ${formatCount(failed)} ${failed === 1 ? "file" : "files"} again`)
+      onChanged()
     } catch (err) {
-      toast.error(errorText(err, "Copying failed"))
+      toast.error(errorText(err, "Couldn’t retry the copies"))
     } finally {
-      setCopying(false)
+      setRetrying(false)
     }
   }
 
@@ -327,7 +319,8 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
       {!queue.configured ? (
         <p className="m-0 rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-[13px]">
           Reading the Drive needs a Google API key with the Google Drive API turned on, saved as the{" "}
-          <code className="text-[12px]">GOOGLE_DRIVE_API_KEY</code> secret (<code className="text-[12px]">npx wrangler secret put GOOGLE_DRIVE_API_KEY</code>). The
+          <code className="text-[12px]">GOOGLE_DRIVE_API_KEY</code> secret on both the site and the video worker (
+          <code className="text-[12px]">npx wrangler secret put GOOGLE_DRIVE_API_KEY</code>, then again in <code className="text-[12px]">video-worker/</code>). The
           folder has to open in a private window without signing in.
         </p>
       ) : null}
@@ -347,19 +340,15 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
       {pending.length > 0 ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <span className="flex-1 text-[13px] text-muted-foreground">
-            <span className="num text-foreground">{formatCount(copied)}</span> of {formatCount(pending.length)} files to review are copied over and re-encoded
-            {reencoding > 0 ? <>, {formatCount(reencoding)} re-encoding</> : null}
-            {failed > 0 ? <span className="text-destructive">, {formatCount(failed)} failed</span> : null}. Files copy in the daily sweep too.
+            <span className="num text-foreground">{formatCount(copied)}</span> of {formatCount(pending.length)} files to review are copied and re-encoded
+            {inProgress > 0 ? <>, {formatCount(inProgress)} copying now</> : null}
+            {failed > 0 ? <span className="text-destructive">, {formatCount(failed)} failed</span> : null}. The video worker copies them straight from the
+            Drive, a few at a time, whether or not this page is open.
           </span>
-          {copying ? (
-            <Button type="button" variant="outline" onClick={() => (stopping.current = true)}>
-              <Spinner className="size-4" />
-              Stop copying
-            </Button>
-          ) : queue.waiting_copies > 0 ? (
-            <Button type="button" variant="outline" onClick={() => void copyAll()} disabled={!queue.configured}>
-              <CloudDownloadIcon />
-              Copy all {formatCount(queue.waiting_copies)}
+          {failed > 0 ? (
+            <Button type="button" variant="outline" onClick={() => void retry()} disabled={retrying || !queue.configured}>
+              {retrying ? <Spinner className="size-4" /> : <CloudDownloadIcon />}
+              Retry {formatCount(failed)} failed
             </Button>
           ) : null}
         </div>
@@ -371,8 +360,7 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
 function FilePreview({ row }: { row: ImportRow }) {
   const [failed, setFailed] = useState(false)
   if (row.staged && !failed) {
-    // No filmstrip: these are the original uploads, often large, and it
-    // would download them a second time.
+    // No filmstrip: it would download each file a second time.
     return (
       <VideoPlayer
         src={apiV2(`/admin/wr-imports/${encodeURIComponent(row.drive_file_id)}/file`)}
@@ -389,10 +377,10 @@ function FilePreview({ row }: { row: ImportRow }) {
           {failed
             ? "This file can’t play in the browser."
             : row.copy_error
-              ? row.copy_error.startsWith("Re-encoding failed") ? `${row.copy_error}.` : `Copying it failed: ${row.copy_error}`
-              : row.encoding
-                ? "Re-encoding the file so it plays here. This usually takes a minute or two."
-                : "Not copied from the Drive yet."}
+              ? `Copying it failed: ${row.copy_error}`
+              : row.copying
+                ? "Copying the file from the Drive and re-encoding it so it plays here. This usually takes a minute or two."
+                : "Waiting to be copied from the Drive."}
         </p>
         <a href={driveFileUrl(row.drive_file_id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm underline underline-offset-4">
           Watch it in Drive <ExternalLinkIcon className="size-3.5" aria-hidden />
@@ -704,7 +692,7 @@ function ImportDetail({
           Skip
         </Button>
         <span className="hidden text-[13px] text-subtle-foreground xl:inline">
-          {!row.staged && !match ? "Importing waits for the file to be copied and re-encoded. " : ""}Keys: 1–9 pick a version, N adds one, Enter saves, S skips, J and K move.
+          {!row.staged && !match ? "Importing waits for the file to be copied. " : ""}Keys: 1–9 pick a version, N adds one, Enter saves, S skips, J and K move.
         </span>
         <div className="ml-auto flex gap-2">
           <Button type="button" variant="outline" size="icon-lg" aria-label="Previous (K)" disabled={!canPrev} onClick={() => onMove(-1)}>

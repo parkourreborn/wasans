@@ -6,8 +6,9 @@
 //   (<=1080p, <=60fps) -> thumbnail -> publish to scores/{uuid}.mp4 and
 //   scores/{uuid}-preview.jpg
 //
-// A "drive" job (a file in the WR import queue) stops after the encode and
-// replaces the file it read instead, with no thumbnail.
+// A "drive" job (a file in the WR import queue) downloads the file from
+// Google Drive, stops after the encode and uploads it to the import queue's
+// imports/ instead, with no thumbnail.
 //
 // Like render.mjs, the container holds no credentials. Every read and write
 // goes through http://media.internal, whose Worker handlers derive every
@@ -251,9 +252,34 @@ async function fetchMedalVideo(link) {
   return video
 }
 
+// A file from the old WR Drive, straight from Google (see /drive-source in
+// ../src/processing.js). Every attempt starts from Drive's copy.
+async function fetchDriveSource(job, source) {
+  const response = await media("/drive-source")
+  if (response.status === 404) {
+    throw new PermanentError("Google Drive couldn't find the file. It may have been moved, deleted or unshared.")
+  }
+  if (response.status === 501) {
+    throw new PermanentError(await response.text())
+  }
+  if (!response.ok) {
+    throw new Error(`downloading from Google Drive failed (${response.status}): ${await response.text().catch(() => "")}`)
+  }
+  const declared = Number(response.headers.get("content-length") || "0")
+  if (declared > job.maxBytes) {
+    throw new SizeLimitError(job.maxBytes)
+  }
+  await saveResponse(response, source, job.maxBytes)
+  return { from: "drive" }
+}
+
 // Puts the untouched original at `source`, preferring the private copy
 // kept for moderators (it's also what a retry should start from).
 async function obtainOriginal(job, source) {
+  if (job.reason === "drive") {
+    return fetchDriveSource(job, source)
+  }
+
   const existing = await media("/original")
   if (existing.ok) {
     await saveResponse(existing, source, job.maxBytes)
@@ -276,10 +302,6 @@ async function obtainOriginal(job, source) {
   if (job.reason === "import") {
     // The main app copies the file in before queueing the job.
     throw new PermanentError("The imported file is missing.")
-  }
-
-  if (job.reason === "drive") {
-    throw new PermanentError("The copied file is missing.")
   }
 
   if (job.reason === "medal") {

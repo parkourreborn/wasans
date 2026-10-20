@@ -85,11 +85,15 @@ World records from the old Google Drive folder come in through
 "Import from the old WR Drive" in /admin/site
 (`src/lib/server/services/wr-import-service.ts`). The folder is scanned
 with the Drive API (the `GOOGLE_DRIVE_API_KEY` secret on the main app; the
-folder must be shared as "anyone with the link"), each file is copied to
-`wasans-uploads/imports/{drive file id}` and queued here with reason
-`drive`, which re-encodes it in place to an H.264 MP4 (the Drive original
-isn't kept; no thumbnail, nothing published) and reports to
-`/v2/internal/wr-imports/{id}`. Owners then go through them one at a time.
+folder must be shared as "anyone with the link"), and each file is queued
+here with reason `drive`: the container downloads it from Google Drive
+(streamed through this Worker, which needs the same `GOOGLE_DRIVE_API_KEY`
+secret: `npx wrangler secret put GOOGLE_DRIVE_API_KEY` in this directory),
+re-encodes it to an H.264 MP4 and uploads it to
+`wasans-uploads/imports/{drive file id}` (the Drive original isn't kept; no
+thumbnail, nothing published), then reports to `/v2/internal/wr-imports/{id}`.
+Files up to 4 GB. The main app never handles the file. Owners then go
+through them one at a time.
 An imported file moves to `originals/{uuid}` and is queued here with reason
 `import`, which works like an upload whose original is already in place. Once it's processed (or fails), the main app archives it to
 `world-records/` as above.

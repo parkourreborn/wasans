@@ -534,7 +534,6 @@ CREATE TABLE wr_imports (
   submission_uuid TEXT,
   resolved_at INTEGER,
   resolved_by TEXT,
-  copied_at INTEGER,
   encode_queued_at INTEGER,
   FOREIGN KEY (submission_uuid) REFERENCES submissions(uuid) ON DELETE SET NULL
 );
