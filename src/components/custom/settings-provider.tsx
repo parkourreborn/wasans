@@ -238,7 +238,7 @@ export function FloatingSettingsModal({
 
       if (!response.ok) {
         if (response.status === 429 && json?.error?.code === "rate_limited") {
-          const wait = Number(json?.error?.details?.retry_after ?? response.headers.get("retry-after") ?? 60 * 60)
+          const wait = Number(json?.error?.details?.retry_after ?? response.headers.get("retry-after") ?? 5 * 60)
           throw new Error(`You can change your username again in ${formatCooldown(wait)}.`)
         }
 

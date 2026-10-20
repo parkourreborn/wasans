@@ -35,7 +35,7 @@ export const PATCH = withV2Context(async (ctx) => {
 
   const rate = await enforceRateLimit(ctx.db, getRateLimitKey(ctx.request, "v2:account:username", user.uuid), {
     limit: 1,
-    windowSeconds: 60 * 60,
+    windowSeconds: 5 * 60,
   })
 
   if (!rate.allowed) {

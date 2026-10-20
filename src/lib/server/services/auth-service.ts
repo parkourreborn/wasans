@@ -178,11 +178,18 @@ export type OAuthIdentity = {
   displayName?: string | null
 }
 
+// The first candidate that makes a valid starting name, so a display name
+// that is blank once invisible characters are dropped falls back to the
+// account's username instead of failing signup.
+function pickNameHint(...candidates: Array<string | null | undefined>) {
+  return candidates.find((candidate) => normalizeLoginPlayerName(candidate) !== null) ?? null
+}
+
 export function discordIdentity(user: DiscordUserResponse): OAuthIdentity {
   return {
     provider: "discord",
     accountId: user.id,
-    nameHint: user.global_name || user.username,
+    nameHint: pickNameHint(user.global_name, user.username),
     discordAvatar: user.avatar || null,
     discordDiscriminator: user.discriminator || null,
   }
@@ -192,7 +199,7 @@ export function googleIdentity(user: GoogleUserResponse): OAuthIdentity {
   return {
     provider: "google",
     accountId: user.sub,
-    nameHint: user.name || user.given_name || null,
+    nameHint: pickNameHint(user.name, user.given_name),
   }
 }
 
@@ -203,7 +210,7 @@ export function robloxIdentity(user: RobloxUserInfo): OAuthIdentity {
   return {
     provider: "roblox",
     accountId: user.sub,
-    nameHint: displayName || username,
+    nameHint: pickNameHint(displayName, username),
     username,
     displayName,
   }

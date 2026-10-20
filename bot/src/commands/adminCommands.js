@@ -1,5 +1,9 @@
 import { logger } from '../logger.js';
 
+// !say relays the owner's own words, so it keeps the @everyone and role pings
+// the client default (discordClient.js) turns off.
+const sayMentions = { parse: ['users', 'roles', 'everyone'], repliedUser: true };
+
 export async function handleAdminCommandMessage(message, allowedUserId) {
     if (!message.content.startsWith('!') || message.author.id !== allowedUserId) {
         return false;
@@ -29,12 +33,12 @@ export async function handleAdminCommandMessage(message, allowedUserId) {
         if (message.reference?.messageId) {
             try {
                 const referencedMessage = await message.channel.messages.fetch(message.reference.messageId);
-                await referencedMessage.reply(text);
+                await referencedMessage.reply({ content: text, allowedMentions: sayMentions });
             } catch {
-                await message.channel.send(text);
+                await message.channel.send({ content: text, allowedMentions: sayMentions });
             }
         } else {
-            await message.channel.send(text);
+            await message.channel.send({ content: text, allowedMentions: sayMentions });
         }
 
         await message.delete().catch(() => {});

@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import calculateScore from "@/lib/calc-score"
-import { validatePlayerName } from "@/lib/player-name"
+import { normalizeLoginPlayerName, validatePlayerName } from "@/lib/player-name"
 import { getSubmissionErrorMessage, getSubmissionErrorStatus } from "@/lib/submission-errors"
 import {
   normalizeModeratorNote,
@@ -84,11 +84,27 @@ test("submission API errors map to the correct HTTP status codes", () => {
   assert.equal(getSubmissionErrorStatus("Unexpected issue"), 400)
 })
 
-test("player username validation allows clean names and rejects bad ones", () => {
+test("player username validation follows the signup rules and drops invisible characters", () => {
   assert.deepEqual(validatePlayerName(" Wasans  Main "), { ok: true, playerName: "Wasans Main" })
   assert.deepEqual(validatePlayerName("wasans_1"), { ok: true, playerName: "wasans_1" })
-  assert.equal(validatePlayerName("ab").ok, false)
-  assert.equal(validatePlayerName("wasans!").ok, false)
-  assert.equal(validatePlayerName("wasans-").ok, false)
+  assert.deepEqual(validatePlayerName("ab"), { ok: true, playerName: "ab" })
+  assert.deepEqual(validatePlayerName("wasans!"), { ok: true, playerName: "wasans!" })
+  assert.deepEqual(validatePlayerName("wasans-"), { ok: true, playerName: "wasans-" })
+  assert.deepEqual(validatePlayerName("Élodie ✨"), { ok: true, playerName: "Élodie ✨" })
+  assert.deepEqual(validatePlayerName("Tul​ly‮"), { ok: true, playerName: "Tully" })
+  assert.deepEqual(validatePlayerName("Tully ㅤ⠀ "), { ok: true, playerName: "Tully" })
+  assert.equal(validatePlayerName("a").ok, false)
+  assert.equal(validatePlayerName("ㅤㅤ​").ok, false)
+  assert.equal(validatePlayerName("x".repeat(33)).ok, false)
   assert.equal(validatePlayerName("Deleted Account").ok, false)
+  assert.equal(validatePlayerName(42).ok, false)
+})
+
+test("signup names use the same rules but leave reserved names to be suffixed", () => {
+  assert.equal(normalizeLoginPlayerName(" Tul​ly "), "Tully")
+  assert.equal(normalizeLoginPlayerName("Deleted Account"), "Deleted Account")
+
+  for (const name of ["ab", "wasans!", "Élodie ✨", "a", "ㅤㅤ", "x".repeat(33)]) {
+    assert.equal(normalizeLoginPlayerName(name) !== null, validatePlayerName(name).ok, name)
+  }
 })
