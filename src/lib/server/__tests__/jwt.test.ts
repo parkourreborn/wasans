@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { signJwt, verifyJwt, generateOpaqueToken, hashToken } from "../v2/jwt"
+import { signJwt, verifyJwt, generateOpaqueToken, hashToken, signValue, verifyValue } from "../v2/jwt"
 
 test("signJwt/verifyJwt round-trips valid claims", async () => {
   const token = await signJwt({ sub: "player-uuid", perm: 1 }, "test-secret", 60)
@@ -59,4 +59,19 @@ test("hashToken is deterministic and distinguishes different inputs", async () =
   assert.equal(hashA1, hashA2)
   assert.notEqual(hashA1, hashB)
   assert.match(hashA1, /^[0-9a-f]{64}$/)
+})
+
+test("signed values only verify for their own purpose, and never as access tokens", async () => {
+  const token = await signValue("archive-zip", [["abc123", "mp4"]], "secret", 60)
+  assert.deepEqual(await verifyValue("archive-zip", token, "secret"), [["abc123", "mp4"]])
+  assert.equal(await verifyValue("something-else", token, "secret"), null)
+  assert.equal(await verifyValue("archive-zip", token, "other-secret"), null)
+  assert.equal(await verifyValue("archive-zip", `${token}x`, "secret"), null)
+  assert.equal(await verifyJwt(token, "secret"), null)
+
+  const access = await signJwt({ sub: "player", perm: 4 }, "secret", 60)
+  assert.equal(await verifyValue("archive-zip", access, "secret"), null)
+
+  const expired = await signValue("archive-zip", ["x"], "secret", -1)
+  assert.equal(await verifyValue("archive-zip", expired, "secret"), null)
 })

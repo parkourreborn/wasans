@@ -105,6 +105,39 @@ export async function verifyJwt(token: string, secret: string): Promise<JwtClaim
   return payload
 }
 
+// A short-lived signed value for a link, e.g. the files in a WR archive zip
+// (/v2/archive/zip). Signed with a key derived for `purpose`, so it can never
+// pass for an access token or for another purpose's value, and the other
+// way round.
+export async function signValue(purpose: string, value: unknown, secret: string, expiresInSeconds: number) {
+  const payload = base64UrlEncode(new TextEncoder().encode(JSON.stringify({ value, exp: Math.floor(Date.now() / 1000) + expiresInSeconds })))
+  const key = await importHmacKey(`${secret}:${purpose}`)
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload))
+  return `${payload}.${base64UrlEncode(new Uint8Array(signature))}`
+}
+
+export async function verifyValue(purpose: string, token: string, secret: string): Promise<unknown | null> {
+  const [payload, signature, ...rest] = token.split(".")
+  if (!payload || !signature || rest.length > 0) {
+    return null
+  }
+
+  try {
+    const key = await importHmacKey(`${secret}:${purpose}`)
+    const valid = await crypto.subtle.verify("HMAC", key, base64UrlDecode(signature), new TextEncoder().encode(payload))
+    if (!valid) {
+      return null
+    }
+    const parsed = JSON.parse(new TextDecoder().decode(base64UrlDecode(payload))) as { value?: unknown; exp?: unknown }
+    if (typeof parsed.exp !== "number" || parsed.exp <= Math.floor(Date.now() / 1000)) {
+      return null
+    }
+    return parsed.value ?? null
+  } catch {
+    return null
+  }
+}
+
 // Opaque refresh tokens: random bytes, url-safe. Only the SHA-256 hash of
 // this value is ever stored server-side.
 export function generateOpaqueToken(): string {

@@ -30,11 +30,11 @@ type WrRun = {
   source: "original" | "published" | null
 }
 type QueueData = { versions: GameVersion[]; runs: WrRun[] }
-type SaveResult = { game_version: string; archive: "archived" | "unchanged" | "missing" | "failed" | null }
+type SaveResult = { game_version: string; archive: "archived" | "unchanged" | "missing" | "waiting" | "failed" | null }
 
 const QUEUE_URL = apiV2("/admin/wr-archive")
 
-function isTyping(target: EventTarget | null) {
+export function isTyping(target: EventTarget | null) {
   return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
 }
 
@@ -95,9 +95,11 @@ export function AdminWrVersionsPage() {
       toast.success(
         result?.archive === "missing"
           ? `${run.trial_name} set to ${choice}. No file was found to archive.`
-          : result?.archive === "failed"
-            ? `${run.trial_name} set to ${choice}. The file gets its new name in the daily sweep.`
-            : `${run.trial_name} set to ${choice}`
+          : result?.archive === "waiting"
+            ? `${run.trial_name} set to ${choice}. The file gets its name once its video is processed.`
+            : result?.archive === "failed"
+              ? `${run.trial_name} set to ${choice}. The file gets its new name in the daily sweep.`
+              : `${run.trial_name} set to ${choice}`
       )
     } catch (err) {
       toast.error(errorText(err, "Couldn’t save the version"))
@@ -265,25 +267,7 @@ export function AdminWrVersionsPage() {
                 <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface p-4">
                   <span className="label-caps text-[13px] text-subtle-foreground">Version</span>
                   <div className="flex flex-wrap items-center gap-2">
-                    <div role="radiogroup" aria-label="Game version" className="contents">
-                      {versions.map((version, index) => (
-                        <button
-                          key={version.name}
-                          type="button"
-                          role="radio"
-                          aria-checked={choice === version.name}
-                          onClick={() => setPicked(version.name)}
-                          className={cn(
-                            "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-[14px] transition-colors",
-                            choice === version.name ? "border-primary bg-primary/15 text-foreground" : "border-line-strong text-muted-foreground hover:text-foreground"
-                          )}
-                        >
-                          {index < 9 ? <span className="num hidden rounded-sm border border-current/30 px-1 text-[11px] leading-4 md:inline-block">{index + 1}</span> : null}
-                          {version.name}
-                          {version.is_current ? <span className="text-[11px] text-subtle-foreground">current</span> : null}
-                        </button>
-                      ))}
-                    </div>
+                    <VersionChoices versions={versions} choice={choice} onPick={setPicked} />
                     <NewVersion open={creating} onOpenChange={setCreating} onCreated={created} />
                   </div>
                   {versions.length === 0 && !creating ? (
@@ -325,10 +309,36 @@ export function AdminWrVersionsPage() {
   )
 }
 
+// The versions as buttons, highest first, the first nine numbered for their
+// keys. The Drive import queue uses it too.
+export function VersionChoices({ versions, choice, onPick }: { versions: GameVersion[]; choice: string | null; onPick: (name: string) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Game version" className="contents">
+      {versions.map((version, index) => (
+        <button
+          key={version.name}
+          type="button"
+          role="radio"
+          aria-checked={choice === version.name}
+          onClick={() => onPick(version.name)}
+          className={cn(
+            "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-[14px] transition-colors",
+            choice === version.name ? "border-primary bg-primary/15 text-foreground" : "border-line-strong text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {index < 9 ? <span className="num hidden rounded-sm border border-current/30 px-1 text-[11px] leading-4 md:inline-block">{index + 1}</span> : null}
+          {version.name}
+          {version.is_current ? <span className="text-[11px] text-subtle-foreground">current</span> : null}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // Adds a version from the queue, for a record played on one that isn't on
 // the list yet. It doesn't become current: new runs keep getting the one
-// set in Site.
-function NewVersion({
+// set in Site. The Drive import queue uses it too.
+export function NewVersion({
   open,
   onOpenChange,
   onCreated,

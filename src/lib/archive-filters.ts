@@ -1,3 +1,5 @@
+import { formatTime } from "@/lib/format"
+
 // Filtering and sorting for the public WR archive (/archive), which loads
 // every archived file at once and narrows it down in the browser.
 
@@ -13,9 +15,17 @@ export type ArchiveEntry = {
   size: number | null
   source: "original" | "published"
   current: boolean
+  // From the old WR Drive (see wr-import-service.ts).
+  imported?: boolean
 }
 
 export const NO_VERSION_FILTER = "none"
+
+// What a file is called on the page: the old WR Drive's naming. The stored
+// name (file_name) keeps the player's uuid, so renamed players never clash.
+export function archiveTitle(entry: Pick<ArchiveEntry, "trial_name" | "time" | "player_name">) {
+  return `${entry.trial_name.toLowerCase()} ${formatTime(entry.time)} | ${entry.player_name}`
+}
 
 export const DATE_FILTERS = [
   { value: "", label: "Any time" },
@@ -69,10 +79,10 @@ export function filterArchive(entries: readonly ArchiveEntry[], filters: Archive
     if (filters.trial && entry.trial_name !== filters.trial) return false
     if (filters.version === NO_VERSION_FILTER ? entry.game_version !== null : filters.version && entry.game_version !== filters.version) return false
     if (window && (entry.date < window[0] || entry.date >= window[1])) return false
-    const haystack = `${entry.file_name} ${entry.trial_name} ${entry.player_name}`.toLowerCase()
+    const haystack = `${archiveTitle(entry)} ${entry.file_name}`.toLowerCase()
     return words.every((word) => haystack.includes(word))
   })
-  const byName = (a: ArchiveEntry, b: ArchiveEntry) => a.file_name.localeCompare(b.file_name, undefined, { numeric: true, sensitivity: "base" })
+  const byName = (a: ArchiveEntry, b: ArchiveEntry) => archiveTitle(a).localeCompare(archiveTitle(b), undefined, { numeric: true, sensitivity: "base" })
   const compare: Record<string, (a: ArchiveEntry, b: ArchiveEntry) => number> = {
     oldest: (a, b) => a.date - b.date,
     name: byName,

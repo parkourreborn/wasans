@@ -26,6 +26,7 @@ import {
   type VideoJobMessage,
 } from "@/lib/server/video-processing"
 import { ApiError } from "@/lib/server/v2/http"
+import { archiveIfImported } from "@/lib/server/services/wr-archive-service"
 import { generateShortId } from "@/lib/utils"
 
 // Generous for real use (one upload per trial, plus retries), tight enough
@@ -136,6 +137,14 @@ export async function handleVideoResult(
   }
 
   const applied = await applySubmissionVideoResult(db, submissionUuid, result, now)
+  if (applied) {
+    try {
+      await archiveIfImported(env, db, submissionUuid)
+    } catch (error) {
+      // The daily sweep archives it instead.
+      console.error(`Archiving imported record ${submissionUuid} failed:`, error)
+    }
+  }
   if (applied && result.status === "failed") {
     await notifyVideoFailed(db, submissionUuid, result.error)
   }

@@ -1,7 +1,7 @@
 import { validationError } from "@/lib/server/http"
 import { insertAuditLog } from "@/lib/server/audit"
 import { gameVersionExists, setSubmissionGameVersion } from "@/lib/server/repositories/game-version-repository"
-import { archiveRun, getWorldRecordRun } from "@/lib/server/services/wr-archive-service"
+import { archiveRun, getWorldRecordRun, type ArchiveOutcome } from "@/lib/server/services/wr-archive-service"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 import { ApiError, jsonOk, requireV2Owner, withV2Params } from "@/lib/server/v2/http"
 
@@ -37,7 +37,7 @@ export const PATCH = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   }
 
   const record = ctx.env.UPLOADS && ctx.env.SUBMISSION_VIDEOS ? await getWorldRecordRun(ctx.db, uuid) : null
-  let archive: "archived" | "unchanged" | "missing" | "failed" | null = null
+  let archive: ArchiveOutcome | "failed" | null = null
   if (record) {
     try {
       archive = await archiveRun(ctx.env, ctx.db, record)

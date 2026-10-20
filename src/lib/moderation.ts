@@ -29,11 +29,13 @@ export type TrialRun = PlayerAvatarFields & {
   moderator_username?: string | null
   video_status?: "processing" | "ready" | "failed" | null
   video_error?: string | null
-  video_source_type?: "upload" | "medal" | null
+  video_source_type?: "upload" | "medal" | "import" | null
   video_source_ref?: string | null
   video_fps?: number | null
   original_key?: string | null
   game_version?: string | null
+  // A world record from the old WR Drive: never counts toward scores.
+  imported?: number | boolean | null
 }
 
 export type ComboRun = PlayerAvatarFields & {

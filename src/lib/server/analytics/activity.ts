@@ -10,7 +10,7 @@ export async function getPlayerActivityHeatmap(db: D1Database, playerUuid: strin
     .prepare(
       `SELECT strftime('%Y-%m-%d', date, 'unixepoch') AS day, COUNT(*) AS count
        FROM submissions
-       WHERE player_uuid = ? AND state = 'approved' AND date >= ?
+       WHERE player_uuid = ? AND state = 'approved' AND imported = 0 AND date >= ?
        GROUP BY day
        ORDER BY day ASC`
     )

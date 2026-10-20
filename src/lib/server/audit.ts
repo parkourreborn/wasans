@@ -58,6 +58,11 @@ export type AuditAction =
   | "analytics_backfilled"
   | "duplicates_removed"
   | "wr_originals_archived"
+  // The old WR Drive import (/admin/site/wr-imports).
+  | "wr_drive_scanned"
+  | "wr_imported"
+  | "wr_import_matched"
+  | "wr_import_skipped"
 
 // Split out from insertAuditLog so callers writing several audit rows at
 // once (e.g. the deduplicate sweep) can send them as one db.batch() instead

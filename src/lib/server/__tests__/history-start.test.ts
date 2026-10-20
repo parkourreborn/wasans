@@ -93,3 +93,37 @@ test("records count only if they were still standing on June 1, with their real 
   )
   assert.equal(allTime, 4)
 })
+
+test("records from the old WR Drive count however long ago they were beaten, but stay out of the feed", () => {
+  const YEAR = 365 * DAY
+  let id = 0
+  const entry = (trial_name: string, player_uuid: string, date: number, from_drive = 1): HistoryEntry => ({
+    uuid: `wr-${(id += 1)}`,
+    trial_name,
+    player_uuid,
+    player_name: player_uuid,
+    time: 10,
+    date,
+    from_drive,
+  })
+  const history = [
+    // Imported: theirs, taken by a rival, then their own again.
+    entry("Thread", "me", APRIL - 2 * YEAR),
+    entry("Thread", "rival", APRIL - YEAR),
+    entry("Thread", "me", APRIL - YEAR / 2),
+    entry("Thread", "me", MAY),
+    // A trial the site has nothing newer on: the imported record is last.
+    entry("Depot", "me", APRIL - YEAR),
+    // On the site, not from the Drive, beaten in May: still left out.
+    entry("Spire", "me", APRIL, 0),
+    entry("Spire", "rival", MAY, 0),
+  ]
+  const current = new Set([history[3].uuid])
+  const { held, lost, allTime } = recordsFor(history, "me", current)
+
+  assert.deepEqual(held.map((record) => record.trial), ["Thread"])
+  assert.deepEqual(lost.map((record) => [record.trial, record.takenBy]), [["Thread", "rival"]])
+  // Held Thread, lost Thread once, beat their own Thread once, and Depot.
+  assert.equal(allTime, 4)
+  assert.deepEqual(activityFor([], lost), [])
+})

@@ -74,6 +74,24 @@ It can't reach `world-records/`. A record waiting for its version is moved
 to `world-records/` straight away, named `(no version)`, so the rule can't
 take it either.
 
+The archive page shows each file as `{lowercase trial} {time} | {player}`
+(the old WR Drive's naming); the stored name keeps the player's uuid. Picked
+files download as one zip, a folder per trial, streamed by the main app
+(`/v2/archive/zip`, up to 250 files and about 4 GB).
+
+### Old WR Drive import
+
+World records from the old Google Drive folder come in through
+"Import from the old WR Drive" in /admin/site
+(`src/lib/server/services/wr-import-service.ts`). The folder is scanned
+with the Drive API (the `GOOGLE_DRIVE_API_KEY` secret on the main app; the
+folder must be shared as "anyone with the link"), each file is copied to
+`wasans-uploads/imports/{drive file id}`, and owners go through them one at
+a time. An imported file moves to `originals/{uuid}` and is queued here
+with reason `import`, which works like an upload whose original is already
+in place. Once it's processed (or fails), the main app archives it to
+`world-records/` as above.
+
 ## WR compilation
 
 Renders the WR compilation video: every active trial's world record, in the

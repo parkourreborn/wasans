@@ -89,6 +89,9 @@
 		// Account details).
 		"R2_ACCOUNT_ID": "7599248988d1378ed7254d2fe7d3583d",
 		"R2_UPLOADS_BUCKET": "wasans-uploads"
+		// The old WR Drive import (/admin/site/wr-imports) reads the Drive with
+		// a Google API key that has the Google Drive API enabled: `wrangler
+		// secret put GOOGLE_DRIVE_API_KEY`. Without it, scanning errors.
 	},
 	"d1_databases": [
 		{

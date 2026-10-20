@@ -403,7 +403,8 @@ function TrialRunView({ run }: { run: TrialRun }) {
   const isWr = wr?.submission_uuid === run.uuid
   const isPb = pb?.submission_uuid === run.uuid
   const beatsWr = Boolean(wr && !isWr && time < Number(wr.time))
-  const trialScore = wr ? calculateScore(Number(wr.time), time, trialName) : null
+  const imported = Boolean(run.imported)
+  const trialScore = wr && !imported ? calculateScore(Number(wr.time), time, trialName) : null
   const canModerate = canModerateKind("trial", permission)
   const canDelete = Boolean(user) && canDeleteRun("trial", permission, user?.uuid === run.player_uuid)
   const moderation = useRunModeration("trial", run)
@@ -483,8 +484,14 @@ function TrialRunView({ run }: { run: TrialRun }) {
               ) : null
             }
           />
-          {videoStatus === "failed" && user?.uuid === run.player_uuid ? (
+          {videoStatus === "failed" && user?.uuid === run.player_uuid && !imported ? (
             <p className="text-sm text-muted-foreground">Delete this run and submit it again with the video.</p>
+          ) : null}
+          {imported ? (
+            <p className="m-0 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-muted-foreground">
+              A world record from the old WR Drive, from before the site tracked records. It’s in the trial’s record history and the archive,
+              and counts toward {run.player_name}’s all-time records, but not toward scores, PBs or leaderboards.
+            </p>
           ) : null}
           <NoteBlock note={run.moderator_note} by={run.moderator_username ? `${run.moderator_username}` : null} />
         </div>
@@ -493,7 +500,11 @@ function TrialRunView({ run }: { run: TrialRun }) {
           <Panel title="Run">
             <dl className="m-0 flex flex-col gap-2.5">
               <Fact label="Trial score">
-                <span className="num text-[15px] font-semibold">{trialScore === null ? "—" : formatScore(trialScore)}</span>
+                {imported ? (
+                  <span className="text-muted-foreground">Doesn’t count</span>
+                ) : (
+                  <span className="num text-[15px] font-semibold">{trialScore === null ? "—" : formatScore(trialScore)}</span>
+                )}
               </Fact>
               <Fact label="World record">
                 {wr ? (
@@ -531,6 +542,8 @@ function TrialRunView({ run }: { run: TrialRun }) {
                   <a href={medal} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 hover:underline hover:underline-offset-4">
                     Medal clip <ExternalLinkIcon className="size-3.5 text-subtle-foreground" aria-hidden />
                   </a>
+                ) : imported ? (
+                  "From the old WR Drive"
                 ) : (
                   "Uploaded video"
                 )}

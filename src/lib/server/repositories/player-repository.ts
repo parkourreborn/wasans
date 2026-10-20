@@ -177,6 +177,7 @@ export async function getPlayerSubmissions(
      FROM submissions
      LEFT JOIN players ON players.uuid = submissions.player_uuid
      WHERE submissions.player_uuid = ?
+       AND submissions.imported = 0
      ${stateSql}
      ORDER BY submissions.date DESC
      LIMIT ? OFFSET ?`

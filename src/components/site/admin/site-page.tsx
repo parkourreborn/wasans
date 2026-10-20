@@ -400,6 +400,17 @@ function Maintenance({ site }: { site: SiteData }) {
               <Link href="/admin/site/wr-versions">Open</Link>
             </Button>
           </li>
+          <li className="flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 border-t border-line px-4 py-3">
+            <span className="flex min-w-64 flex-1 flex-col gap-0.5">
+              <span className="text-[15px]">Import from the old WR Drive</span>
+              <span className="text-[13px] text-muted-foreground">
+                Copies the old Google Drive folder of world records over and goes through its files one at a time. They join the archive and players&apos; all-time records without changing any scores.
+              </span>
+            </span>
+            <Button asChild variant="outline">
+              <Link href="/admin/site/wr-imports">Open</Link>
+            </Button>
+          </li>
         </ul>
       </AdminCard>
       <p className="m-0 text-[13px] text-muted-foreground">

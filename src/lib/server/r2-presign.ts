@@ -72,12 +72,13 @@ export function attachmentDisposition(filename: string) {
 
 // Short-lived download link for a private original: moderators for any
 // run's (/v2/submissions/[uuid]/original), anyone for an archived world
-// record's (/v2/archive/[uuid]/download).
-export async function presignOriginalGet(env: PresignEnv, options: { key: string; filename: string; ttlSeconds: number }) {
+// record's (/v2/archive/[uuid]/download). With `inline`, it plays in the
+// page instead (owners previewing a file in /admin/site/wr-imports).
+export async function presignOriginalGet(env: PresignEnv, options: { key: string; filename: string; ttlSeconds: number; inline?: boolean }) {
   const { accountId, bucket, accessKeyId, secretAccessKey } = presignConfig(env)
   const url = objectUrl(accountId, bucket, options.key)
   url.searchParams.set("X-Amz-Expires", String(options.ttlSeconds))
-  url.searchParams.set("response-content-disposition", attachmentDisposition(options.filename))
+  url.searchParams.set("response-content-disposition", options.inline ? "inline" : attachmentDisposition(options.filename))
 
   const signer = new AwsV4Signer({
     method: "GET",

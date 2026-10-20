@@ -446,6 +446,7 @@ export async function patchSubmission(
              WHERE player_uuid = ?
                AND trial_name = ?
                AND state = 'approved'
+               AND imported = 0
                AND uuid != ?
              ORDER BY time ASC, date ASC, uuid ASC
              LIMIT 1`

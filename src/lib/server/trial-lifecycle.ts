@@ -67,9 +67,11 @@ export function canAcceptNewSubmissions(trial: Pick<TrialLifecycle, "status">): 
 // SQL fragment shared by wrs.ts/pbs.ts/player-scores.ts to filter a
 // `submissions AS s JOIN trials AS t ON t.name = s.trial_name` query down to
 // only currently-valid rows. Two `?` placeholders for `nowSeconds`, bound in
-// the order they appear (status check, then version check).
+// the order they appear (status check, then version check). World records
+// imported from the old WR Drive never count (see wr-import-service.ts).
 export const VALID_SUBMISSION_SQL = `(
-  (
+  s.imported = 0
+  AND (
     (t.status = 'active' AND ? >= t.added_at + ${TRIAL_GRACE_PERIOD_SECONDS})
     OR (t.status = 'removed' AND t.removed_at IS NOT NULL AND ? < t.removed_at + ${TRIAL_GRACE_PERIOD_SECONDS})
   )
@@ -83,7 +85,8 @@ export const VALID_SUBMISSION_SQL = `(
 // join differently (candidate/better self-joins in wrs.ts).
 export function validSubmissionSql(submissionsAlias: string, trialsAlias: string) {
   return `(
-    (
+    ${submissionsAlias}.imported = 0
+    AND (
       (${trialsAlias}.status = 'active' AND ? >= ${trialsAlias}.added_at + ${TRIAL_GRACE_PERIOD_SECONDS})
       OR (${trialsAlias}.status = 'removed' AND ${trialsAlias}.removed_at IS NOT NULL AND ? < ${trialsAlias}.removed_at + ${TRIAL_GRACE_PERIOD_SECONDS})
     )

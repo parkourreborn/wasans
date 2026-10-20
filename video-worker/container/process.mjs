@@ -270,6 +270,11 @@ async function obtainOriginal(job, source) {
     return { from: "original" }
   }
 
+  if (job.reason === "import") {
+    // The main app copies the file in before queueing the job.
+    throw new PermanentError("The imported file is missing.")
+  }
+
   if (job.reason === "medal") {
     const video = await fetchMedalVideo(job.medalUrl)
     const declared = Number(video.headers.get("content-length") || "0")

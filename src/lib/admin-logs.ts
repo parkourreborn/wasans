@@ -62,6 +62,10 @@ export const ADMIN_ACTIONS = [
   "game_version_removed",
   "game_version_made_current",
   "submission_version_changed",
+  "wr_drive_scanned",
+  "wr_imported",
+  "wr_import_matched",
+  "wr_import_skipped",
 ] as const
 
 // Everything else lands in "activity": runs and combos being submitted, WRs
@@ -259,6 +263,19 @@ export function describeLog(row: LogRow): { tag: string; tone: "error" | "good" 
       return { tag: "Version", tone: "admin", text: `${who} removed game version ${str(d.name) ?? row.entity_uuid}`, meta: null }
     case "wr_originals_archived":
       return { tag: "Maintenance", tone: "admin", text: `${who} archived world record originals`, meta: `${num(d.archived) ?? 0} archived` }
+    case "wr_drive_scanned":
+      return { tag: "Import", tone: "admin", text: `${who} scanned the old WR Drive`, meta: `${num(d.videos) ?? 0} videos, ${num(d.added) ?? 0} new` }
+    case "wr_imported":
+      return { tag: "Import", tone: "admin", text: `${who} imported ${runLabel(row, d)} from the old WR Drive`, meta: str(d.file_name) }
+    case "wr_import_matched":
+      return {
+        tag: "Import",
+        tone: "admin",
+        text: `${who} matched ${runLabel(row, d)} to the old WR Drive`,
+        meta: num(d.old_date) !== null && num(d.new_date) !== null ? "Backdated to the Drive's date" : str(d.file_name),
+      }
+    case "wr_import_skipped":
+      return { tag: "Import", tone: "muted", text: `${who} skipped a file from the old WR Drive`, meta: str(d.file_name) }
     case "video_backfill_started":
       return { tag: "Maintenance", tone: "admin", text: `${who} started re-encoding old videos`, meta: null }
     case "wr_compilation_started":

@@ -1,6 +1,7 @@
 -- Fresh-install schema. For migrating an existing database with real data,
 -- use the migrations/ folder instead (this file DROPs and recreates tables).
 
+DROP TABLE IF EXISTS wr_imports;
 DROP TABLE IF EXISTS wrs;
 DROP TABLE IF EXISTS pbs;
 DROP TABLE IF EXISTS combo_pbs;
@@ -183,6 +184,10 @@ CREATE TABLE submissions (
   -- published video stood in for an original that was already gone.
   original_size INTEGER,
   original_source TEXT,
+  -- 1 for a world record imported from the old WR Drive (wr_imports). It
+  -- counts in the record history, the archive and all-time record counts
+  -- only: never toward PBs, WRs, scores, leaderboards or run lists.
+  imported INTEGER NOT NULL DEFAULT 0,
 
   FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
   FOREIGN KEY (trial_name) REFERENCES trials(name) ON DELETE CASCADE
@@ -504,6 +509,32 @@ CREATE TABLE game_versions (
 );
 
 CREATE UNIQUE INDEX idx_game_versions_current ON game_versions(is_current) WHERE is_current = 1;
+
+-- Files from the old WR Google Drive folder, waiting in /admin/site/wr-imports
+-- to be imported as runs, matched to a run already on the site, or skipped
+-- (see migrations/0024_wr_imports.sql). The file is copied to
+-- wasans-uploads/imports/{drive_file_id} first (staged_at).
+CREATE TABLE wr_imports (
+  drive_file_id TEXT PRIMARY KEY,
+  file_name TEXT NOT NULL,
+  folder_path TEXT NOT NULL DEFAULT '',
+  mime_type TEXT,
+  size INTEGER,
+  drive_created_at INTEGER,
+  drive_modified_at INTEGER,
+  scanned_at INTEGER NOT NULL,
+  staged_at INTEGER,
+  copy_error TEXT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'imported', 'merged', 'skipped')),
+  submission_uuid TEXT,
+  resolved_at INTEGER,
+  resolved_by TEXT,
+  FOREIGN KEY (submission_uuid) REFERENCES submissions(uuid) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_wr_imports_status ON wr_imports(status, staged_at);
+CREATE INDEX idx_wr_imports_submission ON wr_imports(submission_uuid);
 
 -- Feature flags (owner-controlled site-wide toggles)
 CREATE TABLE feature_flags (

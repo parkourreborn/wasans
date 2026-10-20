@@ -52,7 +52,9 @@ const cspDirectives = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://cdn.discordapp.com https://*.rbxcdn.com https://assets.wasans.tully.sh",
-  "media-src 'self' blob: https://assets.wasans.tully.sh",
+  // The R2 endpoint: owners preview old WR Drive files from the private
+  // uploads bucket (/admin/site/wr-imports).
+  "media-src 'self' blob: https://assets.wasans.tully.sh https://*.r2.cloudflarestorage.com",
   "font-src 'self' data:",
   // R2 S3 endpoint: browsers PUT videos straight to the private uploads
   // bucket with presigned URLs (see /v2/uploads).

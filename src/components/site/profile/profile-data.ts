@@ -51,7 +51,17 @@ export type ProfileAnalytics = {
   peak_rank?: { rank: number; date: string } | null
 }
 
-export type HistoryEntry = { uuid: string; trial_name: string; player_uuid: string; player_name: string; time: number; date: number }
+// from_drive: the old WR Drive vouches for it (imported from there, or
+// matched to a file there; see wr-import-service.ts).
+export type HistoryEntry = {
+  uuid: string
+  trial_name: string
+  player_uuid: string
+  player_name: string
+  time: number
+  date: number
+  from_drive?: number | boolean
+}
 
 export type Medal = "wr" | "platinum" | "bronze" | "none" | "unplayed"
 
@@ -77,7 +87,8 @@ export type RecordLost = { trial: string; time: number; set: number; held: numbe
 
 // Walks every trial's chain of records: the player's entries that are still
 // the record, and the ones somebody later beat. Records beaten before the
-// profile's history starts are left out.
+// profile's history starts are left out, unless the old WR Drive vouches
+// for them: those always count.
 export function recordsFor(history: readonly HistoryEntry[], playerUuid: string, currentWrUuids: ReadonlySet<string>) {
   const byTrial = new Map<string, HistoryEntry[]>()
   for (const entry of history) {
@@ -88,15 +99,20 @@ export function recordsFor(history: readonly HistoryEntry[], playerUuid: string,
   const held: RecordHeld[] = []
   const lost: RecordLost[] = []
   let selfBeaten = 0
+  // Records from the old WR Drive that nothing came after (say, on a trial
+  // with no records on the site since): not held, as they never count, but
+  // records all the same.
+  let unfollowed = 0
   for (const [trial, chain] of byTrial) {
     chain.forEach((entry, index) => {
       if (entry.player_uuid !== playerUuid) return
       const next = chain[index + 1]
       if (!next) {
         if (currentWrUuids.has(entry.uuid)) held.push({ trial, time: Number(entry.time), since: entry.date, submission_uuid: entry.uuid })
+        else if (entry.from_drive) unfollowed += 1
         return
       }
-      if (next.date < HISTORY_START) return
+      if (next.date < HISTORY_START && !entry.from_drive) return
       // Beating your own record isn't losing it.
       if (next.player_uuid === playerUuid) {
         selfBeaten += 1
@@ -107,7 +123,7 @@ export function recordsFor(history: readonly HistoryEntry[], playerUuid: string,
   }
   held.sort((a, b) => b.since - a.since)
   lost.sort((a, b) => b.set + b.held - (a.set + a.held))
-  return { held, lost, allTime: held.length + lost.length + selfBeaten }
+  return { held, lost, allTime: held.length + lost.length + selfBeaten + unfollowed }
 }
 
 export type ActivityEvent = {
@@ -145,7 +161,10 @@ export function activityFor(events: readonly ScoreEvent[], lost: readonly Record
     }
     previous = score
   }
+  // Like the rest of the feed, from the start of the profile's history:
+  // records from the old WR Drive lost long before stay in Records.
   for (const record of lost) {
+    if (record.set + record.held < HISTORY_START) continue
     feed.push({ kind: "lost", at: record.set + record.held, trial: record.trial, submission_uuid: null, text: `${record.takenBy} took the record on`, delta: null })
   }
   return feed.sort((a, b) => b.at - a.at)

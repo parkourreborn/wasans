@@ -48,7 +48,9 @@ export async function listSubmissions(
     order?: "asc" | "desc"
   }
 ) {
-  const whereConditions: string[] = ["COALESCE(players.account_status, 'active') != 'deactivated'"]
+  // World records imported from the old WR Drive aren't in run lists; they
+  // show in the record history and the archive instead.
+  const whereConditions: string[] = ["COALESCE(players.account_status, 'active') != 'deactivated'", "submissions.imported = 0"]
   const bindValues: (string | number)[] = []
   const direction = options.order === "asc" ? "ASC" : "DESC"
 
@@ -131,6 +133,7 @@ export async function findPersonalBestByTrials(db: D1Database, playerUuid: strin
      JOIN trials ON trials.name = submissions.trial_name
      WHERE submissions.player_uuid = ?
        AND submissions.state != 'denied'
+       AND submissions.imported = 0
        AND submissions.trial_name IN (${placeholders})
        AND submissions.trial_version = trials.version
      GROUP BY submissions.trial_name`

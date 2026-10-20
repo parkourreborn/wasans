@@ -11,7 +11,9 @@ export const POST = withV2Context(async (ctx) => {
      FROM (
        SELECT uuid, original_key,
               ROW_NUMBER() OVER (
-                PARTITION BY player_uuid, trial_name, time
+                -- Imported records (see wr-import-service.ts) are only
+                -- compared with each other, never with site runs.
+                PARTITION BY imported, player_uuid, trial_name, time
                 ORDER BY date DESC, uuid DESC
               ) AS row_num
        FROM submissions

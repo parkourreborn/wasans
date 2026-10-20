@@ -96,7 +96,7 @@ export async function getBiggestImprovers(db: D1Database, days: number, limit = 
 async function getRecentApprovedSubmissionCount(db: D1Database, days: number) {
   const since = Math.floor(Date.now() / 1000) - days * 86400
   const row = await db
-    .prepare(`SELECT COUNT(*) AS count FROM submissions WHERE state = 'approved' AND date >= ?`)
+    .prepare(`SELECT COUNT(*) AS count FROM submissions WHERE state = 'approved' AND imported = 0 AND date >= ?`)
     .bind(since)
     .first<{ count: number }>()
 

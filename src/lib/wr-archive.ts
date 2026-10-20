@@ -83,9 +83,21 @@ const EXTENSIONS: Record<string, string> = {
   "video/x-flv": "flv",
 }
 
-// What a download is saved as: the archive name, plus an extension when the
-// file's type gives one (some uploads only ever said octet-stream).
+// The extension a file's type gives, if any (some uploads only ever said
+// octet-stream).
+export function archiveExtension(contentType: string | null | undefined) {
+  return (contentType ? EXTENSIONS[contentType.split(";")[0].trim().toLowerCase()] : undefined) ?? null
+}
+
+// What a download is saved as: the archive name, plus that extension.
 export function archiveDownloadName(fileName: string, contentType: string | null | undefined) {
-  const extension = contentType ? EXTENSIONS[contentType.split(";")[0].trim().toLowerCase()] : undefined
+  const extension = archiveExtension(contentType)
   return extension ? `${fileName}.${extension}` : fileName
+}
+
+// Where an archived file goes in a zip of several: its trial's folder, as in
+// the archive itself.
+export function archiveZipPath(key: string, extension: string | null) {
+  const path = key.startsWith(ARCHIVE_PREFIX) ? key.slice(ARCHIVE_PREFIX.length) : key
+  return extension ? `${path}.${extension}` : path
 }

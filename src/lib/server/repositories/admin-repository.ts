@@ -67,7 +67,7 @@ export async function getAdminPlayer(db: D1Database, uuid: string) {
       `SELECT provider, provider_account_id, username, display_name, created_at
        FROM oauth_accounts WHERE player_uuid = ? ORDER BY provider ASC, created_at ASC`
     ).bind(uuid),
-    db.prepare(`SELECT state, COUNT(*) AS count FROM submissions WHERE player_uuid = ? GROUP BY state`).bind(uuid),
+    db.prepare(`SELECT state, COUNT(*) AS count FROM submissions WHERE player_uuid = ? AND imported = 0 GROUP BY state`).bind(uuid),
     db.prepare(`SELECT state, COUNT(*) AS count FROM combo_submissions WHERE player_uuid = ? GROUP BY state`).bind(uuid),
     db.prepare(`SELECT MAX(last_seen) AS last_seen FROM player_ips WHERE player_uuid = ?`).bind(uuid),
     db.prepare(
@@ -189,13 +189,13 @@ type Window = { from: number; to: number }
 async function activityCounts(db: D1Database, { from, to }: Window) {
   const row = await db.prepare(
     `SELECT
-       (SELECT COUNT(*) FROM submissions WHERE date >= ?1 AND date < ?2)
+       (SELECT COUNT(*) FROM submissions WHERE date >= ?1 AND date < ?2 AND imported = 0)
          + (SELECT COUNT(*) FROM combo_submissions WHERE date >= ?1 AND date < ?2) AS submitted,
        (SELECT COUNT(*) FROM audit_logs
           WHERE action IN ('submission_approved', 'combo_submission_approved') AND created_at >= ?1 AND created_at < ?2) AS approved,
        (SELECT COUNT(*) FROM players WHERE date_joined >= ?1 AND date_joined < ?2) AS new_players,
        (SELECT COUNT(*) FROM (
-          SELECT player_uuid FROM submissions WHERE date >= ?1 AND date < ?2
+          SELECT player_uuid FROM submissions WHERE date >= ?1 AND date < ?2 AND imported = 0
           UNION
           SELECT player_uuid FROM combo_submissions WHERE date >= ?1 AND date < ?2
         )) AS submitting_players`
@@ -217,7 +217,7 @@ async function activitySeries(db: D1Database, { from, to }: Window) {
   const [submitted, approved, joined, submitters] = await db.batch([
     db.prepare(
       `SELECT CAST((date - ?1) / ${DAY} AS INTEGER) AS day, COUNT(*) AS count FROM (
-         SELECT date FROM submissions WHERE date >= ?1 AND date < ?2
+         SELECT date FROM submissions WHERE date >= ?1 AND date < ?2 AND imported = 0
          UNION ALL
          SELECT date FROM combo_submissions WHERE date >= ?1 AND date < ?2
        ) GROUP BY day`
@@ -233,7 +233,7 @@ async function activitySeries(db: D1Database, { from, to }: Window) {
     ).bind(from, to),
     db.prepare(
       `SELECT day, COUNT(DISTINCT player_uuid) AS count FROM (
-         SELECT CAST((date - ?1) / ${DAY} AS INTEGER) AS day, player_uuid FROM submissions WHERE date >= ?1 AND date < ?2
+         SELECT CAST((date - ?1) / ${DAY} AS INTEGER) AS day, player_uuid FROM submissions WHERE date >= ?1 AND date < ?2 AND imported = 0
          UNION ALL
          SELECT CAST((date - ?1) / ${DAY} AS INTEGER) AS day, player_uuid FROM combo_submissions WHERE date >= ?1 AND date < ?2
        ) GROUP BY day`

@@ -31,7 +31,9 @@ const MAX_DELIVERY_ATTEMPTS = 6
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024
 const MAX_DURATION_SECONDS = 10 * 60
 const MAX_PREVIEW_BYTES = 2 * 1024 * 1024
-const REASONS = new Set(["upload", "medal", "backfill"])
+// "import": a world record from the old WR Drive. The main app has already
+// put its file at originals/{uuid}.
+const REASONS = new Set(["upload", "medal", "backfill", "import"])
 
 export function processorName(submissionUuid) {
   return `submission-${submissionUuid}`

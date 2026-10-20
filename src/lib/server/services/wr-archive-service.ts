@@ -1,5 +1,6 @@
 import "server-only"
 import type { ArchiveEntry } from "@/lib/archive-filters"
+import { EVER_WR_SQL } from "@/lib/server/repositories/records-repository"
 import { attachmentDisposition } from "@/lib/server/r2-presign"
 import {
   ORIGINAL_KEEP_SECONDS,
@@ -21,16 +22,6 @@ import {
 // rule on originals/ stays as a safety net for anything left behind, such as
 // a video that failed processing; it can't reach world-records/.
 
-// The same "was ever the record" chain as getWorldRecordHistoryAll.
-const EVER_WR_SQL = `s.state = 'approved' AND NOT EXISTS (
-  SELECT 1
-  FROM submissions earlier
-  WHERE earlier.trial_name = s.trial_name
-    AND earlier.state = 'approved'
-    AND (earlier.date < s.date OR (earlier.date = s.date AND earlier.uuid < s.uuid))
-    AND earlier.time <= s.time
-)`
-
 export type OriginalSource = "original" | "published"
 
 export type WorldRecordRun = ArchiveRun & {
@@ -39,12 +30,14 @@ export type WorldRecordRun = ArchiveRun & {
   original_key: string | null
   original_size: number | null
   original_source: OriginalSource | null
+  video_status: "processing" | "ready" | "failed"
+  imported: number
   is_current_wr: number
 }
 
 const WORLD_RECORD_RUN_SELECT = `SELECT
     s.uuid, s.trial_name, s.player_uuid, COALESCE(p.player_name, s.player_name) AS player_name,
-    s.time, s.date, s.game_version, s.original_key, s.original_size, s.original_source,
+    s.time, s.date, s.game_version, s.original_key, s.original_size, s.original_source, s.video_status, s.imported,
     (w.submission_uuid IS NOT NULL) AS is_current_wr
   FROM submissions s
   LEFT JOIN players p ON p.uuid = s.player_uuid
@@ -67,7 +60,9 @@ export function isArchived(run: WorldRecordRun) {
   return run.original_key === archiveKey(run)
 }
 
-export type ArchiveOutcome = "archived" | "unchanged" | "missing"
+// "waiting": an imported record whose video is still being processed from
+// its original, which has to stay put until then.
+export type ArchiveOutcome = "archived" | "unchanged" | "missing" | "waiting"
 
 // Puts a world record's original at its archive name: after it becomes a
 // WR, when its version is set or changed, or when its player is renamed.
@@ -77,6 +72,7 @@ export type ArchiveOutcome = "archived" | "unchanged" | "missing"
 export async function archiveRun(env: CloudflareEnv, db: D1Database, run: WorldRecordRun): Promise<ArchiveOutcome> {
   const key = archiveKey(run)
   if (run.original_key === key) return "unchanged"
+  if (run.video_status === "processing") return "waiting"
   const uploads = env.UPLOADS
 
   const existing = await uploads.head(key)
@@ -147,11 +143,12 @@ function archivePriority(run: WorldRecordRun) {
 // Archives the world records whose file isn't at its name yet, oldest
 // first, until `limit` are done or `budgetMs` has passed. A run with no
 // file anywhere doesn't count toward the limit, so a few of those can't
-// hold the rest up.
+// hold the rest up. An imported record still being processed waits: the
+// processor reads its original from originals/ (see wr-import-service.ts).
 export async function archiveWorldRecords(env: CloudflareEnv, db: D1Database, options: { limit: number; budgetMs: number }) {
   const started = Date.now()
   const waiting = (await listWorldRecordRuns(db))
-    .filter((run) => !isArchived(run))
+    .filter((run) => !isArchived(run) && run.video_status !== "processing")
     .sort((a, b) => archivePriority(a) - archivePriority(b) || a.date - b.date)
 
   let archived = 0
@@ -167,6 +164,16 @@ export async function archiveWorldRecords(env: CloudflareEnv, db: D1Database, op
     }
   }
   return { archived, missing, remaining: waiting.length - archived }
+}
+
+// An imported record (see wr-import-service.ts) goes into the archive as
+// soon as its video is processed, whether or not that worked: its original
+// is the file that matters. Other runs wait for the daily sweep as before.
+export async function archiveIfImported(env: CloudflareEnv, db: D1Database, uuid: string) {
+  const imported = await db.prepare(`SELECT imported FROM submissions WHERE uuid = ?`).bind(uuid).first<{ imported: number }>()
+  if (!imported?.imported || !env.UPLOADS || !env.SUBMISSION_VIDEOS) return null
+  const run = await getWorldRecordRun(db, uuid)
+  return run ? archiveRun(env, db, run) : null
 }
 
 // D1 takes at most 100 bound parameters per statement.
@@ -219,6 +226,24 @@ export async function sweepOriginals(env: CloudflareEnv, db: D1Database) {
   return { originalsDeleted, recordsArchived: archive.archived, recordsMissing: archive.missing }
 }
 
+export type ArchivedFile = { uuid: string; key: string; size: number; date: number; trial_name: string }
+
+// The archived files of these runs, in the order given. Runs that aren't
+// in the archive (any more) are left out.
+export async function listArchivedFiles(db: D1Database, uuids: readonly string[]): Promise<ArchivedFile[]> {
+  const byUuid = new Map(
+    (await listWorldRecordRuns(db))
+      .filter((run) => isArchiveKey(run.original_key) && run.original_size !== null)
+      .map((run) => [run.uuid, run])
+  )
+  return uuids.flatMap((uuid) => {
+    const run = byUuid.get(uuid)
+    return run
+      ? [{ uuid, key: run.original_key as string, size: Number(run.original_size), date: Number(run.date), trial_name: run.trial_name }]
+      : []
+  })
+}
+
 // The public archive: every world record whose file is archived.
 export async function listArchive(db: D1Database): Promise<ArchiveEntry[]> {
   return (await listWorldRecordRuns(db))
@@ -235,5 +260,6 @@ export async function listArchive(db: D1Database): Promise<ArchiveEntry[]> {
       size: run.original_size === null ? null : Number(run.original_size),
       source: run.original_source ?? "original",
       current: Boolean(run.is_current_wr),
+      imported: Boolean(run.imported),
     }))
 }
