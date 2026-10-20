@@ -15,6 +15,7 @@ import { fetchApi, invalidateApi, useApi } from "@/hooks/use-api"
 import { useAuthSession } from "@/components/custom/use-auth-session"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { ConfirmDialog } from "@/components/site/moderation-dialogs"
+import { PlayerPicker, type PickedPlayer } from "@/components/site/player-picker"
 import { TierLabel } from "@/components/site/tier-label"
 import {
   AdminCard,
@@ -57,7 +58,12 @@ type PlayerDetail = SearchRow & {
   runs: { approved: number; pending: number; denied: number }
   combos: { approved: number; pending: number; denied: number }
   last_seen: number | null
+  // 1 for a name-only player (no account), from the old WR Drive import.
+  placeholder: number
+  imported_runs: number
 }
+
+type PlaceholderRow = { uuid: string; player_name: string; date_joined: number; runs: number }
 
 const PERMISSION_HELP = [
   "A regular account: submits runs and combos, nothing to moderate.",
@@ -71,6 +77,7 @@ const ROLE_COLORS = ["text-muted-foreground", "text-[#61d5c0]", "text-[#69c1fc]"
 
 const STAFF_URL = apiV2("/admin/staff")
 const BANS_URL = apiV2("/admin/submission-bans")
+const PLACEHOLDERS_URL = apiV2("/admin/players/placeholders")
 const playerUrl = (uuid: string) => apiV2(`/admin/players/${encodeURIComponent(uuid)}`)
 
 const PROVIDER_LABELS: Record<string, string> = { discord: "Discord", roblox: "Roblox", google: "Google" }
@@ -96,6 +103,7 @@ export function AdminPlayersPage() {
         <StaffList onSelect={select} />
         <BanList onSelect={select} />
       </div>
+      <PlaceholderList onSelect={select} />
     </AdminPage>
   )
 }
@@ -205,6 +213,7 @@ function PlayerPanel({ uuid, onClose }: { uuid: string; onClose: () => void }) {
   if (error && !player) return <AdminError message={error} onRetry={refetch} />
   if (!player) return null
 
+  if (player.placeholder) return <PlaceholderDetailCard key={player.uuid} player={player} onClose={onClose} />
   return <PlayerDetailCard key={player.uuid} player={player} onClose={onClose} />
 }
 
@@ -446,6 +455,113 @@ function PlayerDetailCard({ player, onClose }: { player: PlayerDetail; onClose: 
         onConfirm={() => void ban()}
       />
     </AdminCard>
+  )
+}
+
+// A name-only player: no account, nothing to moderate. Once they sign up,
+// their runs move to the account and the name-only player goes.
+function PlaceholderDetailCard({ player, onClose }: { player: PlayerDetail; onClose: () => void }) {
+  const [target, setTarget] = useState<PickedPlayer | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const runs = player.imported_runs + player.runs.approved + player.runs.pending + player.runs.denied
+
+  const move = async () => {
+    if (!target) return
+    setBusy(true)
+    try {
+      await adminRequest(`/admin/players/${encodeURIComponent(player.uuid)}/move-runs`, {
+        body: { player_uuid: target.uuid },
+        fallback: "Couldn’t move the runs",
+      })
+      toast.success(`Moved ${player.player_name}’s runs to ${target.player_name}`)
+      setConfirming(false)
+      invalidateApi(PLACEHOLDERS_URL)
+      invalidateApi(playerUrl(target.uuid))
+      onClose()
+    } catch (error) {
+      toast.error(errorText(error, "Couldn’t move the runs"))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <AdminCard className="flex flex-col">
+      <div className="flex flex-wrap items-center gap-4 border-b border-line p-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <h2 className="truncate font-display text-[30px] font-extrabold uppercase leading-none">{player.player_name}</h2>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground">
+            <span>No account</span>
+            <span>
+              <span className="num text-foreground">{formatCount(runs)}</span> imported {runs === 1 ? "record" : "records"}
+            </span>
+            <span>Added {formatDate(player.date_joined)}</span>
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/players/${encodeURIComponent(player.uuid)}`}>Profile</Link>
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+      <div className="flex flex-col gap-3 p-4">
+        <span className="label-caps text-[13px] text-subtle-foreground">Move to an account</span>
+        <p className="m-0 text-[13px] text-muted-foreground">
+          Signed up since? Pick their account. Their records move to it, and this name-only player is removed.
+        </p>
+        <div className="flex flex-wrap items-start gap-2">
+          <div className="min-w-0 flex-[1_1_18rem]">
+            <PlayerPicker value={target} onChange={setTarget} placeholder={`Search for ${player.player_name}`} label="Account" />
+          </div>
+          <Button onClick={() => setConfirming(true)} disabled={!target || busy}>
+            Move records
+          </Button>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Move ${player.player_name}’s records to ${target?.player_name ?? "this account"}?`}
+        description={`${formatCount(runs)} ${runs === 1 ? "record moves" : "records move"} to their account, and ${player.player_name} (no account) is removed. This can’t be undone.`}
+        confirmLabel="Move"
+        tone="default"
+        busy={busy}
+        onConfirm={() => void move()}
+      />
+    </AdminCard>
+  )
+}
+
+function PlaceholderList({ onSelect }: { onSelect: (uuid: string) => void }) {
+  const { data, error, loading, refetch } = useApi<{ data: PlaceholderRow[] }>(PLACEHOLDERS_URL)
+  const rows = data?.data ?? []
+  return (
+    <AdminSection title="Name-only players" count={data ? rows.length : undefined}>
+      {error && !data ? <AdminError message={error} onRetry={refetch} /> : null}
+      {loading && !data ? <AdminLoading /> : null}
+      {data && rows.length === 0 ? <AdminEmpty>None yet. Records imported from the old WR Drive for someone without an account show up here.</AdminEmpty> : null}
+      {rows.length > 0 ? (
+        <AdminCard>
+          <ul className="m-0 grid list-none p-0 sm:grid-cols-2 lg:grid-cols-3">
+            {rows.map((row) => (
+              <li key={row.uuid} className="border-b border-line">
+                <button type="button" onClick={() => onSelect(row.uuid)} className="flex h-12 w-full items-center gap-3 px-4 text-left hover:bg-surface-2">
+                  <span className="min-w-0 flex-1 truncate text-[15px]">{row.player_name}</span>
+                  <span className="num text-[13px] text-muted-foreground">
+                    {formatCount(row.runs)} {row.runs === 1 ? "record" : "records"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </AdminCard>
+      ) : null}
+    </AdminSection>
   )
 }
 

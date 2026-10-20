@@ -16,7 +16,7 @@ import type { TrialName } from "@/lib/trials"
 const PEER_SPAN = 50
 const MAX_GAINS = 6
 
-const ACTIVE = "COALESCE(account_status, 'active') != 'deactivated'"
+const ACTIVE = "COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0"
 
 export type PlayerGain = {
   trial_name: string

@@ -62,7 +62,7 @@ export async function backfillScoreHistory(db: D1Database) {
       .bind(now, now, now)
       .all<SubmissionEvent>(),
     getCountedTrialCount(db, now),
-    db.prepare(`SELECT uuid, score FROM players WHERE COALESCE(account_status, 'active') != 'deactivated'`).all<{
+    db.prepare(`SELECT uuid, score FROM players WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0`).all<{
       uuid: string
       score: number
     }>(),
@@ -249,7 +249,7 @@ async function backfillRankSnapshots(
       .prepare(
         `SELECT uuid AS player_uuid, score, RANK() OVER (ORDER BY score DESC) AS rank
          FROM players
-         WHERE COALESCE(account_status, 'active') != 'deactivated'`
+         WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0`
       )
       .all<{ player_uuid: string; score: number; rank: number }>()
 

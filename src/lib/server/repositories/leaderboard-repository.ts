@@ -5,13 +5,13 @@ export async function listOverallLeaderboard(db: D1Database, limit: number, offs
     db.prepare(
       `SELECT COUNT(*) AS count
        FROM players
-       WHERE COALESCE(account_status, 'active') != 'deactivated'`
+       WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0`
     ),
     db.prepare(
       `SELECT uuid AS player_uuid, player_id, discord_avatar, discord_discriminator, auth_provider,
               discord_id, (avatar_roblox_id IS NOT NULL) AS has_roblox_avatar, player_name, score AS overall_score, date_joined
        FROM players
-       WHERE COALESCE(account_status, 'active') != 'deactivated'
+       WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0
        ORDER BY score DESC, player_name ASC
        LIMIT ? OFFSET ?`
     ).bind(limit, offset),

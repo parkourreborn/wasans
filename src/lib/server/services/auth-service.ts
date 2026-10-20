@@ -282,6 +282,7 @@ async function findPlayerByIdentity(db: Queryable, identity: OAuthIdentity) {
      FROM players
      WHERE players.player_id = ?
        AND players.auth_provider = 'discord'
+       AND players.placeholder = 0
        AND COALESCE(players.account_status, 'active') != 'deleted'
        AND NOT EXISTS (SELECT 1 FROM oauth_accounts WHERE oauth_accounts.player_uuid = players.uuid)`
   )

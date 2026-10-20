@@ -40,6 +40,8 @@ type ImportMatch = {
   game_version: string | null
   imported: boolean
 }
+// placeholder is 1 for a player with no account, just a name.
+type ImportPlayer = PickedPlayer & { placeholder?: number }
 type ImportRow = {
   drive_file_id: string
   file_name: string
@@ -55,11 +57,17 @@ type ImportRow = {
   date: number | null
   parsed: { trial: string | null; trialText: string; time: number | null; player: string | null }
   version: string | null
-  players: PickedPlayer[]
+  players: ImportPlayer[]
   matches: ImportMatch[]
 }
 type QueueData = { configured: boolean; default_folder: string; trials: string[]; versions: GameVersion[]; imports: ImportRow[]; waiting_copies: number }
-type SaveResult = { status: "imported" | "merged" | "skipped" | "pending"; submission_uuid?: string; backdated?: boolean }
+type SaveResult = {
+  status: "imported" | "merged" | "skipped" | "pending"
+  submission_uuid?: string
+  backdated?: boolean
+  // A placeholder made for a name-only import.
+  player?: ImportPlayer | null
+}
 type View = "review" | "player" | "skipped" | "done"
 
 const QUEUE_URL = apiV2("/admin/wr-imports")
@@ -123,10 +131,19 @@ export function AdminWrImportsPage() {
   const setQueue = (next: QueueData) => setApiData(QUEUE_URL, { ...data, data: next })
 
   // The file leaves this list, so the next one takes its place.
-  const resolved = (row: ImportRow, changes: Partial<ImportRow>) => {
+  // A name-only import's new placeholder becomes the match for the other
+  // files with that name.
+  const resolved = (row: ImportRow, changes: Partial<ImportRow>, created?: ImportPlayer | null) => {
     if (!queue) return
     const following = visible[currentIndex + 1] ?? visible[currentIndex - 1] ?? null
-    setQueue({ ...queue, imports: queue.imports.map((entry) => (entry.drive_file_id === row.drive_file_id ? { ...entry, ...changes } : entry)) })
+    const named = (entry: ImportRow) =>
+      Boolean(created && entry.status === "pending" && entry.parsed.player?.toLowerCase() === created.player_name.toLowerCase() && !entry.players.some((other) => other.uuid === created.uuid))
+    setQueue({
+      ...queue,
+      imports: queue.imports.map((entry) =>
+        entry.drive_file_id === row.drive_file_id ? { ...entry, ...changes } : created && named(entry) ? { ...entry, players: [...entry.players, created] } : entry
+      ),
+    })
     setSelected(following?.drive_file_id ?? null)
   }
 
@@ -234,9 +251,9 @@ export function AdminWrImportsPage() {
                     versions={queue.versions}
                     lastVersion={lastVersion}
                     onVersionsChanged={versionsChanged}
-                    onResolved={(changes, version) => {
+                    onResolved={(changes, version, created) => {
                       if (version) setLastVersion(version)
-                      resolved(current, changes)
+                      resolved(current, changes, created)
                     }}
                     canPrev={currentIndex > 0}
                     canNext={currentIndex < visible.length - 1}
@@ -426,14 +443,20 @@ function ImportDetail({
   versions: GameVersion[]
   lastVersion: string | null
   onVersionsChanged: (versions: GameVersion[]) => void
-  onResolved: (changes: Partial<ImportRow>, version: string | null) => void
+  onResolved: (changes: Partial<ImportRow>, version: string | null, created?: ImportPlayer | null) => void
   canPrev: boolean
   canNext: boolean
   onMove: (step: number) => void
 }) {
   const [trial, setTrial] = useState(row.parsed.trial ?? "")
   const [timeText, setTimeText] = useState(row.parsed.time !== null ? formatTime(row.parsed.time) : "")
-  const [player, setPlayer] = useState<PickedPlayer | null>(row.players.length === 1 ? row.players[0] : null)
+  const [player, setPlayerState] = useState<ImportPlayer | null>(row.players.length === 1 ? row.players[0] : null)
+  // Set for a player with no account: the name the run goes under.
+  const [nameOnly, setNameOnly] = useState<string | null>(null)
+  const setPlayer = (next: ImportPlayer | null) => {
+    setPlayerState(next)
+    setNameOnly(null)
+  }
   const [dateText, setDateText] = useState(row.date ? toLocalInput(row.date) : "")
   const [picked, setPicked] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -449,17 +472,27 @@ function ImportDetail({
   const match = player ? (known.find((run) => run.player_uuid === player.uuid) ?? null) : null
   const others = known.filter((run) => run.player_uuid !== player?.uuid)
   const version = picked ?? match?.game_version ?? row.version ?? lastVersion
-  const ready = Boolean(trial && time !== null && player && date !== null && version && (match || row.staged))
+  const nameText = nameOnly?.trim() ?? ""
+  const ready = Boolean(trial && time !== null && (player || nameText.length >= 2) && date !== null && version && (match || row.staged))
   const backdates = Boolean(match && date !== null && date < match.date)
 
   const save = async () => {
-    if (!ready || busy || !player || time === null || date === null || !version) return
+    if (!ready || busy || time === null || date === null || !version) return
+    const who = player?.player_name ?? nameText
     setBusy("save")
     try {
       const response = await fetch(apiV2(`/admin/wr-imports/${encodeURIComponent(row.drive_file_id)}`), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: match ? "match" : "import", submission_uuid: match?.uuid, trial, time, player_uuid: player.uuid, version, date }),
+        body: JSON.stringify({
+          action: match ? "match" : "import",
+          submission_uuid: match?.uuid,
+          trial,
+          time,
+          ...(player ? { player_uuid: player.uuid } : { player_name: nameText }),
+          version,
+          date,
+        }),
       })
       const json = (await response.json().catch(() => null)) as { data?: SaveResult; error?: { message?: string; details?: { match?: ImportMatch } | null } } | null
       const existing = json?.error?.details?.match
@@ -470,11 +503,11 @@ function ImportDetail({
       }
       if (!response.ok || !json?.data) throw new Error(json?.error?.message || "Couldn’t save")
       const result = json.data
-      onResolved({ status: result.status === "merged" ? "merged" : "imported", submission_uuid: result.submission_uuid ?? null }, version)
+      onResolved({ status: result.status === "merged" ? "merged" : "imported", submission_uuid: result.submission_uuid ?? null }, version, result.player)
       toast.success(
         result.status === "merged"
           ? `Matched to the site’s run${result.backdated ? " and backdated it" : ""}`
-          : `Imported ${trial} ${formatTime(time)} by ${player.player_name}. It shows in the archive once its video is processed.`
+          : `Imported ${trial} ${formatTime(time)} by ${who}. It shows in the archive once its video is processed.`
       )
     } catch (err) {
       toast.error(errorText(err, "Couldn’t save"))
@@ -546,19 +579,39 @@ function ImportDetail({
         <Field
           label="Player"
           note={
-            !name
-              ? "The name doesn’t say who. Search for them."
-              : row.players.length === 0
-                ? `No player is called “${name}”. Search for them, or leave the file here until they sign up.`
-                : row.players.length > 1
-                  ? `“${name}” could be ${row.players.length} players. Pick the right one.`
-                  : player?.uuid === row.players[0].uuid
-                    ? `Matched “${name}”`
-                    : undefined
+            nameOnly !== null
+              ? "The run goes under this name, with no account. If they sign up later, move it to their account from the Players page."
+              : !name
+                ? "The name doesn’t say who. Search for them."
+                : row.players.length === 0
+                  ? `No player is called “${name}”. Search for them, or import it under just the name.`
+                  : row.players.length > 1
+                    ? `“${name}” could be ${row.players.length} players. Pick the right one.`
+                    : player?.uuid === row.players[0].uuid
+                      ? row.players[0].placeholder
+                        ? `Matched “${name}”, who has no account`
+                        : `Matched “${name}”`
+                      : undefined
           }
         >
-          <PlayerPicker value={player} onChange={setPlayer} placeholder={name ? `Search for ${name}` : "Search players"} label="Player" />
-          {row.players.length > 1 ? (
+          {nameOnly !== null ? (
+            <div className="flex gap-2">
+              <Input
+                value={nameOnly}
+                onChange={(event) => setNameOnly(event.target.value)}
+                aria-label="Player name"
+                aria-invalid={nameText.length < 2}
+                autoFocus
+                className="h-10 min-w-0 flex-1"
+              />
+              <Button type="button" variant="outline" className="h-10" onClick={() => setNameOnly(null)}>
+                Pick an account
+              </Button>
+            </div>
+          ) : (
+            <PlayerPicker value={player} onChange={setPlayer} placeholder={name ? `Search for ${name}` : "Search players"} label="Player" />
+          )}
+          {nameOnly === null && row.players.length > 1 ? (
             <span className="flex flex-wrap gap-1.5">
               {row.players.map((candidate) => (
                 <button
@@ -572,9 +625,22 @@ function ImportDetail({
                   )}
                 >
                   {candidate.player_name}
+                  {candidate.placeholder ? <span className="ml-1 text-subtle-foreground">(no account)</span> : null}
                 </button>
               ))}
             </span>
+          ) : null}
+          {nameOnly === null && !player?.placeholder ? (
+            <button
+              type="button"
+              onClick={() => {
+                setPlayerState(null)
+                setNameOnly(name ?? "")
+              }}
+              className="self-start text-[13px] text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            >
+              No account? Import it under just a name
+            </button>
           ) : null}
         </Field>
         <Field

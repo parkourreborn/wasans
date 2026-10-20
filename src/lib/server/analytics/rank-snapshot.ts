@@ -15,7 +15,7 @@ export async function snapshotPlayerRanks(db: D1Database, snapshotDate: string =
     .prepare(
       `SELECT uuid AS player_uuid, score, RANK() OVER (ORDER BY score DESC) AS rank
        FROM players
-       WHERE COALESCE(account_status, 'active') != 'deactivated'`
+       WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0`
     )
     .all<{ player_uuid: string; score: number; rank: number }>()
 

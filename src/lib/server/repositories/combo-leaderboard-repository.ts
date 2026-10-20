@@ -23,7 +23,7 @@ export async function listComboLeaderboard(db: D1Database, categorySlug: string,
     db.prepare(
       `SELECT COUNT(*) AS count
        FROM players
-       WHERE COALESCE(account_status, 'active') != 'deactivated'`
+       WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0`
     ),
     db.prepare(
       `SELECT players.uuid AS player_uuid,
@@ -39,7 +39,7 @@ export async function listComboLeaderboard(db: D1Database, categorySlug: string,
               combo_pbs.date
        FROM players
        LEFT JOIN combo_pbs ON combo_pbs.player_uuid = players.uuid AND combo_pbs.category_slug = ?
-       WHERE COALESCE(players.account_status, 'active') != 'deactivated'
+       WHERE COALESCE(players.account_status, 'active') != 'deactivated' AND players.placeholder = 0
        ORDER BY CASE WHEN combo_pbs.combo_count IS NULL THEN 1 ELSE 0 END,
                 combo_pbs.combo_count DESC, combo_pbs.date ASC, players.player_name ASC
        LIMIT ? OFFSET ?`

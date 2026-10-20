@@ -57,10 +57,14 @@ CREATE TABLE players (
   discord_id TEXT,
   -- Linked Roblox account whose headshot is the avatar. NULL with Discord
   -- linked means the Discord picture is the avatar.
-  avatar_roblox_id TEXT
+  avatar_roblox_id TEXT,
+  -- 1 for a player with no account, just a name (see
+  -- migrations/0026_placeholder_players.sql).
+  placeholder INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_players_account_status ON players(account_status);
+CREATE UNIQUE INDEX idx_players_placeholder_name ON players(LOWER(player_name)) WHERE placeholder = 1;
 CREATE INDEX idx_players_score ON players(score DESC, player_name ASC);
 
 -- OAuth-linked accounts (Discord, Google, Roblox): one Discord and one

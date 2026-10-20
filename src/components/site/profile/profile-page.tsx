@@ -101,6 +101,23 @@ export function ProfilePage({ uuid }: { uuid: string }) {
     { id: "runs", label: "Runs", count: approvedData?.meta?.count !== undefined ? formatCount(approvedData.meta.count) : undefined },
   ].filter((section) => section !== null)
 
+  // No account, so no rank, score or runs: just the records imported for them.
+  if (profile.placeholder) {
+    return (
+      <div className="pb-16">
+        <Cover playerName={profile.player_name} row={coverRow} own={false} />
+        <ProfileHeader profile={profile} own={false} viewerUuid={user?.uuid ?? null} lastPbAt={null} now={now} />
+        <main className="mx-auto flex max-w-[1200px] flex-col gap-14 px-4 pt-8">
+          {allTime > 0 ? (
+            <RecordsSection held={held} lost={lost} allTime={allTime} now={now} />
+          ) : (
+            <p className="m-0 text-sm text-muted-foreground">No records yet.</p>
+          )}
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="pb-16">
       <Cover playerName={profile.player_name} row={coverRow} own={own} />
@@ -253,23 +270,29 @@ function ProfileHeader({
         />
         <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-2.5">
           <h1 className="break-words font-display text-[36px] font-bold leading-[0.95] md:text-[54px]">{profile.player_name}</h1>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-            <TierLabel tier={tier} className="text-[16px]" />
-            {profile.permission > 0 ? (
-              <span className="label-caps inline-flex h-6 items-center border border-line-strong px-2 text-[12px]">{permissionLabel(profile.permission)}</span>
-            ) : null}
-            <span>
-              Joined <span className="text-foreground">{formatDate(profile.date_joined)}</span>
-            </span>
-            {lastPbAt ? (
+          {profile.placeholder ? (
+            <p className="m-0 text-sm text-muted-foreground">
+              No account on the site. These world records were imported from the old WR Drive.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+              <TierLabel tier={tier} className="text-[16px]" />
+              {profile.permission > 0 ? (
+                <span className="label-caps inline-flex h-6 items-center border border-line-strong px-2 text-[12px]">{permissionLabel(profile.permission)}</span>
+              ) : null}
               <span>
-                Last PB <span className="text-foreground">{formatAgo(lastPbAt, now, formatDate)}</span>
+                Joined <span className="text-foreground">{formatDate(profile.date_joined)}</span>
               </span>
-            ) : null}
-          </div>
+              {lastPbAt ? (
+                <span>
+                  Last PB <span className="text-foreground">{formatAgo(lastPbAt, now, formatDate)}</span>
+                </span>
+              ) : null}
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-2 md:pt-1">
-          {own ? (
+          {profile.placeholder ? null : own ? (
             <>
               <Button asChild variant="outline">
                 <Link href="/calculator">

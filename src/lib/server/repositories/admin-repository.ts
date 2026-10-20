@@ -56,9 +56,9 @@ export async function listStaff(db: D1Database) {
 // One player as the Players page shows them: who they are, what they can do,
 // whether they're banned, which accounts are linked and how their runs went.
 export async function getAdminPlayer(db: D1Database, uuid: string) {
-  const [player, ban, accounts, trialCounts, comboCounts, lastSeen, rank] = await db.batch([
+  const [player, ban, accounts, trialCounts, comboCounts, lastSeen, rank, imported] = await db.batch([
     db.prepare(
-      `SELECT uuid, player_id, player_name, permission, score, date_joined, account_status, auth_provider,
+      `SELECT uuid, player_id, player_name, permission, score, date_joined, account_status, auth_provider, placeholder,
               discord_id, discord_avatar, discord_discriminator, (avatar_roblox_id IS NOT NULL) AS has_roblox_avatar
        FROM players WHERE uuid = ?`
     ).bind(uuid),
@@ -72,8 +72,9 @@ export async function getAdminPlayer(db: D1Database, uuid: string) {
     db.prepare(`SELECT MAX(last_seen) AS last_seen FROM player_ips WHERE player_uuid = ?`).bind(uuid),
     db.prepare(
       `SELECT COUNT(*) + 1 AS rank FROM players
-       WHERE account_status = 'active' AND score > (SELECT score FROM players WHERE uuid = ?)`
+       WHERE account_status = 'active' AND placeholder = 0 AND score > (SELECT score FROM players WHERE uuid = ?)`
     ).bind(uuid),
+    db.prepare(`SELECT COUNT(*) AS count FROM submissions WHERE player_uuid = ? AND imported = 1`).bind(uuid),
   ])
 
   type PlayerRow = {
@@ -85,6 +86,7 @@ export async function getAdminPlayer(db: D1Database, uuid: string) {
     date_joined: number
     account_status: string
     auth_provider: string
+    placeholder: number
     discord_id: string | null
     discord_avatar: string | null
     discord_discriminator: string | null
@@ -115,6 +117,8 @@ export async function getAdminPlayer(db: D1Database, uuid: string) {
     runs: counts(trialCounts.results),
     combos: counts(comboCounts.results),
     last_seen: (lastSeen.results[0] as { last_seen: number | null } | undefined)?.last_seen ?? null,
+    // Records imported from the old WR Drive, which runs leaves out.
+    imported_runs: Number((imported.results[0] as { count: number } | undefined)?.count ?? 0),
   }
 }
 
@@ -193,7 +197,7 @@ async function activityCounts(db: D1Database, { from, to }: Window) {
          + (SELECT COUNT(*) FROM combo_submissions WHERE date >= ?1 AND date < ?2) AS submitted,
        (SELECT COUNT(*) FROM audit_logs
           WHERE action IN ('submission_approved', 'combo_submission_approved') AND created_at >= ?1 AND created_at < ?2) AS approved,
-       (SELECT COUNT(*) FROM players WHERE date_joined >= ?1 AND date_joined < ?2) AS new_players,
+       (SELECT COUNT(*) FROM players WHERE date_joined >= ?1 AND date_joined < ?2 AND placeholder = 0) AS new_players,
        (SELECT COUNT(*) FROM (
           SELECT player_uuid FROM submissions WHERE date >= ?1 AND date < ?2 AND imported = 0
           UNION
@@ -229,7 +233,7 @@ async function activitySeries(db: D1Database, { from, to }: Window) {
     ).bind(from, to),
     db.prepare(
       `SELECT CAST((date_joined - ?1) / ${DAY} AS INTEGER) AS day, COUNT(*) AS count FROM players
-       WHERE date_joined >= ?1 AND date_joined < ?2 GROUP BY day`
+       WHERE date_joined >= ?1 AND date_joined < ?2 AND placeholder = 0 GROUP BY day`
     ).bind(from, to),
     db.prepare(
       `SELECT day, COUNT(DISTINCT player_uuid) AS count FROM (
