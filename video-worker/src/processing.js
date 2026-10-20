@@ -7,10 +7,12 @@
 //   original -> remux/transcode to H.264 MP4 (<=1080p, <=60fps) -> thumbnail
 //   -> scores/{uuid}.mp4 + scores/{uuid}-preview.jpg in the public bucket
 //
-// A "drive" job is a file copied in from the old WR Drive (see the main
-// app's wr-import-service.ts) instead: imports/{drive file id} is
-// re-encoded the same way and replaced, with no thumbnail and nothing
-// published, so the import queue can play it.
+// A "drive" job is a file from the old WR Drive (see the main app's
+// wr-import-service.ts) instead: the container downloads it from Google
+// Drive (streamed through /drive-source, with this Worker's
+// GOOGLE_DRIVE_API_KEY), re-encodes it the same way and uploads it to
+// imports/{drive file id}, with no thumbnail and nothing published, so the
+// import queue can play it. The file never passes through the main app.
 //
 // Originals live in the private wasans-uploads bucket as originals/{uuid}
 // (moderators can download them; the main app deletes them 7 days after
@@ -43,6 +45,7 @@ const MAX_PREVIEW_BYTES = 2 * 1024 * 1024
 // put its file at originals/{uuid}.
 // "drive": a file from the old WR Drive waiting in the import queue.
 const REASONS = new Set(["upload", "medal", "backfill", "import", "drive"])
+const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
 
 export function processorName(job) {
   return job.reason === "drive" ? `drive-${job.driveFileId}` : `submission-${job.submissionUuid}`
@@ -78,11 +81,10 @@ async function handleMedia(request, env, ctx) {
   const keys = keysFor(job)
   const { pathname } = new URL(request.url)
 
-  // A Drive file can only be read and replaced, nothing else.
+  // A Drive file can only be downloaded and put in imports/, nothing else.
   if (job.reason === "drive") {
-    if (request.method === "GET" && pathname === "/original") {
-      const object = await env.UPLOADS.get(keys.original)
-      return object ? new Response(object.body) : new Response("Not found", { status: 404 })
+    if (request.method === "GET" && pathname === "/drive-source") {
+      return fetchDriveFile(env, job.driveFileId)
     }
     const replace = pathname.match(/^\/original\/multipart\/(create|part|complete|abort)$/)
     if (replace) {
@@ -163,6 +165,25 @@ async function handleMedia(request, env, ctx) {
   }
 
   return new Response("Not found", { status: 404 })
+}
+
+// The file straight from Google Drive, streamed to the container as it
+// arrives. 501 when this Worker has no API key, which retrying won't fix.
+async function fetchDriveFile(env, driveFileId) {
+  if (!env.GOOGLE_DRIVE_API_KEY) {
+    return new Response("The wasans-video Worker has no GOOGLE_DRIVE_API_KEY secret", { status: 501 })
+  }
+  const url = new URL(`${DRIVE_FILES_URL}/${encodeURIComponent(driveFileId)}`)
+  url.searchParams.set("alt", "media")
+  url.searchParams.set("supportsAllDrives", "true")
+  url.searchParams.set("key", env.GOOGLE_DRIVE_API_KEY)
+  const response = await fetch(url)
+  if (!response.ok || !response.body) {
+    const json = await response.json().catch(() => null)
+    return new Response(json?.error?.message || `Google Drive answered ${response.status}`, { status: response.status || 502 })
+  }
+  const length = response.headers.get("content-length")
+  return new Response(response.body, { headers: length ? { "content-length": length } : {} })
 }
 
 async function handleResult(request, env, ctx) {

@@ -3,7 +3,7 @@ import { secretsMatch } from "@/lib/constant-time"
 import { cleanupExpiredApiState } from "@/lib/server/services/api-state-cleanup-service"
 import { sweepVideoProcessing } from "@/lib/server/services/video-processing-service"
 import { sweepOriginals } from "@/lib/server/services/wr-archive-service"
-import { copyDriveFiles } from "@/lib/server/services/wr-import-service"
+import { queueDriveCopies } from "@/lib/server/services/wr-import-service"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 
@@ -32,15 +32,15 @@ export const POST = withV2Context(async (ctx) => {
   if (originals.recordsArchived > 0) {
     await bumpCacheGeneration(ctx.cache)
   }
-  // Copies files from the old WR Drive into the import queue, for when no
-  // owner has the queue page open (see wr-import-service.ts).
-  const drive = await copyDriveFiles(ctx.env, ctx.db, { limit: 50, budgetMs: 3 * 60 * 1000 }).catch((error) => {
-    console.error("Copying Drive files failed:", error)
-    return { copied: 0, failed: 0, remaining: null }
+  // Restarts copies from the old WR Drive into the import queue if their
+  // chain stopped (see wr-import-service.ts).
+  const drive = await queueDriveCopies(ctx.env, ctx.db).catch((error) => {
+    console.error("Queueing Drive copies failed:", error)
+    return { queued: 0, remaining: null }
   })
 
   return jsonOk(
-    { ok: true, ...result, ...videos, ...originals, driveFilesCopied: drive.copied, driveFilesWaiting: drive.remaining },
+    { ok: true, ...result, ...videos, ...originals, driveCopiesQueued: drive.queued, driveFilesWaiting: drive.remaining },
     { requestId: ctx.requestId }
   )
 })
