@@ -13,6 +13,8 @@ const cache = new Map();
 
 // Which image the site shows for a player (components/custom/player-avatar.tsx):
 // their picked Roblox headshot, else their Discord avatar, else initials.
+// discord_id is only ever a linked Discord account, whichever provider the
+// account was created with.
 export function playerAvatarUrl(player) {
     if (!player) return null;
     const uuid = player.uuid || player.player_uuid;
@@ -23,7 +25,6 @@ export function playerAvatarUrl(player) {
 
     const id = String(player.discord_id || '').trim();
     if (!/^\d+$/.test(id)) return null;
-    if (player.auth_provider && player.auth_provider !== 'discord') return null;
 
     const hash = String(player.discord_avatar || '').trim();
     if (hash) return `https://cdn.discordapp.com/avatars/${id}/${hash}.png?size=${AVATAR_SIZE}`;

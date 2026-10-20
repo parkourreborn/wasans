@@ -29,6 +29,8 @@ type LinkedAccount = {
   display_name: string | null
   linked_at: number
   is_avatar: boolean
+  // Discord only; Roblox headshots come from the headshot route.
+  avatar_url: string | null
 }
 
 type ConnectionsResponse = {
@@ -61,7 +63,8 @@ function currentPath() {
 
 // Settings > Linked accounts: one Discord, one Google, any number of Roblox
 // accounts, any of which logs in to this account. Also where the avatar is
-// picked from the linked Roblox accounts' headshots.
+// picked: the linked Discord account's picture or a Roblox account's
+// headshot.
 export function LinkedAccountsSection({ onAvatarChange }: { onAvatarChange?: () => void }) {
   const [connections, setConnections] = useState<LinkedAccount[] | null>(null)
   const [robloxRequired, setRobloxRequired] = useState(false)
@@ -136,12 +139,12 @@ export function LinkedAccountsSection({ onAvatarChange }: { onAvatarChange?: () 
   }
 
   const chooseAvatar = async (account: LinkedAccount) => {
-    setBusy(`avatar:${account.account_id}`)
+    setBusy(`avatar:${account.provider}:${account.account_id}`)
     try {
       const response = await fetch(apiV2("/account/avatar"), {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ roblox_user_id: account.account_id }),
+        body: JSON.stringify(account.provider === "discord" ? { provider: "discord" } : { roblox_user_id: account.account_id }),
         cache: "no-store",
       })
       const json = (await response.json().catch(() => null)) as ConnectionsResponse | null
@@ -149,7 +152,10 @@ export function LinkedAccountsSection({ onAvatarChange }: { onAvatarChange?: () 
         throw new Error(json?.error?.message || "Unable to change avatar")
       }
       setConnections((current) =>
-        (current || []).map((item) => ({ ...item, is_avatar: item.provider === "roblox" && item.account_id === account.account_id }))
+        (current || []).map((item) => ({
+          ...item,
+          is_avatar: item.provider === account.provider && item.account_id === account.account_id,
+        }))
       )
       toast.success("Avatar updated. It can take a few minutes to show everywhere.")
       onAvatarChange?.()
@@ -163,6 +169,18 @@ export function LinkedAccountsSection({ onAvatarChange }: { onAvatarChange?: () 
   const isOnlyLogin = (connections?.length ?? 0) <= 1
   const robloxAccounts = (connections || []).filter((account) => account.provider === "roblox")
   const singleProviders: Array<"discord" | "google"> = ["discord", "google"]
+
+  const avatarControl = (account: LinkedAccount) =>
+    account.is_avatar ? (
+      <Badge variant="secondary">
+        <CheckIcon />
+        Avatar
+      </Badge>
+    ) : (
+      <Button type="button" variant="ghost" size="sm" disabled={Boolean(busy)} onClick={() => void chooseAvatar(account)}>
+        Use as avatar
+      </Button>
+    )
 
   const unlinkButton = (account: LinkedAccount, label: string) => (
     <AlertDialog>
@@ -211,14 +229,28 @@ export function LinkedAccountsSection({ onAvatarChange }: { onAvatarChange?: () 
           <>
             {singleProviders.map((provider) => {
               const account = connections.find((item) => item.provider === provider)
+              const isDiscord = provider === "discord"
               return (
                 <div key={provider} className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm">{providerLabels[provider]}</p>
-                    <p className="text-xs text-muted-foreground">{account ? "Linked" : "Not linked"}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {account && isDiscord ? (
+                      <Avatar size="sm">
+                        {account.avatar_url ? <AvatarImage src={account.avatar_url} alt="Discord picture" /> : null}
+                        <AvatarFallback>{getNameInitials(providerLabels.discord)}</AvatarFallback>
+                      </Avatar>
+                    ) : null}
+                    <div className="min-w-0">
+                      <p className="text-sm">{providerLabels[provider]}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {!account ? "Not linked" : isDiscord ? "Linked. Its picture updates when you log in with Discord." : "Linked"}
+                      </p>
+                    </div>
                   </div>
                   {account ? (
-                    unlinkButton(account, providerLabels[provider])
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {isDiscord ? avatarControl(account) : null}
+                      {unlinkButton(account, providerLabels[provider])}
+                    </div>
                   ) : (
                     <Button type="button" variant="outline" size="sm" disabled={Boolean(busy)} onClick={() => void link(provider)}>
                       <Link2Icon />
@@ -265,16 +297,7 @@ export function LinkedAccountsSection({ onAvatarChange }: { onAvatarChange?: () 
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      {account.is_avatar ? (
-                        <Badge variant="secondary">
-                          <CheckIcon />
-                          Avatar
-                        </Badge>
-                      ) : (
-                        <Button type="button" variant="ghost" size="sm" disabled={Boolean(busy)} onClick={() => void chooseAvatar(account)}>
-                          Use as avatar
-                        </Button>
-                      )}
+                      {avatarControl(account)}
                       {unlinkButton(account, name)}
                     </div>
                   </div>

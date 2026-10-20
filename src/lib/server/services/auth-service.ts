@@ -231,8 +231,10 @@ function upsertOauthAccountStatement(db: Queryable, identity: OAuthIdentity, pla
 }
 
 // The players-row side of having this identity linked: Discord drives the
-// avatar fallback and the bot's DMs, and a player's first Roblox account
-// becomes their avatar until they pick another.
+// avatar and the bot's DMs, and a player's first Roblox account becomes
+// their avatar only if they have no Discord linked. With Discord linked, an
+// empty avatar_roblox_id means the Discord picture is their avatar, kept
+// until they pick a Roblox headshot themselves.
 function applyIdentityToPlayerStatement(db: Queryable, identity: OAuthIdentity, playerUuid: string) {
   if (identity.provider === "discord") {
     return db.prepare(
@@ -242,7 +244,9 @@ function applyIdentityToPlayerStatement(db: Queryable, identity: OAuthIdentity, 
   }
 
   if (identity.provider === "roblox") {
-    return db.prepare(`UPDATE players SET avatar_roblox_id = COALESCE(avatar_roblox_id, ?) WHERE uuid = ?`)
+    return db.prepare(
+      `UPDATE players SET avatar_roblox_id = COALESCE(avatar_roblox_id, ?) WHERE uuid = ? AND discord_id IS NULL`
+    )
       .bind(identity.accountId, playerUuid)
   }
 

@@ -1,4 +1,5 @@
 import "server-only"
+import { getDiscordAvatarUrl } from "@/lib/discord-avatar"
 import { isFeatureEnabled } from "@/lib/server/repositories/feature-flag-repository"
 import { fetchRobloxUserNames } from "@/lib/server/roblox"
 import { AccountLinkError, oauthProviderLabels, type OAuthProvider } from "@/lib/server/services/auth-service"
@@ -18,6 +19,9 @@ export type LinkedAccount = {
   display_name: string | null
   linked_at: number
   is_avatar: boolean
+  // Discord only: its picture as of the last Discord login or link. Roblox
+  // headshots come from /v2/account/connections/roblox/{id}/headshot.
+  avatar_url: string | null
 }
 
 export type LinkedRobloxAccount = {
@@ -63,7 +67,9 @@ async function withLiveRobloxNames(cache: KVNamespace, rows: OauthAccountRow[]) 
 export async function listLinkedAccounts(db: D1Database, cache: KVNamespace, playerUuid: string): Promise<LinkedAccount[]> {
   const [rows, player] = await Promise.all([
     listOauthAccountRows(db, playerUuid),
-    db.prepare(`SELECT avatar_roblox_id FROM players WHERE uuid = ?`).bind(playerUuid).first<{ avatar_roblox_id: string | null }>(),
+    db.prepare(`SELECT avatar_roblox_id, discord_avatar, discord_discriminator FROM players WHERE uuid = ?`)
+      .bind(playerUuid)
+      .first<{ avatar_roblox_id: string | null; discord_avatar: string | null; discord_discriminator: string | null }>(),
   ])
 
   return (await withLiveRobloxNames(cache, rows)).map((row) => ({
@@ -72,7 +78,18 @@ export async function listLinkedAccounts(db: D1Database, cache: KVNamespace, pla
     username: row.username,
     display_name: row.display_name,
     linked_at: row.created_at,
-    is_avatar: row.provider === "roblox" && row.provider_account_id === player?.avatar_roblox_id,
+    // With no Roblox headshot picked, the Discord picture is the avatar.
+    is_avatar: row.provider === "roblox"
+      ? row.provider_account_id === player?.avatar_roblox_id
+      : row.provider === "discord" && Boolean(player) && !player?.avatar_roblox_id,
+    avatar_url: row.provider === "discord"
+      ? getDiscordAvatarUrl({
+          discordId: row.provider_account_id,
+          avatarHash: player?.discord_avatar,
+          discriminator: player?.discord_discriminator,
+          size: 64,
+        })
+      : null,
   }))
 }
 
@@ -109,6 +126,12 @@ export async function unlinkAccount(db: D1Database, playerUuid: string, provider
   const linkGone = `NOT EXISTS (
     SELECT 1 FROM oauth_accounts WHERE provider = ? AND provider_account_id = ? AND player_uuid = ?
   )`
+  const oldestRobloxAccount = `(
+    SELECT provider_account_id FROM oauth_accounts
+    WHERE player_uuid = ? AND provider = 'roblox'
+    ORDER BY created_at ASC
+    LIMIT 1
+  )`
 
   const [deleted] = await session.batch([
     session.prepare(
@@ -119,22 +142,23 @@ export async function unlinkAccount(db: D1Database, playerUuid: string, provider
          AND (SELECT COUNT(*) FROM oauth_accounts WHERE player_uuid = ?) > 1`
     )
       .bind(provider, accountId, playerUuid, playerUuid),
+    // Unlinking Discord while its picture is the avatar moves the avatar to
+    // the player's oldest Roblox account, if they have one.
     session.prepare(
       `UPDATE players
-       SET discord_id = NULL, discord_avatar = NULL, discord_discriminator = NULL
+       SET discord_id = NULL,
+           discord_avatar = NULL,
+           discord_discriminator = NULL,
+           avatar_roblox_id = COALESCE(avatar_roblox_id, ${oldestRobloxAccount})
        WHERE uuid = ? AND discord_id = ? AND ? = 'discord' AND ${linkGone}`
     )
-      .bind(playerUuid, accountId, provider, provider, accountId, playerUuid),
-    // Unlinking the avatar's account moves the avatar to the player's
-    // oldest remaining Roblox account, or clears it if there is none.
+      .bind(playerUuid, playerUuid, accountId, provider, provider, accountId, playerUuid),
+    // Unlinking the avatar's Roblox account moves the avatar to Discord if
+    // it's linked, else to the oldest remaining Roblox account, else clears
+    // it.
     session.prepare(
       `UPDATE players
-       SET avatar_roblox_id = (
-         SELECT provider_account_id FROM oauth_accounts
-         WHERE player_uuid = ? AND provider = 'roblox'
-         ORDER BY created_at ASC
-         LIMIT 1
-       )
+       SET avatar_roblox_id = CASE WHEN discord_id IS NOT NULL THEN NULL ELSE ${oldestRobloxAccount} END
        WHERE uuid = ? AND avatar_roblox_id = ? AND ? = 'roblox' AND ${linkGone}`
     )
       .bind(playerUuid, playerUuid, accountId, provider, provider, accountId, playerUuid),
@@ -174,6 +198,18 @@ export async function setAvatarRobloxAccount(db: D1Database, playerUuid: string,
 
   if (!result.meta?.changes) {
     throw new AccountLinkError("That Roblox account isn't linked to your account.")
+  }
+}
+
+// Makes the linked Discord account's picture the avatar, which is what an
+// empty avatar_roblox_id means while Discord is linked.
+export async function setAvatarDiscord(db: D1Database, playerUuid: string) {
+  const result = await db.prepare(`UPDATE players SET avatar_roblox_id = NULL WHERE uuid = ? AND discord_id IS NOT NULL`)
+    .bind(playerUuid)
+    .run()
+
+  if (!result.meta?.changes) {
+    throw new AccountLinkError("Link a Discord account first.")
   }
 }
 

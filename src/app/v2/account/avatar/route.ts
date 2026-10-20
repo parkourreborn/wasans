@@ -1,18 +1,22 @@
 import { jsonError, validationError } from "@/lib/server/http"
 import { isRobloxUserId } from "@/lib/server/roblox"
 import { AccountLinkError } from "@/lib/server/services/auth-service"
-import { setAvatarRobloxAccount } from "@/lib/server/services/linked-accounts-service"
+import { setAvatarDiscord, setAvatarRobloxAccount } from "@/lib/server/services/linked-accounts-service"
 import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-limit-service"
 import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 import { jsonOk, requireV2User, withV2Context } from "@/lib/server/v2/http"
 
-// Picks which linked Roblox account's headshot is the player's avatar.
+// Picks the player's avatar: their linked Discord account's picture
+// ({ provider: "discord" }) or a linked Roblox account's headshot
+// ({ roblox_user_id }).
 export const PATCH = withV2Context(async (ctx) => {
   const user = await requireV2User(ctx)
 
-  const body = await ctx.request.json().catch(() => null) as { roblox_user_id?: unknown } | null
-  if (!body || !isRobloxUserId(body.roblox_user_id)) {
-    return validationError("roblox_user_id is required", ctx.requestId)
+  const body = await ctx.request.json().catch(() => null) as { provider?: unknown; roblox_user_id?: unknown } | null
+  const pickDiscord = body?.provider === "discord"
+  const robloxUserId = body?.roblox_user_id
+  if (!pickDiscord && !isRobloxUserId(robloxUserId)) {
+    return validationError('provider "discord" or roblox_user_id is required', ctx.requestId)
   }
 
   const rate = await enforceRateLimit(ctx.db, getRateLimitKey(ctx.request, "v2:account:avatar", user.uuid), {
@@ -30,7 +34,11 @@ export const PATCH = withV2Context(async (ctx) => {
   }
 
   try {
-    await setAvatarRobloxAccount(ctx.db, user.uuid, body.roblox_user_id)
+    if (pickDiscord) {
+      await setAvatarDiscord(ctx.db, user.uuid)
+    } else {
+      await setAvatarRobloxAccount(ctx.db, user.uuid, String(robloxUserId))
+    }
   } catch (error) {
     if (error instanceof AccountLinkError) {
       return jsonError(error.message, 409, { code: "conflict", requestId: ctx.requestId })

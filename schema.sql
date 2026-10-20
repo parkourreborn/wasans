@@ -53,7 +53,8 @@ CREATE TABLE players (
     CHECK (auth_provider IN ('discord', 'google', 'roblox')),
   -- Linked Discord account (avatars, bot DMs); NULL when none is linked.
   discord_id TEXT,
-  -- Linked Roblox account whose headshot is the avatar.
+  -- Linked Roblox account whose headshot is the avatar. NULL with Discord
+  -- linked means the Discord picture is the avatar.
   avatar_roblox_id TEXT
 );
 
