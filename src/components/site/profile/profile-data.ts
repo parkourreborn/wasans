@@ -25,6 +25,9 @@ export type ProfilePlayer = {
   position?: number
   permission: number
   date_joined: number
+  // 1 for a player with no account, just a name: records imported from the
+  // old WR Drive and nothing else.
+  placeholder?: number
   discord_id?: string | null
   discord_avatar?: string | null
   discord_discriminator?: string | null

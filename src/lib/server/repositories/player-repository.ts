@@ -23,7 +23,7 @@ export type PlayerWithRankRow = {
 }
 
 export async function listPlayers(db: D1Database, options: PlayerListOptions) {
-  const filters: string[] = ["COALESCE(account_status, 'active') != 'deactivated'"]
+  const filters: string[] = ["COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0"]
   const bindings: Array<string | number> = []
 
   if (options.search) {
@@ -51,7 +51,7 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
               RANK() OVER (ORDER BY score DESC) AS rank,
               ROW_NUMBER() OVER (ORDER BY score DESC, player_name ASC) AS position
        FROM players
-       WHERE COALESCE(account_status, 'active') != 'deactivated'
+       WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0
      )
      ${searchSql}
      ORDER BY position ASC
@@ -69,7 +69,7 @@ export async function listPlayers(db: D1Database, options: PlayerListOptions) {
 export async function getPlayerByUuid(db: D1Database, uuid: string) {
   return db.prepare(
     `SELECT uuid, player_id, discord_avatar, discord_discriminator, auth_provider,
-            discord_id, (avatar_roblox_id IS NOT NULL) AS has_roblox_avatar, player_name, score, permission, date_joined
+            discord_id, (avatar_roblox_id IS NOT NULL) AS has_roblox_avatar, player_name, score, permission, date_joined, placeholder
      FROM players
      WHERE uuid = ?
        AND COALESCE(account_status, 'active') != 'deactivated'`
@@ -87,6 +87,8 @@ export async function getPlayerByUuid(db: D1Database, uuid: string) {
       score: number
       permission: number
       date_joined: number
+      // 1 for a player with no account, just a name.
+      placeholder: number
     }>()
 }
 
@@ -110,7 +112,7 @@ export async function getPlayerRank(db: D1Database, score: number) {
     `SELECT COUNT(*) + 1 AS rank
      FROM players
      WHERE score > ?
-       AND COALESCE(account_status, 'active') != 'deactivated'`
+       AND COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0`
   )
     .bind(score)
     .first<{ rank: number }>()
@@ -126,7 +128,7 @@ export async function getPlayerPosition(db: D1Database, score: number, playerNam
     `SELECT COUNT(*) + 1 AS position
      FROM players
      WHERE (score > ? OR (score = ? AND player_name < ?))
-       AND COALESCE(account_status, 'active') != 'deactivated'`
+       AND COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0`
   )
     .bind(score, score, playerName)
     .first<{ position: number }>()

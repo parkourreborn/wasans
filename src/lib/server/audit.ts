@@ -63,6 +63,7 @@ export type AuditAction =
   | "wr_imported"
   | "wr_import_matched"
   | "wr_import_skipped"
+  | "placeholder_runs_moved"
 
 // Split out from insertAuditLog so callers writing several audit rows at
 // once (e.g. the deduplicate sweep) can send them as one db.batch() instead

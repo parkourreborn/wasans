@@ -33,16 +33,16 @@ async function getPlayerScoreStats(db: D1Database) {
       .prepare(
         `SELECT COUNT(*) AS total, AVG(score) AS avg_score
          FROM players
-         WHERE COALESCE(account_status, 'active') != 'deactivated'`
+         WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0`
       )
       .first<{ total: number; avg_score: number | null }>(),
     db
       .prepare(
         `SELECT score FROM players
-         WHERE COALESCE(account_status, 'active') != 'deactivated'
+         WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0
          ORDER BY score
          LIMIT 1 OFFSET (
-           SELECT COUNT(*) / 2 FROM players WHERE COALESCE(account_status, 'active') != 'deactivated'
+           SELECT COUNT(*) / 2 FROM players WHERE COALESCE(account_status, 'active') != 'deactivated' AND placeholder = 0
          )`
       )
       .first<{ score: number } | null>(),

@@ -66,6 +66,7 @@ export const ADMIN_ACTIONS = [
   "wr_imported",
   "wr_import_matched",
   "wr_import_skipped",
+  "placeholder_runs_moved",
 ] as const
 
 // Everything else lands in "activity": runs and combos being submitted, WRs
@@ -276,6 +277,13 @@ export function describeLog(row: LogRow): { tag: string; tone: "error" | "good" 
       }
     case "wr_import_skipped":
       return { tag: "Import", tone: "muted", text: `${who} skipped a file from the old WR Drive`, meta: str(d.file_name) }
+    case "placeholder_runs_moved":
+      return {
+        tag: "Players",
+        tone: "admin",
+        text: `${who} moved ${str(d.from_name) ?? "a name-only player"}’s runs to ${str(d.to_name) ?? "an account"}`,
+        meta: `${num(d.runs) ?? 0} runs`,
+      }
     case "video_backfill_started":
       return { tag: "Maintenance", tone: "admin", text: `${who} started re-encoding old videos`, meta: null }
     case "wr_compilation_started":

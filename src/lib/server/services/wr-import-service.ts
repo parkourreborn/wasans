@@ -5,7 +5,9 @@ import { enqueueVideoJobs } from "@/lib/server/services/video-processing-service
 import { STUCK_PROCESSING_SECONDS } from "@/lib/server/video-processing"
 import { archiveRun, getWorldRecordRun } from "@/lib/server/services/wr-archive-service"
 import { ApiError } from "@/lib/server/v2/http"
-import { generateShortId } from "@/lib/utils"
+import { isPlayerNameTaken } from "@/lib/server/player-name-service"
+import { validatePlayerName } from "@/lib/player-name"
+import { generateShortId, generateUUID } from "@/lib/utils"
 import {
   DEFAULT_DRIVE_FOLDER,
   driveRecordDate,
@@ -28,7 +30,9 @@ import {
 //     The video container then re-encodes it there to an H.264 MP4 (a
 //     "drive" job), replacing the Drive original, so it plays in the queue.
 //  3. Review, one at a time in /admin/site/wr-imports:
-//     - Import: a new approved run with imported = 1. Its file moves to
+//     - Import: a new approved run with imported = 1, for a player on the
+//       site or, by name, for one who never signed up: a placeholder player
+//       (players.placeholder = 1) shared by every import with that name. Its file moves to
 //       originals/{uuid} and goes through the video pipeline (reason
 //       "import"); once processed, it's archived like any other record's.
 //     - Match: the same run (trial, time to the millisecond, player) is
@@ -302,6 +306,8 @@ export type ImportPlayer = {
   uuid: string
   player_name: string
   score: number
+  // 1 for a player with no account, just a name.
+  placeholder: number
   discord_id: string | null
   discord_avatar: string | null
   discord_discriminator: string | null
@@ -347,7 +353,7 @@ export type ImportQueueRow = Omit<ImportRowDb, "mime_type" | "staged_at" | "copi
   matches: ImportMatch[]
 }
 
-const PLAYER_FIELDS = `p.uuid, p.player_name, p.score, p.discord_id, p.discord_avatar, p.discord_discriminator,
+const PLAYER_FIELDS = `p.uuid, p.player_name, p.score, p.placeholder, p.discord_id, p.discord_avatar, p.discord_discriminator,
   (p.avatar_roblox_id IS NOT NULL) AS has_roblox_avatar`
 
 // Every active player whose site name, or linked Roblox username or display
@@ -520,10 +526,39 @@ async function release(db: D1Database, driveFileId: string) {
     .run()
 }
 
-export type ImportInput = { trial: string; time: number; player_uuid: string; version: string; date: number }
+export type ImportInput = { trial: string; time: number; player_uuid: string; player_name: string; version: string; date: number }
 
-// What an owner sent, checked: a trial the site has, a time, an active
-// player, a version on the list and a date that's already happened.
+type CheckedPlayer = { uuid: string; player_name: string; create: boolean }
+
+// The player an owner picked (player_uuid), or a name for one with no
+// account (player_name): the placeholder with that name, or a new one to
+// create with the run. A name an account already has is refused, since
+// that's almost always the same person.
+async function checkPlayer(db: D1Database, input: Partial<Record<keyof ImportInput, unknown>>): Promise<CheckedPlayer> {
+  if (typeof input.player_uuid === "string" && input.player_uuid) {
+    const player = await db
+      .prepare(`SELECT uuid, player_name FROM players WHERE uuid = ? AND COALESCE(account_status, 'active') = 'active'`)
+      .bind(input.player_uuid)
+      .first<{ uuid: string; player_name: string }>()
+    if (!player) throw new ApiError("Pick the player who set it", 400, "validation_error")
+    return { ...player, create: false }
+  }
+  if (typeof input.player_name !== "string") throw new ApiError("Pick the player who set it", 400, "validation_error")
+  const name = validatePlayerName(input.player_name)
+  if (!name.ok) throw new ApiError(name.message, 400, "validation_error")
+  const placeholder = await db
+    .prepare(`SELECT uuid, player_name FROM players WHERE placeholder = 1 AND LOWER(player_name) = LOWER(?)`)
+    .bind(name.playerName)
+    .first<{ uuid: string; player_name: string }>()
+  if (placeholder) return { ...placeholder, create: false }
+  if (await isPlayerNameTaken(db, name.playerName)) {
+    throw new ApiError(`“${name.playerName}” has an account on the site. Pick them instead.`, 400, "validation_error")
+  }
+  return { uuid: generateUUID(), player_name: name.playerName, create: true }
+}
+
+// What an owner sent, checked: a trial the site has, a time, a player, a
+// version on the list and a date that's already happened.
 async function checkInput(db: D1Database, input: Partial<Record<keyof ImportInput, unknown>>, now: number) {
   const time = typeof input.time === "number" && Number.isFinite(input.time) ? Math.round(input.time * 1000) / 1000 : NaN
   if (!(time > 0 && time < 100_000)) throw new ApiError("Enter the run’s time", 400, "validation_error")
@@ -531,14 +566,7 @@ async function checkInput(db: D1Database, input: Partial<Record<keyof ImportInpu
   if (!(date > Date.UTC(2000, 0, 1) / 1000 && date <= now + 86400)) throw new ApiError("Enter the date the record was set", 400, "validation_error")
   const trial = typeof input.trial === "string" ? await db.prepare(`SELECT name, version FROM trials WHERE name = ?`).bind(input.trial).first<{ name: string; version: number }>() : null
   if (!trial) throw new ApiError("Pick a trial the site has", 400, "validation_error")
-  const player =
-    typeof input.player_uuid === "string"
-      ? await db
-          .prepare(`SELECT uuid, player_name FROM players WHERE uuid = ? AND COALESCE(account_status, 'active') = 'active'`)
-          .bind(input.player_uuid)
-          .first<{ uuid: string; player_name: string }>()
-      : null
-  if (!player) throw new ApiError("Pick the player who set it", 400, "validation_error")
+  const player = await checkPlayer(db, input)
   const version = typeof input.version === "string" ? input.version : ""
   if (!(await gameVersionExists(db, version))) throw new ApiError("Pick a version from the list", 400, "validation_error")
   return { time, date, trial, player, version }
@@ -564,7 +592,7 @@ export async function importDriveFile(env: CloudflareEnv, db: D1Database, actor:
   if (row.staged_at === null) throw new ApiError("This file hasn’t been copied from the Drive and re-encoded yet", 409, "conflict")
   const { time, date, trial, player, version } = await checkInput(db, body, now)
 
-  const match = await findSameRun(db, trial.name, time, player.uuid)
+  const match = player.create ? null : await findSameRun(db, trial.name, time, player.uuid)
   if (match) throw new ApiError("This run is already on the site", 409, "conflict", { match })
 
   await claim(db, driveFileId, "imported", actor, now)
@@ -584,8 +612,21 @@ export async function importDriveFile(env: CloudflareEnv, db: D1Database, actor:
   }
 
   const note = `Imported from the old WR Drive: ${[row.folder_path, row.file_name].filter(Boolean).join("/")}`
+  const createPlayer = player.create
+    ? [
+        db
+          .prepare(
+            `INSERT INTO players (uuid, player_id, player_name, date_joined, permission, account_status, auth_provider, placeholder)
+             VALUES (?, ?, ?, ?, 0, 'active', 'discord', 1)`
+          )
+          // player_id is never an account id for a placeholder, so no
+          // login can land on it (see findPlayerByIdentity).
+          .bind(player.uuid, player.uuid, player.player_name, now),
+      ]
+    : []
   try {
     await db.batch([
+      ...createPlayer,
       db
         .prepare(
           `INSERT INTO submissions (
@@ -598,7 +639,16 @@ export async function importDriveFile(env: CloudflareEnv, db: D1Database, actor:
       db.prepare(`UPDATE wr_imports SET submission_uuid = ?, staged_at = NULL, copied_at = NULL, copy_error = NULL WHERE drive_file_id = ?`).bind(uuid, driveFileId),
       buildAuditLogStatement(db, "wr_imported", "submission", uuid, {
         actor,
-        details: { trial_name: trial.name, time, player_name: player.player_name, date, game_version: version, file_name: row.file_name, drive_file_id: driveFileId },
+        details: {
+          trial_name: trial.name,
+          time,
+          player_name: player.player_name,
+          ...(player.create ? { new_placeholder: true } : {}),
+          date,
+          game_version: version,
+          file_name: row.file_name,
+          drive_file_id: driveFileId,
+        },
       }),
     ])
   } catch (error) {
@@ -614,7 +664,11 @@ export async function importDriveFile(env: CloudflareEnv, db: D1Database, actor:
     // The daily sweep re-queues runs stuck in processing.
     console.error(`Queueing the imported record ${uuid} failed:`, error)
   }
-  return { status: "imported" as const, submission_uuid: uuid }
+  // A new placeholder, for the queue to offer on the other files with its name.
+  const created: ImportPlayer | null = player.create
+    ? { uuid: player.uuid, player_name: player.player_name, score: 0, placeholder: 1, discord_id: null, discord_avatar: null, discord_discriminator: null, has_roblox_avatar: 0 }
+    : null
+  return { status: "imported" as const, submission_uuid: uuid, player: created }
 }
 
 // The file is a run the site already has: that run and its file stay, and
