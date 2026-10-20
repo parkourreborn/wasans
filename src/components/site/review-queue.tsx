@@ -706,6 +706,7 @@ function TrialReview({ run, wr, records, now }: { run: TrialRun; wr?: WorldRecor
         submissionUuid={run.uuid}
         status={run.video_status}
         errorMessage={run.video_error}
+        fps={run.video_fps}
         label={`${run.trial_name} ${formatTime(time)} by ${run.player_name}, run video`}
         fallback={
           medal ? (

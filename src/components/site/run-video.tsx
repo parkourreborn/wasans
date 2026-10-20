@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { FileVideoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { VideoPlayer } from "@/components/site/video-player"
 import { Spinner } from "@/components/ui/spinner"
 
 export const ASSETS_URL = "https://assets.wasans.tully.sh"
@@ -42,6 +43,7 @@ export function RunVideo({
   status = "ready",
   errorMessage,
   showPoster = true,
+  fps,
   label,
   fallback,
   className,
@@ -49,7 +51,11 @@ export function RunVideo({
   submissionUuid: string
   status?: VideoStatus | null
   errorMessage?: string | null
+  // Off when the viewer turned thumbnails off, which also turns off the
+  // timeline's frame previews.
   showPoster?: boolean
+  // The frame rate the server probed, for frame stepping.
+  fps?: number | null
   label: string
   // Shown when the file can't be loaded, e.g. a link to the run page.
   fallback?: React.ReactNode
@@ -57,6 +63,20 @@ export function RunVideo({
 }) {
   const [loadFailed, setLoadFailed] = useState(false)
   const state = status ?? "ready"
+
+  if (state === "ready" && !loadFailed) {
+    return (
+      <VideoPlayer
+        src={runVideoUrl(submissionUuid)}
+        poster={showPoster ? runPosterUrl(submissionUuid) : undefined}
+        previews={showPoster}
+        fps={fps}
+        label={label}
+        onError={() => setLoadFailed(true)}
+        className={className}
+      />
+    )
+  }
 
   return (
     <div className={cn("relative aspect-video w-full overflow-hidden rounded-lg border border-line-strong bg-black", className)}>
@@ -70,22 +90,11 @@ export function RunVideo({
           <p className="label-caps text-[15px] text-destructive">Video processing failed</p>
           <p className="max-w-md text-sm text-muted-foreground">{errorMessage || "The video couldn't be processed."}</p>
         </div>
-      ) : loadFailed ? (
+      ) : (
         <div className="flex size-full flex-col items-center justify-center gap-2 px-4 text-center">
           <p className="text-sm text-muted-foreground">This video couldn&apos;t be loaded.</p>
           {fallback}
         </div>
-      ) : (
-        <video
-          src={runVideoUrl(submissionUuid)}
-          poster={showPoster ? runPosterUrl(submissionUuid) : undefined}
-          controls
-          playsInline
-          preload="metadata"
-          onError={() => setLoadFailed(true)}
-          aria-label={label}
-          className="size-full bg-black object-contain"
-        />
       )}
     </div>
   )

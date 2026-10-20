@@ -473,6 +473,7 @@ function TrialRunView({ run }: { run: TrialRun }) {
             submissionUuid={run.uuid}
             status={videoStatus}
             errorMessage={run.video_error}
+            fps={run.video_fps}
             label={`${runLabel}, run video`}
             fallback={
               medal ? (

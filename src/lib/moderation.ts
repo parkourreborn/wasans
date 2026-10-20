@@ -31,6 +31,7 @@ export type TrialRun = PlayerAvatarFields & {
   video_error?: string | null
   video_source_type?: "upload" | "medal" | null
   video_source_ref?: string | null
+  video_fps?: number | null
   original_key?: string | null
   game_version?: string | null
 }
