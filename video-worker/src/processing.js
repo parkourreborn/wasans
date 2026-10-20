@@ -7,6 +7,11 @@
 //   original -> remux/transcode to H.264 MP4 (<=1080p, <=60fps) -> thumbnail
 //   -> scores/{uuid}.mp4 + scores/{uuid}-preview.jpg in the public bucket
 //
+// A "drive" job is a file copied in from the old WR Drive (see the main
+// app's wr-import-service.ts) instead: imports/{drive file id} is
+// re-encoded the same way and replaced, with no thumbnail and nothing
+// published, so the import queue can play it.
+//
 // Originals live in the private wasans-uploads bucket as originals/{uuid}
 // (moderators can download them; the main app deletes them 7 days after
 // review, or moves a world record's to world-records/ for good). Players'
@@ -30,16 +35,27 @@ const MAX_DELIVERY_ATTEMPTS = 6
 
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024
 const MAX_DURATION_SECONDS = 10 * 60
+// Drive files are the old originals, never re-encoded, so they get more
+// room (the container has 16 GB of disk for the file and its encode).
+const MAX_DRIVE_BYTES = 4 * 1024 * 1024 * 1024
 const MAX_PREVIEW_BYTES = 2 * 1024 * 1024
 // "import": a world record from the old WR Drive. The main app has already
 // put its file at originals/{uuid}.
-const REASONS = new Set(["upload", "medal", "backfill", "import"])
+// "drive": a file from the old WR Drive waiting in the import queue.
+const REASONS = new Set(["upload", "medal", "backfill", "import", "drive"])
 
-export function processorName(submissionUuid) {
-  return `submission-${submissionUuid}`
+export function processorName(job) {
+  return job.reason === "drive" ? `drive-${job.driveFileId}` : `submission-${job.submissionUuid}`
+}
+
+function jobLabel(job) {
+  return job.reason === "drive" ? `Drive file ${job.driveFileId}` : job.submissionUuid
 }
 
 function keysFor(job) {
+  if (job.reason === "drive") {
+    return { original: `imports/${job.driveFileId}` }
+  }
   return {
     original: `originals/${job.submissionUuid}`,
     published: `scores/${job.submissionUuid}.mp4`,
@@ -61,6 +77,23 @@ async function handleMedia(request, env, ctx) {
 
   const keys = keysFor(job)
   const { pathname } = new URL(request.url)
+
+  // A Drive file can only be read and replaced, nothing else.
+  if (job.reason === "drive") {
+    if (request.method === "GET" && pathname === "/original") {
+      const object = await env.UPLOADS.get(keys.original)
+      return object ? new Response(object.body) : new Response("Not found", { status: 404 })
+    }
+    const replace = pathname.match(/^\/original\/multipart\/(create|part|complete|abort)$/)
+    if (replace) {
+      return handleMultipart(request, env.UPLOADS, keys.original, replace[1], {
+        contentType: "video/mp4",
+        customMetadata: { drive_file_id: job.driveFileId },
+      })
+    }
+    return new Response("Forbidden", { status: 403 })
+  }
+
   const metadata = { submission_uuid: job.submissionUuid, source: job.reason }
 
   if (request.method === "GET" && pathname === "/original") {
@@ -143,8 +176,13 @@ async function handleResult(request, env, ctx) {
 
 // Validates a queue message into the job a processor runs.
 function toJob(body) {
-  const submissionUuid = String(body?.submissionUuid || "")
-  if (!/^[A-Za-z0-9_-]{6,64}$/.test(submissionUuid) || !REASONS.has(body?.reason)) {
+  if (!REASONS.has(body?.reason)) {
+    return null
+  }
+  const drive = body.reason === "drive"
+  const submissionUuid = drive ? null : String(body.submissionUuid || "")
+  const driveFileId = drive ? String(body.driveFileId || "") : null
+  if (drive ? !/^[A-Za-z0-9_-]{10,128}$/.test(driveFileId) : !/^[A-Za-z0-9_-]{6,64}$/.test(submissionUuid)) {
     return null
   }
   if (body.reason === "upload" && !String(body.incomingKey || "").startsWith("incoming/")) {
@@ -155,6 +193,7 @@ function toJob(body) {
   }
   return {
     submissionUuid,
+    driveFileId,
     reason: body.reason,
     incomingKey: body.reason === "upload" ? body.incomingKey : null,
     medalUrl: body.reason === "medal" ? body.medalUrl : null,
@@ -163,8 +202,8 @@ function toJob(body) {
 }
 
 function toMessage(job) {
-  const { submissionUuid, reason, incomingKey, medalUrl, attempt } = job
-  return { submissionUuid, reason, incomingKey, medalUrl, attempt }
+  const { submissionUuid, driveFileId, reason, incomingKey, medalUrl, attempt } = job
+  return { submissionUuid, driveFileId, reason, incomingKey, medalUrl, attempt }
 }
 
 // Queue consumer entry point (see src/index.js). Throws if the container
@@ -176,7 +215,7 @@ export async function startProcessing(env, body) {
     console.error("Dropping invalid video-processing message:", JSON.stringify(body))
     return
   }
-  await getContainer(env.VIDEO_PROCESSOR, processorName(job.submissionUuid)).startJob(job)
+  await getContainer(env.VIDEO_PROCESSOR, processorName(job)).startJob(job)
 }
 
 export class SubmissionVideoProcessor extends Container {
@@ -195,7 +234,7 @@ export class SubmissionVideoProcessor extends Container {
     // A Durable Object runs one event at a time, so this check-and-set is
     // atomic (see CompilationRenderer.startJob).
     if (this.startingJob || this.ctx.container?.running) {
-      throw new Error(`Submission ${job.submissionUuid} is already being processed`)
+      throw new Error(`${jobLabel(job)} is already being processed`)
     }
     this.startingJob = true
 
@@ -203,7 +242,7 @@ export class SubmissionVideoProcessor extends Container {
       await this.ctx.storage.put("job", { ...job, finished: false })
       const containerJob = {
         ...toMessage(job),
-        maxBytes: MAX_VIDEO_BYTES,
+        maxBytes: job.reason === "drive" ? MAX_DRIVE_BYTES : MAX_VIDEO_BYTES,
         maxDurationSeconds: MAX_DURATION_SECONDS,
       }
       await this.start({ envVars: { JOB_JSON: toBase64(JSON.stringify(containerJob)) } })
@@ -226,7 +265,7 @@ export class SubmissionVideoProcessor extends Container {
     await this.ctx.storage.put("job", { ...job, finished: true })
 
     if (result?.status === "failed" && result.retryable && job.attempt < MAX_ATTEMPTS) {
-      console.warn(`Retrying ${job.submissionUuid} (attempt ${job.attempt + 1}): ${result.detail || result.error}`)
+      console.warn(`Retrying ${jobLabel(job)} (attempt ${job.attempt + 1}): ${result.detail || result.error}`)
       await this.env.VIDEO_QUEUE.send(
         { ...toMessage(job), attempt: job.attempt + 1 },
         { delaySeconds: RETRY_DELAY_SECONDS * job.attempt }
@@ -235,7 +274,7 @@ export class SubmissionVideoProcessor extends Container {
     }
 
     if (result?.status === "failed") {
-      console.error(`Processing ${job.submissionUuid} failed: ${result.detail || result.error}`)
+      console.error(`Processing ${jobLabel(job)} failed: ${result.detail || result.error}`)
     }
 
     const payload = {
@@ -250,12 +289,19 @@ export class SubmissionVideoProcessor extends Container {
       duration_seconds: result?.duration_seconds ?? null,
       size_bytes: result?.size_bytes ?? null,
     }
-    await this.deliverResult({ submissionUuid: job.submissionUuid, payload, attempt: 1 })
+    const path =
+      job.reason === "drive"
+        ? `/v2/internal/wr-imports/${job.driveFileId}`
+        : `/v2/internal/submission-videos/${job.submissionUuid}`
+    await this.deliverResult({ path, label: jobLabel(job), payload, attempt: 1 })
   }
 
-  async deliverResult({ submissionUuid, payload, attempt }) {
+  async deliverResult({ path, label, submissionUuid, payload, attempt }) {
+    // Retries scheduled before drive jobs existed only carry submissionUuid.
+    path ??= `/v2/internal/submission-videos/${submissionUuid}`
+    label ??= submissionUuid
     try {
-      const response = await fetch(`${this.env.APP_URL}/v2/internal/submission-videos/${submissionUuid}`, {
+      const response = await fetch(`${this.env.APP_URL}${path}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -266,17 +312,17 @@ export class SubmissionVideoProcessor extends Container {
       if (response.ok) {
         return
       }
-      console.error(`Result callback for ${submissionUuid} failed: ${response.status} ${await response.text().catch(() => "")}`)
+      console.error(`Result callback for ${label} failed: ${response.status} ${await response.text().catch(() => "")}`)
     } catch (error) {
-      console.error(`Result callback for ${submissionUuid} failed:`, error)
+      console.error(`Result callback for ${label} failed:`, error)
     }
 
     if (attempt < MAX_DELIVERY_ATTEMPTS) {
-      await this.schedule(30 * 2 ** (attempt - 1), "deliverResult", { submissionUuid, payload, attempt: attempt + 1 })
+      await this.schedule(30 * 2 ** (attempt - 1), "deliverResult", { path, label, payload, attempt: attempt + 1 })
     } else {
       // The main app's daily sweep re-queues submissions stuck in
       // "processing", so this isn't the end of the road.
-      console.error(`Giving up on the result callback for ${submissionUuid}`)
+      console.error(`Giving up on the result callback for ${label}`)
     }
   }
 

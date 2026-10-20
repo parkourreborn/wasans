@@ -24,6 +24,31 @@ test("Drive names read as '{lowercase trial} {time} | {player}'", () => {
   assert.equal(parseDriveFileName("glass 9.9 | j.r", trials).player, "j.r")
 })
 
+test("any separator between the time and the player reads", () => {
+  // Synced from Windows, which doesn't allow "|" in a file name.
+  assert.deepEqual(parseDriveFileName("vestibule 6.067 I zarvy.mp4", [...trials, "Vestibule"]), {
+    trial: "Vestibule",
+    trialText: "vestibule",
+    time: 6.067,
+    player: "zarvy",
+  })
+  assert.equal(parseDriveFileName("crystal 45.123 l Tully.mp4", trials).player, "Tully")
+  assert.equal(parseDriveFileName("crystal 45.123 - Tully.mp4", trials).player, "Tully")
+  assert.equal(parseDriveFileName("crystal 45.123 Tully.mp4", trials).player, "Tully")
+  assert.equal(parseDriveFileName("crystal45.123|Tully.mp4", trials).player, "Tully")
+  // A player whose name starts with I or l keeps it.
+  assert.equal(parseDriveFileName("crystal 45.123 lucas.mp4", trials).player, "lucas")
+  assert.equal(parseDriveFileName("crystal 45.123 I Ivy.mp4", trials).player, "Ivy")
+  // Digits in the player's name aren't the time.
+  assert.deepEqual(parseDriveFileName("crystal 45.123 I tully99.mp4", trials).time, 45.123)
+  assert.equal(parseDriveFileName("crystal 45.123 I tully99.mp4", trials).player, "tully99")
+})
+
+test("the trial is found inside whatever comes before the time", () => {
+  assert.equal(parseDriveFileName("WR neon bold 1:02.5 I Bo.mp4", trials).trial, "Neon Bold")
+  assert.equal(parseDriveFileName("[rust belt] 30.25 Ana.mp4", trials).trial, "Rust Belt")
+})
+
 test("whatever doesn't read is left for an owner to fill in", () => {
   assert.deepEqual(parseDriveFileName("sawdust 20.000 | Bo.mp4", trials), { trial: null, trialText: "sawdust", time: 20, player: "Bo" })
   assert.deepEqual(parseDriveFileName("crystal | Bo.mp4", trials), { trial: "Crystal", trialText: "crystal", time: null, player: "Bo" })

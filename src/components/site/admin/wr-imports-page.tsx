@@ -51,6 +51,7 @@ type ImportRow = {
   status: "pending" | "imported" | "merged" | "skipped"
   submission_uuid: string | null
   staged: boolean
+  encoding: boolean
   date: number | null
   parsed: { trial: string | null; trialText: string; time: number | null; player: string | null }
   version: string | null
@@ -96,6 +97,7 @@ export function AdminWrImportsPage() {
   const [lastVersion, setLastVersion] = useState<string | null>(null)
 
   const imports = queue?.imports ?? []
+  const encoding = imports.some((row) => row.status === "pending" && row.encoding)
   const lists: Record<View, ImportRow[]> = {
     review: imports.filter((row) => row.status === "pending"),
     player: imports.filter((row) => row.status === "pending" && row.players.length !== 1),
@@ -110,6 +112,13 @@ export function AdminWrImportsPage() {
     const target = visible[currentIndex + step]
     if (target) setSelected(target.drive_file_id)
   }
+
+  // Re-encodes finish on the server, so check back while any are running.
+  useEffect(() => {
+    if (!encoding) return
+    const timer = window.setInterval(refetch, 20 * 1000)
+    return () => window.clearInterval(timer)
+  }, [encoding, refetch])
 
   const setQueue = (next: QueueData) => setApiData(QUEUE_URL, { ...data, data: next })
 
@@ -209,7 +218,7 @@ export function AdminWrImportsPage() {
                         {row.parsed.player ?? "No player in the name"}
                       </span>
                       <span className={cn("text-right text-[12px]", row.copy_error ? "text-destructive" : "text-subtle-foreground")}>
-                        {row.status === "imported" ? "Imported" : row.status === "merged" ? "Matched" : row.status === "skipped" ? "Skipped" : row.staged ? "Copied" : row.copy_error ? "Copy failed" : "Not copied"}
+                        {row.status === "imported" ? "Imported" : row.status === "merged" ? "Matched" : row.status === "skipped" ? "Skipped" : row.staged ? "Ready" : row.copy_error ? "Copy failed" : row.encoding ? "Re-encoding" : "Not copied"}
                       </span>
                     </button>
                   </li>
@@ -234,7 +243,7 @@ export function AdminWrImportsPage() {
                     onMove={move}
                   />
                 ) : (
-                  <ResolvedDetail row={current} onRestored={() => resolved(current, { status: "pending", staged: false })} />
+                  <ResolvedDetail row={current} onRestored={() => resolved(current, { status: "pending", staged: false, encoding: false })} />
                 )}
               </section>
             </div>
@@ -254,6 +263,7 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
   const pending = queue.imports.filter((row) => row.status === "pending")
   const copied = pending.filter((row) => row.staged).length
   const failed = pending.filter((row) => !row.staged && row.copy_error).length
+  const reencoding = pending.filter((row) => row.encoding).length
 
   const scan = async () => {
     setScanning(true)
@@ -320,7 +330,8 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
       {pending.length > 0 ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <span className="flex-1 text-[13px] text-muted-foreground">
-            <span className="num text-foreground">{formatCount(copied)}</span> of {formatCount(pending.length)} files to review are copied over
+            <span className="num text-foreground">{formatCount(copied)}</span> of {formatCount(pending.length)} files to review are copied over and re-encoded
+            {reencoding > 0 ? <>, {formatCount(reencoding)} re-encoding</> : null}
             {failed > 0 ? <span className="text-destructive">, {formatCount(failed)} failed</span> : null}. Files copy in the daily sweep too.
           </span>
           {copying ? (
@@ -358,7 +369,13 @@ function FilePreview({ row }: { row: ImportRow }) {
     <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-line-strong bg-black">
       <div className="flex size-full flex-col items-center justify-center gap-2 px-6 text-center">
         <p className="text-sm text-muted-foreground">
-          {failed ? "This file can’t play in the browser." : row.copy_error ? `Copying it failed: ${row.copy_error}` : "Not copied from the Drive yet."}
+          {failed
+            ? "This file can’t play in the browser."
+            : row.copy_error
+              ? row.copy_error.startsWith("Re-encoding failed") ? `${row.copy_error}.` : `Copying it failed: ${row.copy_error}`
+              : row.encoding
+                ? "Re-encoding the file so it plays here. This usually takes a minute or two."
+                : "Not copied from the Drive yet."}
         </p>
         <a href={driveFileUrl(row.drive_file_id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm underline underline-offset-4">
           Watch it in Drive <ExternalLinkIcon className="size-3.5" aria-hidden />
@@ -621,7 +638,7 @@ function ImportDetail({
           Skip
         </Button>
         <span className="hidden text-[13px] text-subtle-foreground xl:inline">
-          {!row.staged && !match ? "Importing waits for the file to be copied. " : ""}Keys: 1–9 pick a version, N adds one, Enter saves, S skips, J and K move.
+          {!row.staged && !match ? "Importing waits for the file to be copied and re-encoded. " : ""}Keys: 1–9 pick a version, N adds one, Enter saves, S skips, J and K move.
         </span>
         <div className="ml-auto flex gap-2">
           <Button type="button" variant="outline" size="icon-lg" aria-label="Previous (K)" disabled={!canPrev} onClick={() => onMove(-1)}>
