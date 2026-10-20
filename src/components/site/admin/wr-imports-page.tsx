@@ -25,6 +25,7 @@ import { VERSIONS_URL, type GameVersion } from "@/components/site/game-versions"
 import { AdminCard, AdminEmpty, AdminError, AdminLoading, AdminPage, adminRequest, errorText } from "@/components/site/admin/admin-kit"
 import { isTyping, NewVersion, VersionChoices } from "@/components/site/admin/wr-versions-page"
 import { PlayerPicker, type PickedPlayer } from "@/components/site/player-picker"
+import { VideoPlayer } from "@/components/site/video-player"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
@@ -341,28 +342,28 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
 
 function FilePreview({ row }: { row: ImportRow }) {
   const [failed, setFailed] = useState(false)
+  if (row.staged && !failed) {
+    // No filmstrip: these are the original uploads, often large, and it
+    // would download them a second time.
+    return (
+      <VideoPlayer
+        src={apiV2(`/admin/wr-imports/${encodeURIComponent(row.drive_file_id)}/file`)}
+        label={row.file_name}
+        previews={false}
+        onError={() => setFailed(true)}
+      />
+    )
+  }
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-line-strong bg-black">
-      {row.staged && !failed ? (
-        <video
-          src={apiV2(`/admin/wr-imports/${encodeURIComponent(row.drive_file_id)}/file`)}
-          controls
-          playsInline
-          preload="metadata"
-          onError={() => setFailed(true)}
-          aria-label={row.file_name}
-          className="size-full object-contain"
-        />
-      ) : (
-        <div className="flex size-full flex-col items-center justify-center gap-2 px-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            {failed ? "This file can’t play in the browser." : row.copy_error ? `Copying it failed: ${row.copy_error}` : "Not copied from the Drive yet."}
-          </p>
-          <a href={driveFileUrl(row.drive_file_id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm underline underline-offset-4">
-            Watch it in Drive <ExternalLinkIcon className="size-3.5" aria-hidden />
-          </a>
-        </div>
-      )}
+      <div className="flex size-full flex-col items-center justify-center gap-2 px-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          {failed ? "This file can’t play in the browser." : row.copy_error ? `Copying it failed: ${row.copy_error}` : "Not copied from the Drive yet."}
+        </p>
+        <a href={driveFileUrl(row.drive_file_id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm underline underline-offset-4">
+          Watch it in Drive <ExternalLinkIcon className="size-3.5" aria-hidden />
+        </a>
+      </div>
     </div>
   )
 }
