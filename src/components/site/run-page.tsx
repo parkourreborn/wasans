@@ -13,6 +13,7 @@ import {
   ExternalLinkIcon,
   PencilIcon,
   StickyNoteIcon,
+  TagIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
@@ -36,12 +37,14 @@ import { tierForScore } from "@/lib/tiers"
 import { trialHref } from "@/lib/trial-slug"
 import type { TrialName } from "@/lib/trials"
 import { cn } from "@/lib/utils"
-import { fetchApi, setApiData, useApi } from "@/hooks/use-api"
+import { fetchApi, invalidateApi, setApiData, useApi } from "@/hooks/use-api"
 import { useRunNeighbours } from "@/hooks/use-run-list"
 import { useComboCategoryLabel } from "@/hooks/use-combo-categories"
 import { PlayerAvatar } from "@/components/custom/player-avatar"
 import { useAuthSession } from "@/components/custom/use-auth-session"
-import { ConfirmDialog, DenyDialog, EditTimeDialog, NoteDialog, WrPingDialog } from "@/components/site/moderation-dialogs"
+import { adminRequest, errorText, PERMISSION_OWNER } from "@/components/site/admin/admin-kit"
+import { useGameVersions } from "@/components/site/game-versions"
+import { ConfirmDialog, DenyDialog, EditTimeDialog, EditVersionDialog, NoteDialog, WrPingDialog } from "@/components/site/moderation-dialogs"
 import { RobloxAccounts } from "@/components/site/roblox-accounts"
 import { RunVideo } from "@/components/site/run-video"
 import { normalizeRunState, StatusBadge, WrBadge, type RunState } from "@/components/site/status-badge"
@@ -405,6 +408,24 @@ function TrialRunView({ run }: { run: TrialRun }) {
   const canDelete = Boolean(user) && canDeleteRun("trial", permission, user?.uuid === run.player_uuid)
   const moderation = useRunModeration("trial", run)
   const runLabel = `${run.trial_name} ${formatTime(time)} by ${run.player_name}`
+  const owner = permission >= PERMISSION_OWNER
+  const versionList = useGameVersions(owner)
+  const [versionOpen, setVersionOpen] = useState(false)
+  const [versionBusy, setVersionBusy] = useState(false)
+
+  const saveVersion = async (version: string) => {
+    setVersionBusy(true)
+    try {
+      await adminRequest(`/submissions/${encodeURIComponent(run.uuid)}/version`, { method: "PATCH", body: { version }, fallback: "Couldn't save the version" })
+      invalidateApi(trialRunUrl(run.uuid))
+      setVersionOpen(false)
+      toast.success(`Version set to ${version}`)
+    } catch (error) {
+      toast.error(errorText(error, "Couldn't save the version"))
+    } finally {
+      setVersionBusy(false)
+    }
+  }
   const videoStatus = run.video_status ?? "ready"
   const approveBlockedReason =
     videoStatus === "processing"
@@ -514,6 +535,7 @@ function TrialRunView({ run }: { run: TrialRun }) {
                 )}
               </Fact>
               {run.moderator_username ? <Fact label="Moderated by">{run.moderator_username}</Fact> : null}
+              <Fact label="Version">{run.game_version ?? <span className="text-muted-foreground">Not set</span>}</Fact>
             </dl>
           </Panel>
 
@@ -533,9 +555,18 @@ function TrialRunView({ run }: { run: TrialRun }) {
                   <PencilIcon />
                   Edit time
                 </Button>
+                {owner ? (
+                  <Button type="button" variant="outline" size="sm" disabled={versionBusy} onClick={() => setVersionOpen(true)}>
+                    <TagIcon />
+                    Version
+                  </Button>
+                ) : null}
                 {run.original_key ? (
                   <Button asChild variant="outline" size="sm">
-                    <a href={apiV2(`/submissions/${encodeURIComponent(run.uuid)}/original`)} title="The file exactly as submitted, kept for 90 days">
+                    <a
+                      href={apiV2(`/submissions/${encodeURIComponent(run.uuid)}/original`)}
+                      title="The file exactly as submitted. Kept until 7 days after review, or for good if the run was ever a world record."
+                    >
                       <DownloadIcon />
                       Original file
                     </a>
@@ -574,6 +605,17 @@ function TrialRunView({ run }: { run: TrialRun }) {
         busy={moderation.busy}
         onConfirm={(next) => void moderation.save({ time: next }, "Time updated")}
       />
+      {owner ? (
+        <EditVersionDialog
+          open={versionOpen}
+          onOpenChange={setVersionOpen}
+          runLabel={runLabel}
+          currentVersion={run.game_version ?? null}
+          versions={versionList.data?.data?.versions?.map((version) => version.name) ?? (versionList.error ? [] : null)}
+          busy={versionBusy}
+          onConfirm={(version) => void saveVersion(version)}
+        />
+      ) : null}
       <WrPingDialog
         open={moderation.dialog === "wr-ping"}
         onOpenChange={(open) => moderation.setDialog(open ? "wr-ping" : null)}

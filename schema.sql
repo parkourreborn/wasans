@@ -25,6 +25,7 @@ DROP TABLE IF EXISTS players;
 DROP TABLE IF EXISTS trials;
 DROP TABLE IF EXISTS audit_logs;
 DROP TABLE IF EXISTS feature_flags;
+DROP TABLE IF EXISTS game_versions;
 DROP TABLE IF EXISTS api_idempotency_keys;
 DROP TABLE IF EXISTS api_rate_limits;
 DROP TABLE IF EXISTS player_score_history;
@@ -172,6 +173,17 @@ CREATE TABLE submissions (
   video_processed_at INTEGER,
   video_backfill_claimed_at INTEGER,
 
+  -- The game version the run was played on (game_versions.name), the newest
+  -- one when it was submitted unless an owner changed it.
+  game_version TEXT,
+  -- When it was last approved or denied. Its original is deleted 7 days
+  -- later, unless it was ever a world record (see wr-archive-service.ts).
+  reviewed_at INTEGER,
+  -- The archived original's size, and 'original' or 'published' when the
+  -- published video stood in for an original that was already gone.
+  original_size INTEGER,
+  original_source TEXT,
+
   FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE,
   FOREIGN KEY (trial_name) REFERENCES trials(name) ON DELETE CASCADE
 );
@@ -182,6 +194,7 @@ CREATE INDEX idx_submissions_player_state_trial_date ON submissions(player_uuid,
 CREATE INDEX idx_submissions_state_trial_time_date ON submissions(state, trial_name, time, date);
 CREATE INDEX idx_submissions_trial_state_date_uuid ON submissions(trial_name, state, date, uuid);
 CREATE INDEX idx_submissions_trial_name_version ON submissions(trial_name, trial_version);
+CREATE INDEX idx_submissions_game_version ON submissions(game_version);
 
 -- World records (current best per trial)
 CREATE TABLE wrs (
@@ -481,6 +494,13 @@ CREATE TABLE audit_logs (
 
 CREATE INDEX idx_audit_logs_action_created_at ON audit_logs(action, created_at DESC);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
+
+-- Game versions owners keep in /admin/site. New runs get the newest one.
+CREATE TABLE game_versions (
+  name TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  created_by TEXT
+);
 
 -- Feature flags (owner-controlled site-wide toggles)
 CREATE TABLE feature_flags (

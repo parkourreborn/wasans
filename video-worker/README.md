@@ -34,8 +34,9 @@ How a video is handled:
   browser capture used).
 - **Originals.** The untouched upload, or the Medal clip as downloaded, is
   kept privately at `wasans-uploads/originals/{uuid}`. Moderators can
-  download it from the submission page. A lifecycle rule deletes it after
-  90 days.
+  download it from the submission page. The main app's daily maintenance
+  sweep deletes it 7 days after the run is approved or denied; pending runs
+  keep theirs. See "World record archive" below for the exception.
 - **Limits.** 500 MB and 10 minutes. Any format ffmpeg reads is accepted.
 - **Failures:**
   - A bad file (corrupt, no video, too long, too big) fails right away
@@ -48,6 +49,29 @@ How a video is handled:
   derives every key from that container's own job.
 - **Older videos.** "Video processing backfill" in /admin runs videos from
   before this change through the same pipeline, three at a time.
+
+## World record archive
+
+Every run that was ever a world record keeps its original for good. The
+main app's daily sweep (`src/lib/server/services/wr-archive-service.ts`)
+moves it out of `originals/` to
+
+```
+wasans-uploads/world-records/{trial}/{player name} ({player uuid}) {time} ({version})
+```
+
+and renames it there if the run's version, time or player name changes. If
+a record's original is already gone, the published video is copied in
+instead. Anyone can browse and download the archive at `/archive`. Owners
+keep the list of game versions in /admin/site, and new runs are stamped
+with the newest one. "Set world record versions" in /admin/site goes
+through the older records one at a time.
+
+The 90-day rule on `originals/` stays as a safety net for anything the
+sweep never picks up, like the original of a video that failed processing.
+It can't reach `world-records/`. A record waiting for its version is moved
+to `world-records/` straight away, named `(no version)`, so the rule can't
+take it either.
 
 ## WR compilation
 
@@ -84,7 +108,9 @@ Run these from the repo root unless a step says otherwise.
    Don't connect a custom domain or public access to `wasans-uploads`.
 3. **Lifecycle rules:**
    - Unused uploads expire after 1 day.
-   - Originals expire after 90 days.
+   - Originals expire after 90 days. This is only a safety net: the daily
+     sweep deletes them 7 days after review, and world records' are moved
+     to `world-records/`, which has no rule. Don't add one there.
    - Half-finished multipart uploads are cleaned up in both buckets.
    ```sh
    npx wrangler r2 bucket lifecycle add wasans-uploads incoming-1d incoming/ --expire-days 1 --abort-multipart-days 1
@@ -115,6 +141,7 @@ Run these from the repo root unless a step says otherwise.
    ```sh
    npx wrangler d1 execute wasans --remote --file=migrations/0018_wr_compilations.sql   # if not already run
    npx wrangler d1 execute wasans --remote --file=migrations/0019_video_processing.sql
+   npx wrangler d1 execute wasans --remote --file=migrations/0022_wr_archive.sql
    ```
 8. **Deploy this Worker first.** Docker must be running locally, because
    wrangler builds the image:

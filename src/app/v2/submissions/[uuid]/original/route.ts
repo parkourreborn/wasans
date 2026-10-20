@@ -6,9 +6,11 @@ import { enforceRateLimit, getRateLimitKey } from "@/lib/server/services/rate-li
 import { withV2Params } from "@/lib/server/v2/http"
 
 // The untouched file a player uploaded (or the Medal clip as downloaded),
-// kept privately for 90 days so a disputed run can be checked against what
-// was actually submitted rather than the processed copy. Moderators only.
-// Redirects to a presigned link that's good for 5 minutes.
+// kept privately until 7 days after the run is reviewed, so a disputed run
+// can be checked against what was actually submitted rather than the
+// processed copy. A world record's is kept for good (see
+// wr-archive-service.ts), and is public through /v2/archive too.
+// Moderators only. Redirects to a presigned link that's good for 5 minutes.
 export const GET = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
   if (!/^[A-Za-z0-9_-]{6,64}$/.test(uuid)) {
     return validationError("Invalid submission uuid", ctx.requestId)
@@ -39,7 +41,8 @@ export const GET = withV2Params<{ uuid: string }>(async (ctx, { uuid }) => {
     return jsonError("Submission was not found", 404, { code: "not_found", requestId: ctx.requestId })
   }
 
-  // The lifecycle rule may already have deleted it (90 days).
+  // The daily sweep (or the 90-day safety-net rule) may already have
+  // deleted it.
   const object = submission.original_key && ctx.env.UPLOADS ? await ctx.env.UPLOADS.head(submission.original_key) : null
   if (!object || !submission.original_key) {
     return jsonError("The original video is no longer available", 404, { code: "not_found", requestId: ctx.requestId })

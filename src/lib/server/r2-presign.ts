@@ -62,16 +62,22 @@ export async function presignUploadPut(
   }
 }
 
-// Short-lived download link for a private original (moderators only, see
-// /v2/submissions/[uuid]/original).
+// A download header that keeps a name with accents or emoji intact where
+// browsers read filename*, with a plain fallback for the rest.
+export function attachmentDisposition(filename: string) {
+  const plain = filename.replace(/[^A-Za-z0-9._ ()-]/g, "_")
+  const encoded = encodeURIComponent(filename).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
+  return `attachment; filename="${plain}"; filename*=UTF-8''${encoded}`
+}
+
+// Short-lived download link for a private original: moderators for any
+// run's (/v2/submissions/[uuid]/original), anyone for an archived world
+// record's (/v2/archive/[uuid]/download).
 export async function presignOriginalGet(env: PresignEnv, options: { key: string; filename: string; ttlSeconds: number }) {
   const { accountId, bucket, accessKeyId, secretAccessKey } = presignConfig(env)
   const url = objectUrl(accountId, bucket, options.key)
   url.searchParams.set("X-Amz-Expires", String(options.ttlSeconds))
-  url.searchParams.set(
-    "response-content-disposition",
-    `attachment; filename="${options.filename.replace(/[^A-Za-z0-9._ -]/g, "_")}"`
-  )
+  url.searchParams.set("response-content-disposition", attachmentDisposition(options.filename))
 
   const signer = new AwsV4Signer({
     method: "GET",

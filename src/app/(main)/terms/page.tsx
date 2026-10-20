@@ -16,7 +16,7 @@ const usageRules = [
 ]
 
 const publicDataRules = [
-  "Your profile, scores, submissions, personal bests, world records, the moderator notes on your runs, and your proof videos are all public, through the API as well as the site.",
+  "Your profile, scores, submissions, personal bests, world records, the moderator notes on your runs, and your proof videos are all public, through the API as well as the site. So is the original file of any run that was ever a world record, in the WR archive.",
   "Your proof video is reachable by its link as soon as it is uploaded — including while it is pending, and including if it is denied.",
   "If you have a Discord account linked, submitting a run posts it to our Discord automatically, with your name, your Discord ID, the trial, and the time. Accounts without a linked Discord skip this — there is nothing to post to.",
   "By submitting a run you confirm the proof is yours to share, and you let us host, display, review, and moderate it.",

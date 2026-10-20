@@ -22,6 +22,7 @@ export const primaryNav: NavItem[] = [
 export const moreNav: NavItem[] = [
   { href: "/calculator", label: "Calculator", description: "What-if times, and players side by side", matches: ["/compare"] },
   { href: "/prizes", label: "Prizes", description: "Active prizes and giveaways" },
+  { href: "/archive", label: "WR archive", description: "Every world record's original file" },
   { href: "/rules", label: "Rules", description: "What makes a run valid" },
   { href: "/information", label: "Scoring & FAQ", description: "How scores and tiers work" },
 ]

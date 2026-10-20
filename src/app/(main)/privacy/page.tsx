@@ -38,6 +38,7 @@ const publicData = [
   "If you have a Roblox account linked, the avatar headshot of the one you pick in Settings (but not which Roblox account it is)",
   "Your submissions: trial, time, state, and the moderator note and moderator name attached to them",
   "Your personal bests, any world records you hold, and the proof video for each run",
+  "For a run that was ever a world record, the original file you submitted, in the WR archive",
   "The link to the Discord thread for a submission, where one exists",
 ]
 
@@ -55,6 +56,7 @@ const retentionItems = [
   "Rate-limit counters, which include a value derived from your IP, are cleared out after a day.",
   "Audit logs and moderation notes are kept indefinitely. They are the leaderboard's history — who approved what, and when — and we would not be able to settle a dispute or unpick abuse without them.",
   "Error logs are kept indefinitely too. We should trim these and have not yet.",
+  "The original file of a run, exactly as you sent it, is kept privately for moderators until 7 days after the run is approved or denied, then deleted. If the run was ever a world record, it is kept for good instead, and is public in the WR archive.",
   "Your public submissions, scores, PBs, WRs, and proof videos can stay up after you delete your account, because they are part of the public archive. They show as Deleted Account.",
   "We may hold on to something longer if we are dealing with abuse, a dispute, a security problem, or a legal obligation.",
 ]
@@ -213,6 +215,12 @@ export default function PrivacyPage() {
           </p>
           <p>
             We also generate a still frame from the video to use as a thumbnail.
+          </p>
+          <p>
+            What everyone watches is our processed copy. We also keep the original file, exactly as you sent it (or as we downloaded it from your link), privately, so moderators can check it: from when you submit until 7 days after the run is approved or denied. Then it is deleted.
+          </p>
+          <p>
+            If your run is ever a world record, even one that is later beaten, its original file is kept for good and <span className="font-medium text-foreground">anyone can download it</span> from the <a href="/archive" className="underline underline-offset-4">WR archive</a>, named after you, your account ID, the time, and the game version. An original file can carry more than the video: details your phone or recording app stored in it, like the device, when it was recorded, and on some phones where. If you would rather not share those, strip them before you upload.
           </p>
         </div>
       </SectionCard>

@@ -1,6 +1,7 @@
 import "server-only"
 import calculateScore from "@/lib/calc-score"
 import type { TrialName } from "@/lib/trials"
+import { runOriginalKeys } from "@/lib/wr-archive"
 import type { AuthUser } from "@/lib/server/auth"
 import { canDeleteTrialSubmission, canModerate, PERMISSION_JUNIOR_MODERATOR } from "@/lib/server/auth"
 import { isBotApiRequest } from "@/lib/server/bot-auth"
@@ -360,10 +361,16 @@ export async function patchSubmission(
   }
   const sendWrPing = canMakeWr && wrPing === true
 
-  const updates: Array<{ field: "state" | "moderator_note" | "time" | "moderator_username"; value: string | number | null }> = []
+  const updates: Array<{ field: "state" | "moderator_note" | "time" | "moderator_username" | "reviewed_at"; value: string | number | null }> = []
 
   if (state) {
     updates.push({ field: "state", value: state })
+  }
+
+  // The original is deleted 7 days after this, unless the run is ever a WR
+  // (see wr-archive-service.ts). Back to pending, the clock stops.
+  if (state && state !== previousState) {
+    updates.push({ field: "reviewed_at", value: state === "pending" ? null : Math.floor(Date.now() / 1000) })
   }
 
   if (moderatorNote !== null) {
@@ -726,7 +733,7 @@ export async function deleteSubmission(
     ctx.waitUntil(env.SUBMISSION_VIDEOS.delete([`scores/${uuid}.mp4`, `scores/${uuid}-preview.jpg`]))
   }
   if (env.UPLOADS) {
-    ctx.waitUntil(env.UPLOADS.delete(`originals/${uuid}`))
+    ctx.waitUntil(env.UPLOADS.delete(runOriginalKeys(uuid, submission.original_key)))
   }
 
   const isWr = submission.wr_trial !== null

@@ -33,8 +33,10 @@
 			"remote": true
 		},
 		{
-			// Private: players' direct uploads (incoming/) and the originals
-			// kept for moderators (originals/). Never publicly served.
+			// Private: players' direct uploads (incoming/), the originals kept
+			// for moderators (originals/), and world records' originals kept for
+			// good (world-records/). No public access: the WR archive hands
+			// out short-lived presigned links (/v2/archive/[uuid]/download).
 			"binding": "UPLOADS",
 			"bucket_name": "wasans-uploads",
 			"remote": true

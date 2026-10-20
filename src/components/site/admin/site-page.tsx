@@ -1,12 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
+import { PlusIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { apiV2 } from "@/lib/api"
 import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { invalidateApi, setApiData, useApi } from "@/hooks/use-api"
 import { ConfirmDialog } from "@/components/site/moderation-dialogs"
+import { useGameVersions, VERSIONS_URL, type GameVersion } from "@/components/site/game-versions"
 import {
   AdminCard,
   AdminError,
@@ -20,6 +23,7 @@ import {
   nowSeconds,
 } from "@/components/site/admin/admin-kit"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 
@@ -97,6 +101,7 @@ export function AdminSitePage() {
       {site && data ? (
         <>
           <Switches flags={site.flags} onChange={(flags) => setApiData(SITE_URL, { ...data, data: { ...site, flags } })} />
+          <GameVersions />
           <Video site={site} onChanged={refetch} />
           <Maintenance site={site} />
         </>
@@ -181,6 +186,99 @@ function Switches({ flags, onChange }: { flags: Flag[]; onChange: (flags: Flag[]
         busy={saving !== null}
         onConfirm={() => confirm && void save(confirm.flag, confirm.next)}
       />
+    </AdminSection>
+  )
+}
+
+function GameVersions() {
+  const { data, error, loading, refetch } = useGameVersions()
+  const versions = data?.data?.versions
+  const [name, setName] = useState("")
+  const [busy, setBusy] = useState<string | null>(null)
+  const now = nowSeconds()
+
+  const save = async (action: "add" | "remove", version: string) => {
+    setBusy(action === "add" ? "" : version)
+    try {
+      const result = await adminRequest<{ versions: GameVersion[] }>(
+        action === "add" ? "/admin/versions" : `/admin/versions?name=${encodeURIComponent(version)}`,
+        { method: action === "add" ? "POST" : "DELETE", body: action === "add" ? { name: version } : undefined, fallback: "That didn’t save" }
+      )
+      if (result) setApiData(VERSIONS_URL, { data: result })
+      if (action === "add") setName("")
+      toast.success(action === "add" ? `Added ${version}. New runs get it from now on.` : `Removed ${version}`)
+    } catch (err) {
+      toast.error(errorText(err, "That didn’t save"))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <AdminSection
+      title="Game versions"
+      count={versions?.length}
+      description="Every new run is stamped with the newest one. Owners can change a run’s version on its page; a version no run has yet can be removed."
+    >
+      {error && !versions ? <AdminError message={error} onRetry={refetch} /> : null}
+      {loading && !versions ? <AdminLoading /> : null}
+      {versions ? (
+        <AdminCard>
+          <form
+            className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (name.trim()) void save("add", name.trim())
+            }}
+          >
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="New version, like 1.4.0"
+              maxLength={32}
+              aria-label="New version"
+              className="h-9 max-w-64 flex-1"
+            />
+            <Button type="submit" variant="outline" disabled={busy !== null || !name.trim()}>
+              {busy === "" ? <Spinner className="size-4" /> : <PlusIcon />}
+              Add
+            </Button>
+          </form>
+          {versions.length === 0 ? (
+            <p className="m-0 px-4 py-4 text-sm text-muted-foreground">No versions yet. Until you add one, new runs have no version.</p>
+          ) : (
+            <ul className="m-0 list-none p-0">
+              {versions.map((version, index) => (
+                <li key={version.name} className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-2.5 last:border-b-0">
+                  <span className="flex min-w-48 flex-1 flex-col gap-0.5">
+                    <span className="flex items-center gap-2 text-[15px]">
+                      {version.name}
+                      {index === 0 ? <span className="label-caps rounded-sm border border-primary px-1.5 text-[11px] text-primary">Newest</span> : null}
+                    </span>
+                    <span className="text-[12px] text-subtle-foreground">
+                      Added{version.created_by ? ` by ${version.created_by}` : ""}, {formatAgo(version.created_at, now)}
+                    </span>
+                  </span>
+                  <span className="num text-[13px] text-muted-foreground">
+                    {formatCount(version.run_count)} {version.run_count === 1 ? "run" : "runs"}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy !== null || version.run_count > 0}
+                    title={version.run_count > 0 ? "Runs have this version, so it stays" : undefined}
+                    onClick={() => void save("remove", version.name)}
+                  >
+                    {busy === version.name ? <Spinner className="size-4" /> : <Trash2Icon />}
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </AdminCard>
+      ) : null}
     </AdminSection>
   )
 }
@@ -274,6 +372,17 @@ function Maintenance({ site }: { site: SiteData }) {
               </Button>
             </li>
           ))}
+          <li className="flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+            <span className="flex min-w-64 flex-1 flex-col gap-0.5">
+              <span className="text-[15px]">Set world record versions</span>
+              <span className="text-[13px] text-muted-foreground">
+                Goes through every world record without a version, one at a time like the review queue. Saving names its file in the archive.
+              </span>
+            </span>
+            <Button asChild variant="outline">
+              <Link href="/admin/site/wr-versions">Open</Link>
+            </Button>
+          </li>
         </ul>
       </AdminCard>
       <p className="m-0 text-[13px] text-muted-foreground">

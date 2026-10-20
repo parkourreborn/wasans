@@ -370,6 +370,77 @@ function EditTimeForm({
   )
 }
 
+// Owners only: the game version the run was played on. Nothing is posted
+// to Discord; a world record's archived file is renamed to match.
+export function EditVersionDialog({
+  open,
+  onOpenChange,
+  runLabel,
+  currentVersion,
+  versions,
+  busy = false,
+  onConfirm,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  runLabel: string
+  currentVersion: string | null
+  versions: readonly string[] | null
+  busy?: boolean
+  onConfirm: (version: string) => void
+}) {
+  const [picked, setPicked] = useState<string | null>(null)
+  const choice = picked ?? currentVersion
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setPicked(null)
+        onOpenChange(next)
+      }}
+    >
+      <DialogContent className={contentClass}>
+        <DialogHeader className="gap-1.5">
+          <DialogTitle className={titleClass}>Game version</DialogTitle>
+          <DialogDescription className="text-[15px] leading-relaxed text-muted-foreground">
+            {runLabel}. Changing it doesn&apos;t post anything to Discord.
+          </DialogDescription>
+        </DialogHeader>
+        {versions === null ? (
+          <Spinner className="size-4" />
+        ) : versions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Add a version in Admin, Site first.</p>
+        ) : (
+          <div role="radiogroup" aria-label="Game version" className="flex flex-wrap gap-2">
+            {versions.map((version) => (
+              <button
+                key={version}
+                type="button"
+                role="radio"
+                aria-checked={choice === version}
+                disabled={busy}
+                onClick={() => setPicked(version)}
+                className={cn(
+                  "inline-flex h-9 items-center rounded-md border px-3 text-[14px] transition-colors",
+                  choice === version ? "border-primary bg-primary/15 text-foreground" : "border-line-strong text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {version}
+              </button>
+            ))}
+          </div>
+        )}
+        <DialogFooter className="-mx-6 -mb-6 rounded-b-xl border-line bg-surface px-6 py-4">
+          <Button type="button" disabled={!choice || choice === currentVersion || busy} onClick={() => choice && onConfirm(choice)} className="sm:min-w-28">
+            {busy ? <Spinner className="size-4" /> : null}
+            Save version
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // Asked when a change would make the run the WR: whether Discord pings the
 // WR role for it. Closing the dialog changes nothing.
 export function WrPingDialog({

@@ -57,6 +57,10 @@ export const ADMIN_ACTIONS = [
   "scores_recalculated",
   "analytics_backfilled",
   "duplicates_removed",
+  "wr_originals_archived",
+  "game_version_added",
+  "game_version_removed",
+  "submission_version_changed",
 ] as const
 
 // Everything else lands in "activity": runs and combos being submitted, WRs
@@ -167,6 +171,13 @@ export function describeLog(row: LogRow): { tag: string; tone: "error" | "good" 
       }
     case "submission_original_downloaded":
       return { tag: "Download", tone: "muted", text: `${who} downloaded the original video for ${runLabel(row, d)}`, meta: null }
+    case "submission_version_changed":
+      return {
+        tag: "Version",
+        tone: "admin",
+        text: `${who} set ${runLabel(row, d)} to version ${str(d.new_version) ?? "?"}`,
+        meta: str(d.old_version) ? `Was ${d.old_version}` : "Had no version",
+      }
     case "combo_submission_approved":
       return { tag: "Approved", tone: "good", text: `${who} approved ${comboLabel(row, d)}`, meta: note }
     case "combo_submission_denied":
@@ -234,6 +245,12 @@ export function describeLog(row: LogRow): { tag: string; tone: "error" | "good" 
       return { tag: "Maintenance", tone: "admin", text: `${who} removed duplicate submissions`, meta: `${num(d.deleted_count) ?? 0} removed` }
     case "analytics_backfilled":
       return { tag: "Maintenance", tone: "admin", text: `${who} backfilled analytics history`, meta: null }
+    case "game_version_added":
+      return { tag: "Version", tone: "admin", text: `${who} added game version ${str(d.name) ?? row.entity_uuid}`, meta: "New runs get it" }
+    case "game_version_removed":
+      return { tag: "Version", tone: "admin", text: `${who} removed game version ${str(d.name) ?? row.entity_uuid}`, meta: null }
+    case "wr_originals_archived":
+      return { tag: "Maintenance", tone: "admin", text: `${who} archived world record originals`, meta: `${num(d.archived) ?? 0} archived` }
     case "video_backfill_started":
       return { tag: "Maintenance", tone: "admin", text: `${who} started re-encoding old videos`, meta: null }
     case "wr_compilation_started":

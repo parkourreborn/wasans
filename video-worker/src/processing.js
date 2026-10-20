@@ -8,9 +8,10 @@
 //   -> scores/{uuid}.mp4 + scores/{uuid}-preview.jpg in the public bucket
 //
 // Originals live in the private wasans-uploads bucket as originals/{uuid}
-// (moderators can download them, and a lifecycle rule deletes them after
-// 90 days). Players' direct uploads land in incoming/ first and are moved
-// to originals/ when processing starts.
+// (moderators can download them; the main app deletes them 7 days after
+// review, or moves a world record's to world-records/ for good). Players'
+// direct uploads land in incoming/ first and are moved to originals/ when
+// processing starts.
 //
 // The container reaches R2 only through the media.internal outbound
 // handler below, and every key it touches is derived from its own job, so

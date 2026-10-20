@@ -2,6 +2,8 @@ import { jsonError } from "@/lib/server/http"
 import { secretsMatch } from "@/lib/constant-time"
 import { cleanupExpiredApiState } from "@/lib/server/services/api-state-cleanup-service"
 import { sweepVideoProcessing } from "@/lib/server/services/video-processing-service"
+import { sweepOriginals } from "@/lib/server/services/wr-archive-service"
+import { bumpCacheGeneration } from "@/lib/server/v2/cache"
 import { jsonOk, withV2Context } from "@/lib/server/v2/http"
 
 // Called once a day by the same standalone Cloudflare Cron Trigger worker
@@ -23,6 +25,12 @@ export const POST = withV2Context(async (ctx) => {
   // Re-queues submission videos whose processing job got lost, and keeps a
   // started backfill moving (see video-processing-service.ts).
   const videos = await sweepVideoProcessing(ctx.db, ctx.env)
+  // Deletes originals 7 days after review and archives world records' for
+  // good (see wr-archive-service.ts).
+  const originals = await sweepOriginals(ctx.env, ctx.db)
+  if (originals.recordsArchived > 0) {
+    await bumpCacheGeneration(ctx.cache)
+  }
 
-  return jsonOk({ ok: true, ...result, ...videos }, { requestId: ctx.requestId })
+  return jsonOk({ ok: true, ...result, ...videos, ...originals }, { requestId: ctx.requestId })
 })

@@ -151,12 +151,13 @@ export async function createSubmission(
     time: number
     now: number
     trialVersion: number
+    gameVersion: string | null
   }
 ) {
   await db.prepare(
     `INSERT INTO submissions (
-      uuid, player_uuid, trial_name, player_name, time, date, state, trial_version
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      uuid, player_uuid, trial_name, player_name, time, date, state, trial_version, game_version
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       submission.uuid,
@@ -166,7 +167,8 @@ export async function createSubmission(
       submission.time,
       submission.now,
       "pending",
-      submission.trialVersion
+      submission.trialVersion,
+      submission.gameVersion
     )
     .run()
 }
@@ -203,7 +205,7 @@ export async function getSubmissionBase(db: D1Database, uuid: string) {
 export async function updateSubmissionByUuid(
   db: D1Database,
   uuid: string,
-  updates: Array<{ field: "state" | "moderator_note" | "time" | "moderator_username"; value: string | number | null }>
+  updates: Array<{ field: "state" | "moderator_note" | "time" | "moderator_username" | "reviewed_at"; value: string | number | null }>
 ) {
   if (!updates.length) {
     return
@@ -241,11 +243,11 @@ export async function deleteSubmissionCascade(db: D1Database, uuid: string) {
 
 export async function getSubmissionDeleteContext(db: D1Database, uuid: string) {
   return db.prepare(
-    `SELECT s.uuid, s.player_uuid, s.trial_name, s.thread_id, w.trial_name AS wr_trial
+    `SELECT s.uuid, s.player_uuid, s.trial_name, s.thread_id, s.original_key, w.trial_name AS wr_trial
      FROM submissions s
      LEFT JOIN wrs w ON w.submission_uuid = s.uuid
      WHERE s.uuid = ?`
   )
     .bind(uuid)
-    .first<SubmissionRow & { wr_trial: string | null }>()
+    .first<SubmissionRow & { original_key: string | null; wr_trial: string | null }>()
 }

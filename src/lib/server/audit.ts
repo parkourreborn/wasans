@@ -48,11 +48,15 @@ export type AuditAction =
   | "giveaway_winner_claimed"
   | "wr_compilation_started"
   | "submission_original_downloaded"
+  | "submission_version_changed"
+  | "game_version_added"
+  | "game_version_removed"
   | "video_backfill_started"
   // Maintenance tools on the admin Site page; also how it shows "last run".
   | "scores_recalculated"
   | "analytics_backfilled"
   | "duplicates_removed"
+  | "wr_originals_archived"
 
 // Split out from insertAuditLog so callers writing several audit rows at
 // once (e.g. the deduplicate sweep) can send them as one db.batch() instead
