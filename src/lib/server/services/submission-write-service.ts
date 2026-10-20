@@ -7,7 +7,7 @@ import {
   findPersonalBestByTrials,
   findPlayerByUuid,
 } from "@/lib/server/repositories/submission-repository"
-import { getLatestGameVersion } from "@/lib/server/repositories/game-version-repository"
+import { getCurrentGameVersion } from "@/lib/server/repositories/game-version-repository"
 import { getTrialLifecycle, type TrialLifecycleRow } from "@/lib/server/repositories/trial-repository"
 import {
   consumeVideoUpload,
@@ -168,8 +168,8 @@ export async function createSubmissions(
 
   const created: Array<{ uuid: string; trial_name: string; video_status: "processing" }> = []
   const jobs: VideoJobMessage[] = []
-  // Runs are played on the newest game version owners have listed.
-  const gameVersion = await getLatestGameVersion(db)
+  // Runs are stamped with the game version owners have marked current.
+  const gameVersion = await getCurrentGameVersion(db)
 
   for (const submission of prepared) {
     if (submission.source.type === "upload") {

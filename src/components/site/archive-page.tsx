@@ -7,6 +7,7 @@ import { DownloadIcon, ExternalLinkIcon, FileVideoIcon, SearchIcon, XIcon } from
 import { apiV2 } from "@/lib/api"
 import { formatCount, formatDate, formatTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { compareVersionsDesc } from "@/lib/wr-archive"
 import { useApi } from "@/hooks/use-api"
 import { PageHeader } from "@/components/site/page-header"
 import { runPosterUrl, RunVideo } from "@/components/site/run-video"
@@ -57,9 +58,7 @@ export function ArchivePage() {
 
   const set = (key: keyof Filters, value: string) => setFilters((current) => ({ ...current, [key]: value }))
   const trials = [...new Set(entries.map((entry) => entry.trial_name))].sort((a, b) => a.localeCompare(b))
-  const versions = [...new Set(entries.map((entry) => entry.game_version).filter((version): version is string => version !== null))].sort((a, b) =>
-    b.localeCompare(a, undefined, { numeric: true })
-  )
+  const versions = [...new Set(entries.map((entry) => entry.game_version).filter((version): version is string => version !== null))].sort(compareVersionsDesc)
   const hasUnversioned = entries.some((entry) => entry.game_version === null)
   const shown = filterArchive(entries, filters, new Date())
   const totalSize = shown.reduce((sum, entry) => sum + (entry.size ?? 0), 0)

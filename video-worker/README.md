@@ -63,9 +63,10 @@ wasans-uploads/world-records/{trial}/{player name} ({player uuid}) {time} ({vers
 and renames it there if the run's version, time or player name changes. If
 a record's original is already gone, the published video is copied in
 instead. Anyone can browse and download the archive at `/archive`. Owners
-keep the list of game versions in /admin/site, and new runs are stamped
-with the newest one. "Set world record versions" in /admin/site goes
-through the older records one at a time.
+keep the list of game versions in /admin/site and pick which one is
+current; new runs are stamped with it. "Set world record versions" in
+/admin/site goes through the older records one at a time, and can add an
+old version without making it current.
 
 The 90-day rule on `originals/` stays as a safety net for anything the
 sweep never picks up, like the original of a video that failed processing.
@@ -142,6 +143,7 @@ Run these from the repo root unless a step says otherwise.
    npx wrangler d1 execute wasans --remote --file=migrations/0018_wr_compilations.sql   # if not already run
    npx wrangler d1 execute wasans --remote --file=migrations/0019_video_processing.sql
    npx wrangler d1 execute wasans --remote --file=migrations/0022_wr_archive.sql
+   npx wrangler d1 execute wasans --remote --file=migrations/0023_current_game_version.sql
    ```
 8. **Deploy this Worker first.** Docker must be running locally, because
    wrangler builds the image:

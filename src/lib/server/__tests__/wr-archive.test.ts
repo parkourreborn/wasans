@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { filterArchive, formatBytes, NO_VERSION_FILTER, type ArchiveEntry, type ArchiveFilters } from "@/lib/archive-filters"
-import { archiveDownloadName, archiveFileName, archiveKey, isArchiveKey, normalizeVersionName, runOriginalKeys } from "@/lib/wr-archive"
+import { archiveDownloadName, archiveFileName, archiveKey, compareVersionsDesc, isArchiveKey, normalizeVersionName, runOriginalKeys } from "@/lib/wr-archive"
 
 const run = { trial_name: "Neon Bold", player_name: "Tully", player_uuid: "54779346-1692", time: 45.6, game_version: "1.2.0" }
 
@@ -89,4 +89,9 @@ test("file sizes read like a file browser's", () => {
   assert.equal(formatBytes(512), "512 B")
   assert.equal(formatBytes(1536), "1.5 KB")
   assert.equal(formatBytes(250 * 1024 * 1024), "250 MB")
+})
+
+test("versions sort highest first, numbers as numbers, releases above their pre-releases", () => {
+  const versions = ["1.9.2", "1.3.0-beta", "1.10.0", "1.3.0", "0.9", "1.3.0-beta.2", "Season 2", "Season 10"]
+  assert.deepEqual([...versions].sort(compareVersionsDesc), ["Season 10", "Season 2", "1.10.0", "1.9.2", "1.3.0", "1.3.0-beta.2", "1.3.0-beta", "0.9"])
 })

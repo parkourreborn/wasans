@@ -2,17 +2,18 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { ArchiveIcon, ArrowLeftIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ExternalLinkIcon } from "lucide-react"
+import { ArchiveIcon, ArrowLeftIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ExternalLinkIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { apiV2 } from "@/lib/api"
 import { formatCount, formatDate, formatTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { archiveFileName, ARCHIVE_PREFIX } from "@/lib/wr-archive"
+import { archiveFileName, ARCHIVE_PREFIX, normalizeVersionName } from "@/lib/wr-archive"
 import { invalidateApi, setApiData, useApi } from "@/hooks/use-api"
 import { VERSIONS_URL, type GameVersion } from "@/components/site/game-versions"
 import { AdminEmpty, AdminError, AdminLoading, AdminPage, adminRequest, errorText } from "@/components/site/admin/admin-kit"
 import { RunVideo } from "@/components/site/run-video"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 
 type WrRun = {
@@ -48,6 +49,7 @@ export function AdminWrVersionsPage() {
   const [picked, setPicked] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [archiving, setArchiving] = useState(false)
+  const [creating, setCreating] = useState(false)
 
   const runs = [...(queue?.runs ?? [])].sort((a, b) => a.date - b.date)
   const missing = runs.filter((run) => !run.game_version)
@@ -104,6 +106,13 @@ export function AdminWrVersionsPage() {
     }
   }
 
+  const created = (name: string, list: GameVersion[]) => {
+    if (queue) setApiData(QUEUE_URL, { ...data, data: { ...queue, versions: list } })
+    setApiData(VERSIONS_URL, { data: { versions: list } })
+    setPicked(name)
+    setCreating(false)
+  }
+
   const archiveBatch = async () => {
     setArchiving(true)
     try {
@@ -117,7 +126,8 @@ export function AdminWrVersionsPage() {
     }
   }
 
-  // Number keys pick a version (newest is 1), Enter saves, J and K move.
+  // Number keys pick a version (highest is 1), N adds one, Enter saves, J
+  // and K move.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target) || !current) return
@@ -125,6 +135,7 @@ export function AdminWrVersionsPage() {
       const index = Number(key) - 1
       if (Number.isInteger(index) && index >= 0 && index < Math.min(9, versions.length)) setPicked(versions[index].name)
       else if (key === "enter") void save()
+      else if (key === "n") setCreating(true)
       else if (key === "j") move(1)
       else if (key === "k") move(-1)
       else return
@@ -199,11 +210,7 @@ export function AdminWrVersionsPage() {
             ) : null}
           </div>
 
-          {versions.length === 0 ? (
-            <AdminEmpty>
-              Add a game version in <Link href="/admin/site" className="underline underline-offset-4">Site</Link> first.
-            </AdminEmpty>
-          ) : !current ? (
+          {!current ? (
             <AdminEmpty>{view === "missing" ? "Every world record has a version." : "No world records yet."}</AdminEmpty>
           ) : (
             <div className="grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
@@ -252,24 +259,31 @@ export function AdminWrVersionsPage() {
 
                 <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface p-4">
                   <span className="label-caps text-[13px] text-subtle-foreground">Version</span>
-                  <div role="radiogroup" aria-label="Game version" className="flex flex-wrap gap-2">
-                    {versions.map((version, index) => (
-                      <button
-                        key={version.name}
-                        type="button"
-                        role="radio"
-                        aria-checked={choice === version.name}
-                        onClick={() => setPicked(version.name)}
-                        className={cn(
-                          "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-[14px] transition-colors",
-                          choice === version.name ? "border-primary bg-primary/15 text-foreground" : "border-line-strong text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {index < 9 ? <span className="num hidden rounded-sm border border-current/30 px-1 text-[11px] leading-4 md:inline-block">{index + 1}</span> : null}
-                        {version.name}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div role="radiogroup" aria-label="Game version" className="contents">
+                      {versions.map((version, index) => (
+                        <button
+                          key={version.name}
+                          type="button"
+                          role="radio"
+                          aria-checked={choice === version.name}
+                          onClick={() => setPicked(version.name)}
+                          className={cn(
+                            "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-[14px] transition-colors",
+                            choice === version.name ? "border-primary bg-primary/15 text-foreground" : "border-line-strong text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {index < 9 ? <span className="num hidden rounded-sm border border-current/30 px-1 text-[11px] leading-4 md:inline-block">{index + 1}</span> : null}
+                          {version.name}
+                          {version.is_current ? <span className="text-[11px] text-subtle-foreground">current</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                    <NewVersion open={creating} onOpenChange={setCreating} onCreated={created} />
                   </div>
+                  {versions.length === 0 && !creating ? (
+                    <p className="m-0 text-[13px] text-muted-foreground">No versions yet. Add the one this record was played on.</p>
+                  ) : null}
                   <p className="m-0 break-all text-[13px] text-muted-foreground">
                     Saved as{" "}
                     <span className="text-foreground">
@@ -286,7 +300,7 @@ export function AdminWrVersionsPage() {
                     Save
                   </Button>
                   <span className="hidden text-[13px] text-subtle-foreground lg:inline">
-                    Keys: 1–9 pick a version, Enter saves, J and K move. Saving can take a few seconds while the file is copied.
+                    Keys: 1–9 pick a version, N adds one, Enter saves, J and K move. Saving can take a few seconds while the file is copied.
                   </span>
                   <div className="ml-auto flex gap-2">
                     <Button type="button" variant="outline" size="icon-lg" aria-label="Previous (K)" disabled={currentIndex === 0} onClick={() => move(-1)}>
@@ -303,5 +317,95 @@ export function AdminWrVersionsPage() {
         </>
       ) : null}
     </AdminPage>
+  )
+}
+
+// Adds a version from the queue, for a record played on one that isn't on
+// the list yet. It doesn't become current: new runs keep getting the one
+// set in Site.
+function NewVersion({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreated: (name: string, versions: GameVersion[]) => void
+}) {
+  const [name, setName] = useState("")
+  const [busy, setBusy] = useState(false)
+  const normalized = normalizeVersionName(name)
+  const invalid = name.trim() !== "" && normalized === null
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenChange(true)}
+        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-dashed border-line-strong px-3 text-[14px] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <PlusIcon className="size-4" aria-hidden />
+        New version
+      </button>
+    )
+  }
+
+  const close = () => {
+    setName("")
+    onOpenChange(false)
+  }
+
+  const create = async () => {
+    if (!normalized || busy) return
+    setBusy(true)
+    try {
+      const result = await adminRequest<{ versions: GameVersion[] }>("/admin/versions", {
+        body: { name: normalized, current: false },
+        fallback: "Couldn’t add that version",
+      })
+      onCreated(normalized, result?.versions ?? [])
+      setName("")
+      toast.success(`Added ${normalized}. New runs still get the current version.`)
+    } catch (err) {
+      toast.error(errorText(err, "Couldn’t add that version"))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void create()
+      }}
+    >
+      <Input
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault()
+            close()
+          }
+        }}
+        placeholder="Version, like 1.0.2"
+        maxLength={32}
+        autoFocus
+        aria-label="New version"
+        aria-invalid={invalid}
+        disabled={busy}
+        className="h-9 w-40"
+      />
+      <Button type="submit" variant="outline" disabled={!normalized || busy}>
+        {busy ? <Spinner className="size-4" /> : <PlusIcon />}
+        Add
+      </Button>
+      <Button type="button" variant="ghost" onClick={close} disabled={busy}>
+        Cancel
+      </Button>
+      {invalid ? <span className="w-full text-[13px] text-destructive">Letters, numbers, spaces, dots, dashes, underscores or pluses, up to 32.</span> : null}
+    </form>
   )
 }

@@ -25,6 +25,19 @@ export function normalizeVersionName(value: unknown): string | null {
   return name.length <= MAX_VERSION_LENGTH && VERSION_PATTERN.test(name) ? name : null
 }
 
+// Highest version first, comparing numbers as numbers (1.10 above 1.9),
+// and a release above its own pre-releases (1.3.0 above 1.3.0-beta).
+export function compareVersionsDesc(a: string, b: string) {
+  const [aBase, ...aRest] = a.split("-")
+  const [bBase, ...bRest] = b.split("-")
+  const byBase = bBase.localeCompare(aBase, undefined, { numeric: true, sensitivity: "base" })
+  if (byBase !== 0) return byBase
+  const aSuffix = aRest.join("-")
+  const bSuffix = bRest.join("-")
+  if (!aSuffix || !bSuffix) return Number(Boolean(aSuffix)) - Number(Boolean(bSuffix))
+  return bSuffix.localeCompare(aSuffix, undefined, { numeric: true, sensitivity: "base" })
+}
+
 // A slash would start a folder, and control characters don't belong in a
 // file name.
 function namePart(value: string) {

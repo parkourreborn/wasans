@@ -173,8 +173,8 @@ CREATE TABLE submissions (
   video_processed_at INTEGER,
   video_backfill_claimed_at INTEGER,
 
-  -- The game version the run was played on (game_versions.name), the newest
-  -- one when it was submitted unless an owner changed it.
+  -- The game version the run was played on (game_versions.name), the
+  -- current one when it was submitted unless an owner changed it.
   game_version TEXT,
   -- When it was last approved or denied. Its original is deleted 7 days
   -- later, unless it was ever a world record (see wr-archive-service.ts).
@@ -495,12 +495,15 @@ CREATE TABLE audit_logs (
 CREATE INDEX idx_audit_logs_action_created_at ON audit_logs(action, created_at DESC);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
 
--- Game versions owners keep in /admin/site. New runs get the newest one.
+-- Game versions owners keep in /admin/site. New runs get the current one.
 CREATE TABLE game_versions (
   name TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL,
-  created_by TEXT
+  created_by TEXT,
+  is_current INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE UNIQUE INDEX idx_game_versions_current ON game_versions(is_current) WHERE is_current = 1;
 
 -- Feature flags (owner-controlled site-wide toggles)
 CREATE TABLE feature_flags (

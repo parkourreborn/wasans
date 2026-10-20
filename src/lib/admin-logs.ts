@@ -60,6 +60,7 @@ export const ADMIN_ACTIONS = [
   "wr_originals_archived",
   "game_version_added",
   "game_version_removed",
+  "game_version_made_current",
   "submission_version_changed",
 ] as const
 
@@ -246,7 +247,14 @@ export function describeLog(row: LogRow): { tag: string; tone: "error" | "good" 
     case "analytics_backfilled":
       return { tag: "Maintenance", tone: "admin", text: `${who} backfilled analytics history`, meta: null }
     case "game_version_added":
-      return { tag: "Version", tone: "admin", text: `${who} added game version ${str(d.name) ?? row.entity_uuid}`, meta: "New runs get it" }
+      return { tag: "Version", tone: "admin", text: `${who} added game version ${str(d.name) ?? row.entity_uuid}`, meta: d.current === false ? null : "New runs get it" }
+    case "game_version_made_current":
+      return {
+        tag: "Version",
+        tone: "admin",
+        text: `${who} made ${str(d.name) ?? row.entity_uuid} the current game version`,
+        meta: str(d.previous) ? `Was ${d.previous}` : null,
+      }
     case "game_version_removed":
       return { tag: "Version", tone: "admin", text: `${who} removed game version ${str(d.name) ?? row.entity_uuid}`, meta: null }
     case "wr_originals_archived":

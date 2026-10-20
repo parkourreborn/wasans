@@ -51,6 +51,7 @@ export type AuditAction =
   | "submission_version_changed"
   | "game_version_added"
   | "game_version_removed"
+  | "game_version_made_current"
   | "video_backfill_started"
   // Maintenance tools on the admin Site page; also how it shows "last run".
   | "scores_recalculated"
