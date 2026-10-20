@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { compareVersionsDesc } from "@/lib/wr-archive"
 import { useApi } from "@/hooks/use-api"
 import { PageHeader } from "@/components/site/page-header"
-import { runPosterUrl, RunVideo } from "@/components/site/run-video"
+import { RunThumbnail, RunVideo } from "@/components/site/run-video"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -185,21 +185,6 @@ function FilterSelect({ label, value, onChange, children }: { label: string; val
   )
 }
 
-function Thumbnail({ uuid, className }: { uuid: string; className?: string }) {
-  const [failed, setFailed] = useState(false)
-  return (
-    <div className={cn("relative flex aspect-video items-center justify-center overflow-hidden bg-surface-3", className)}>
-      {failed ? (
-        <FileVideoIcon className="size-8 text-subtle-foreground" aria-hidden />
-      ) : (
-        // A plain img: the poster lives on the assets host and may be missing.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={runPosterUrl(uuid)} alt="" loading="lazy" onError={() => setFailed(true)} className="size-full object-cover" />
-      )}
-    </div>
-  )
-}
-
 function FileCard({ entry, onOpen }: { entry: ArchiveEntry; onOpen: () => void }) {
   return (
     <button
@@ -208,7 +193,7 @@ function FileCard({ entry, onOpen }: { entry: ArchiveEntry; onOpen: () => void }
       className="group flex w-full flex-col overflow-hidden rounded-lg border border-line bg-surface text-left transition-colors hover:border-line-strong hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-primary"
     >
       <div className="relative">
-        <Thumbnail uuid={entry.submission_uuid} />
+        <RunThumbnail submissionUuid={entry.submission_uuid} />
         <span className="label-caps absolute left-2 top-2 rounded-sm bg-background/80 px-1.5 text-[11px] text-foreground backdrop-blur">{entry.trial_name}</span>
         {entry.current ? <span className="label-caps absolute right-2 top-2 rounded-sm bg-background/80 px-1.5 text-[11px] text-gold backdrop-blur">Current WR</span> : null}
       </div>

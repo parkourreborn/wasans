@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { FileVideoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -14,6 +15,23 @@ export function runVideoUrl(submissionUuid: string) {
 
 export function runPosterUrl(submissionUuid: string) {
   return `${ASSETS_URL}/scores/${submissionUuid}-preview.jpg`
+}
+
+// A run's thumbnail on its own, for lists and places a video would be too
+// much. Give it a `key` per run so a missing one doesn't stick.
+export function RunThumbnail({ submissionUuid, alt = "", className }: { submissionUuid: string; alt?: string; className?: string }) {
+  const [failed, setFailed] = useState(false)
+  return (
+    <div className={cn("relative flex aspect-video items-center justify-center overflow-hidden bg-surface-3", className)}>
+      {failed ? (
+        <FileVideoIcon className="size-8 text-subtle-foreground" aria-hidden />
+      ) : (
+        // A plain img: the poster lives on the assets host and may be missing.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={runPosterUrl(submissionUuid)} alt={alt} loading="lazy" onError={() => setFailed(true)} className="size-full object-cover" />
+      )}
+    </div>
+  )
 }
 
 // A run's processed video, with the states a submission's video can be in:

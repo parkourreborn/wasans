@@ -11,7 +11,7 @@ import { archiveFileName, ARCHIVE_PREFIX, normalizeVersionName } from "@/lib/wr-
 import { invalidateApi, setApiData, useApi } from "@/hooks/use-api"
 import { VERSIONS_URL, type GameVersion } from "@/components/site/game-versions"
 import { AdminEmpty, AdminError, AdminLoading, AdminPage, adminRequest, errorText } from "@/components/site/admin/admin-kit"
-import { RunVideo } from "@/components/site/run-video"
+import { RunThumbnail } from "@/components/site/run-video"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
@@ -255,7 +255,12 @@ export function AdminWrVersionsPage() {
                   </div>
                 </div>
 
-                <RunVideo key={current.uuid} submissionUuid={current.uuid} label={`${current.trial_name} ${formatTime(current.time)} by ${current.player_name}`} />
+                <RunThumbnail
+                  key={current.uuid}
+                  submissionUuid={current.uuid}
+                  alt={`${current.trial_name} ${formatTime(current.time)} by ${current.player_name}`}
+                  className="rounded-lg border border-line-strong"
+                />
 
                 <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface p-4">
                   <span className="label-caps text-[13px] text-subtle-foreground">Version</span>
