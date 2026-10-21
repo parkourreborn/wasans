@@ -41,7 +41,8 @@ How a video is handled:
 - **Failures:**
   - A bad file (corrupt, no video, too long, too big) fails right away
     with a message the player sees.
-  - Anything else is retried, up to 3 runs.
+  - Anything else is retried, up to 3 runs. A container that can't start
+    yet (every instance busy) waits on the queue and doesn't count as a run.
   - A submission stuck in "processing" is re-queued by the daily
     maintenance sweep.
 - **Isolation.** The container holds no credentials. Every R2 read and

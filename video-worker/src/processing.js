@@ -267,6 +267,16 @@ export class SubmissionVideoProcessor extends Container {
         maxDurationSeconds: MAX_DURATION_SECONDS,
       }
       await this.start({ envVars: { JOB_JSON: toBase64(JSON.stringify(containerJob)) } })
+      // onStop ignores stops while the container is starting, so one that
+      // already died has to be counted here.
+      if (!this.ctx.container?.running) {
+        await this.complete({
+          status: "failed",
+          retryable: true,
+          error: "Something went wrong while processing the video.",
+          detail: "Processor exited right after starting",
+        })
+      }
     } catch (error) {
       await this.ctx.storage.put("job", { ...job, finished: true })
       throw error
@@ -347,7 +357,16 @@ export class SubmissionVideoProcessor extends Container {
     }
   }
 
+  // Both of these also fire while startJob is still starting the container,
+  // when a start fails (every instance busy, too many starts at once) or
+  // the alarm sees it "stopped" before it's up. That isn't a run: startJob
+  // throws and the queue tries the message again without using an attempt.
+  // Counting it here as well used up the job's attempts while it waited for
+  // an instance, and queued an extra copy of it each time.
   async onStop({ exitCode, reason }) {
+    if (this.startingJob) {
+      return
+    }
     await this.complete({
       status: "failed",
       retryable: true,
@@ -358,6 +377,9 @@ export class SubmissionVideoProcessor extends Container {
 
   async onError(error) {
     console.error("Video processor container error:", error)
+    if (this.startingJob) {
+      throw error
+    }
     await this.complete({
       status: "failed",
       retryable: true,
