@@ -243,7 +243,29 @@ export async function startProcessing(env, body) {
     console.error("Dropping invalid video-processing message:", JSON.stringify(body))
     return
   }
+  // A Drive file is copied once imports/{id} exists (it only appears when
+  // the upload completes). A leftover duplicate job for it would download
+  // and re-encode the whole file again, holding an instance for nothing, so
+  // it just reports the copy as done instead. The main app ignores that if
+  // it already knew.
+  if (job.reason === "drive" && (await env.UPLOADS.head(keysFor(job).original))) {
+    await reportDriveCopied(env, job.driveFileId)
+    return
+  }
   await getContainer(env.VIDEO_PROCESSOR, processorName(job)).startJob(job)
+}
+
+// Throws if the main app can't be reached, so the queue tries again.
+async function reportDriveCopied(env, driveFileId) {
+  const response = await fetch(`${env.APP_URL}/v2/internal/wr-imports/${driveFileId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${env.VIDEO_CALLBACK_SECRET}` },
+    body: JSON.stringify({ reason: "drive", status: "ready", error: null }),
+  })
+  if (!response.ok) {
+    throw new Error(`Reporting Drive file ${driveFileId} as copied failed: ${response.status}`)
+  }
+  console.log(`Drive file ${driveFileId} is already copied; skipped a duplicate job`)
 }
 
 export class SubmissionVideoProcessor extends Container {
