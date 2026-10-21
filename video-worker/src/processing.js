@@ -34,6 +34,11 @@ const MAX_ATTEMPTS = 3
 const RETRY_DELAY_SECONDS = 60
 // Callback deliveries to the main app before giving up (with backoff).
 const MAX_DELIVERY_ATTEMPTS = 6
+// How long after starting a job its container must be running (or done).
+const START_CHECK_SECONDS = 60
+// The platform's answers when every instance is taken: the container was
+// never placed, so it isn't a failed run.
+const CAPACITY_ERROR = /maximum number of running container instances exceeded|no container instance that can be provided|too many containers per second/i
 
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024
 const MAX_DURATION_SECONDS = 10 * 60
@@ -288,8 +293,9 @@ export class SubmissionVideoProcessor extends Container {
     }
     this.startingJob = true
 
+    const runId = crypto.randomUUID()
     try {
-      await this.ctx.storage.put("job", { ...job, finished: false })
+      await this.ctx.storage.put("job", { ...job, runId, finished: false })
       const containerJob = {
         ...toMessage(job),
         maxBytes: job.reason === "drive" ? MAX_DRIVE_BYTES : MAX_VIDEO_BYTES,
@@ -305,6 +311,8 @@ export class SubmissionVideoProcessor extends Container {
           error: "Something went wrong while processing the video.",
           detail: "Processor exited right after starting",
         })
+      } else {
+        await this.schedule(START_CHECK_SECONDS, "checkStarted", { runId })
       }
     } catch (error) {
       await this.ctx.storage.put("job", { ...job, finished: true })
@@ -312,6 +320,29 @@ export class SubmissionVideoProcessor extends Container {
     } finally {
       this.startingJob = false
     }
+  }
+
+  // A container that never gets an instance can end without onStop or
+  // onError firing, which would leave its job lost until the main app's
+  // daily sweep, so startJob checks back.
+  async checkStarted({ runId }) {
+    const job = await this.getJob()
+    if (!job || job.finished || job.runId !== runId || this.ctx.container?.running) {
+      return
+    }
+    await this.requeue("its container never got an instance")
+  }
+
+  // The container never ran, so the job goes back on the queue without
+  // using one of its attempts.
+  async requeue(why) {
+    const job = await this.getJob()
+    if (!job || job.finished) {
+      return
+    }
+    await this.ctx.storage.put("job", { ...job, finished: true })
+    console.warn(`Queueing ${jobLabel(job)} again: ${why}`)
+    await this.env.VIDEO_QUEUE.send(toMessage(job), { delaySeconds: RETRY_DELAY_SECONDS })
   }
 
   // Called once per run: by the container's own report, or by onStop if it
@@ -339,6 +370,9 @@ export class SubmissionVideoProcessor extends Container {
 
     const payload = {
       reason: job.reason,
+      // Which file an import read: the main app ignores a leftover job's
+      // result for a run whose original has since been archived.
+      original_key: job.reason === "import" ? (job.originalKey ?? null) : null,
       status: result?.status === "ready" ? "ready" : "failed",
       error: result?.status === "ready" ? null : String(result?.error || "Video processing failed").slice(0, 500),
       mode: result?.mode ?? null,
@@ -409,11 +443,16 @@ export class SubmissionVideoProcessor extends Container {
     if (this.startingJob) {
       throw error
     }
+    const message = error instanceof Error ? error.message : String(error)
+    if (CAPACITY_ERROR.test(message)) {
+      await this.requeue(message)
+      throw error
+    }
     await this.complete({
       status: "failed",
       retryable: true,
       error: "Something went wrong while processing the video.",
-      detail: error instanceof Error ? error.message : String(error),
+      detail: message,
     })
     throw error
   }
