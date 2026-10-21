@@ -5,7 +5,8 @@
 //  - Added trial: does not count toward a player's score average until 7
 //    days after it was added.
 //  - Removed trial: keeps counting exactly as before for 7 days after
-//    removal, then drops out of the average entirely.
+//    removal, then drops out of the average entirely. One removed before
+//    its "just added" grace ended never counted, so it never does.
 //  - Changed trial (version bump): submissions made under the old version
 //    keep counting for 7 days after the change, then only submissions made
 //    under the current version count.
@@ -26,7 +27,11 @@ export type TrialLifecycle = {
 // Whether the trial currently participates in WR/PB/score computation at all.
 export function isTrialCountedNow(trial: TrialLifecycle, nowSeconds: number): boolean {
   if (trial.status === "removed") {
-    return trial.removed_at != null && nowSeconds < trial.removed_at + TRIAL_GRACE_PERIOD_SECONDS
+    return (
+      trial.removed_at != null &&
+      trial.removed_at >= trial.added_at + TRIAL_GRACE_PERIOD_SECONDS &&
+      nowSeconds < trial.removed_at + TRIAL_GRACE_PERIOD_SECONDS
+    )
   }
 
   return nowSeconds >= trial.added_at + TRIAL_GRACE_PERIOD_SECONDS
@@ -73,7 +78,7 @@ export const VALID_SUBMISSION_SQL = `(
   s.imported = 0
   AND (
     (t.status = 'active' AND ? >= t.added_at + ${TRIAL_GRACE_PERIOD_SECONDS})
-    OR (t.status = 'removed' AND t.removed_at IS NOT NULL AND ? < t.removed_at + ${TRIAL_GRACE_PERIOD_SECONDS})
+    OR (t.status = 'removed' AND t.removed_at IS NOT NULL AND t.removed_at >= t.added_at + ${TRIAL_GRACE_PERIOD_SECONDS} AND ? < t.removed_at + ${TRIAL_GRACE_PERIOD_SECONDS})
   )
   AND (
     s.trial_version = t.version
@@ -88,7 +93,7 @@ export function validSubmissionSql(submissionsAlias: string, trialsAlias: string
     ${submissionsAlias}.imported = 0
     AND (
       (${trialsAlias}.status = 'active' AND ? >= ${trialsAlias}.added_at + ${TRIAL_GRACE_PERIOD_SECONDS})
-      OR (${trialsAlias}.status = 'removed' AND ${trialsAlias}.removed_at IS NOT NULL AND ? < ${trialsAlias}.removed_at + ${TRIAL_GRACE_PERIOD_SECONDS})
+      OR (${trialsAlias}.status = 'removed' AND ${trialsAlias}.removed_at IS NOT NULL AND ${trialsAlias}.removed_at >= ${trialsAlias}.added_at + ${TRIAL_GRACE_PERIOD_SECONDS} AND ? < ${trialsAlias}.removed_at + ${TRIAL_GRACE_PERIOD_SECONDS})
     )
     AND (
       ${submissionsAlias}.trial_version = ${trialsAlias}.version

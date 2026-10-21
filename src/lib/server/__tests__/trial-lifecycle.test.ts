@@ -33,6 +33,16 @@ test("a removed trial keeps counting for 7 days after removal, then stops", () =
   assert.equal(isTrialCountedNow(trial, now - DAY + TRIAL_GRACE_PERIOD_SECONDS + 1), false)
 })
 
+test("a trial removed before it ever counted never counts", () => {
+  const now = 1_000_000
+  const trial = { status: "removed" as const, added_at: now - DAY, version: 1, version_changed_at: null, removed_at: now - DAY + 7 }
+
+  assert.equal(isTrialCountedNow(trial, now), false)
+  assert.equal(isTrialCountedNow(trial, now + TRIAL_GRACE_PERIOD_SECONDS), false)
+  // Removed the moment it would have started counting: it did count.
+  assert.equal(isTrialCountedNow({ ...trial, removed_at: now - DAY + TRIAL_GRACE_PERIOD_SECONDS }, now + TRIAL_GRACE_PERIOD_SECONDS), true)
+})
+
 test("submissions under the old version stay valid for 7 days after a version bump", () => {
   const now = 1_000_000
   const trial = { version: 2, version_changed_at: now - DAY }

@@ -16,7 +16,8 @@ export async function getTrialLifecycle(db: D1Database, trialName: string): Prom
 
 // How many trials currently participate in the score average — active
 // trials past their "just added" grace period, plus removed trials still
-// inside their post-removal grace period. Shared by player-scores.ts and
+// inside their post-removal grace period (if they were counting when
+// removed; see trial-lifecycle.ts). Shared by player-scores.ts and
 // the WR-change average-score-delta calculation so both agree on the
 // denominator.
 export async function getCountedTrialCount(db: D1Database, nowSeconds: number): Promise<number> {
@@ -24,7 +25,7 @@ export async function getCountedTrialCount(db: D1Database, nowSeconds: number): 
     `SELECT COUNT(*) AS count
      FROM trials
      WHERE (status = 'active' AND ? >= added_at + ${TRIAL_GRACE_PERIOD_SECONDS})
-        OR (status = 'removed' AND removed_at IS NOT NULL AND ? < removed_at + ${TRIAL_GRACE_PERIOD_SECONDS})`
+        OR (status = 'removed' AND removed_at IS NOT NULL AND removed_at >= added_at + ${TRIAL_GRACE_PERIOD_SECONDS} AND ? < removed_at + ${TRIAL_GRACE_PERIOD_SECONDS})`
   )
     .bind(nowSeconds, nowSeconds)
     .first<{ count: number }>()

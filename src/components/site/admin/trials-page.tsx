@@ -60,13 +60,19 @@ const TRIALS_URL = apiV2("/admin/trials")
 
 type Pending = { trial: string; what: string; when: string; undo: { label: string; path: string; done: string } | null }
 
+// A trial retired before its "just added" grace ended never counted, so it
+// has no grace period after retiring either (see trial-lifecycle.ts).
+function stillCounting(trial: TrialRow, now: number) {
+  return trial.status === "removed" && trial.removed_at !== null && trial.removed_at >= trial.added_at + GRACE && now < trial.removed_at + GRACE
+}
+
 function pendingChanges(trials: TrialRow[], now: number): Pending[] {
   const out: Pending[] = []
   for (const trial of trials) {
     if (trial.status === "active" && now < trial.added_at + GRACE) {
       out.push({ trial: trial.name, what: "Added. Runs can be submitted now; it isn’t part of scores yet.", when: `Counts from ${formatDate(trial.added_at + GRACE)}`, undo: null })
     }
-    if (trial.status === "removed" && trial.removed_at && now < trial.removed_at + GRACE) {
+    if (stillCounting(trial, now) && trial.removed_at !== null) {
       out.push({
         trial: trial.name,
         what: "Retired. Takes no new runs, and still counts toward scores until then.",
@@ -337,7 +343,7 @@ export function AdminTrialsPage() {
         <AdminSection title="Retired" count={retired.length}>
           <ul className="m-0 list-none rounded-lg border border-line bg-surface p-0">
             {retired.map((trial) => {
-              const inGrace = trial.removed_at !== null && now < trial.removed_at + GRACE
+              const inGrace = stillCounting(trial, now)
               const key = `unretire:${trial.name}`
               return (
                 <li key={trial.name} className="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-2 last:border-b-0">
