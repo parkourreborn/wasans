@@ -2,7 +2,7 @@ import "server-only"
 import { buildAuditLogStatement, insertAuditLog, type AuditActor } from "@/lib/server/audit"
 import { gameVersionExists, listGameVersions, setSubmissionGameVersion } from "@/lib/server/repositories/game-version-repository"
 import { enqueueVideoJobs } from "@/lib/server/services/video-processing-service"
-import { STUCK_PROCESSING_SECONDS } from "@/lib/server/video-processing"
+import { STUCK_PROCESSING_SECONDS, videoJobFromStoredSource, type VideoJobMessage } from "@/lib/server/video-processing"
 import { archiveRun, getWorldRecordRun } from "@/lib/server/services/wr-archive-service"
 import { ApiError } from "@/lib/server/v2/http"
 import { isPlayerNameTaken } from "@/lib/server/player-name-service"
@@ -296,6 +296,9 @@ type ImportRowDb = {
   status: "pending" | "imported" | "merged" | "skipped"
   submission_uuid: string | null
   resolved_at: number | null
+  // The imported run's video, for an imported file.
+  video_status: "processing" | "ready" | "failed" | null
+  video_error: string | null
 }
 
 export type ImportQueueRow = Omit<ImportRowDb, "mime_type" | "staged_at" | "encode_queued_at" | "resolved_at"> & {
@@ -417,7 +420,13 @@ export async function listImportQueue(env: CloudflareEnv, db: D1Database) {
   await queueDriveCopies(env, db).catch((error) => console.error("Queueing Drive copies failed:", error))
 
   const [{ results: rows }, { results: trialRows }, versions] = await Promise.all([
-    db.prepare(`SELECT * FROM wr_imports`).all<ImportRowDb>(),
+    db
+      .prepare(
+        `SELECT w.*, s.video_status, s.video_error
+         FROM wr_imports w
+         LEFT JOIN submissions s ON s.uuid = w.submission_uuid AND s.imported = 1 AND w.status = 'imported'`
+      )
+      .all<ImportRowDb>(),
     db.prepare(`SELECT name FROM trials ORDER BY sort_order ASC, name ASC`).all<{ name: string }>(),
     listGameVersions(db),
   ])
@@ -446,6 +455,8 @@ export async function listImportQueue(env: CloudflareEnv, db: D1Database) {
         copy_error: row.copy_error,
         status: row.status,
         submission_uuid: row.submission_uuid,
+        video_status: row.video_status,
+        video_error: row.video_error,
         staged: row.staged_at !== null,
         copying: row.staged_at === null && row.encode_queued_at !== null && !row.copy_error,
         date: driveRecordDate(row.drive_created_at, row.drive_modified_at),
@@ -717,4 +728,57 @@ export async function restoreDriveFile(db: D1Database, driveFileId: string) {
     .run()
   if (outcome.meta.changes !== 1) throw new ApiError("Only a skipped file can go back in the queue", 409, "conflict")
   return { status: "pending" as const }
+}
+
+// Imported runs whose video failed to process go through the pipeline again.
+// Their original was archived either way (see archiveIfImported), so the job
+// reads it from the archive, where it stays: the run never leaves it. A run
+// with no file at all is left as it is.
+export async function reprocessFailedImports(env: CloudflareEnv, db: D1Database, actor: AuditActor) {
+  const now = Math.floor(Date.now() / 1000)
+  const { results } = await db
+    .prepare(`SELECT uuid, original_key, video_error FROM submissions WHERE imported = 1 AND video_status = 'failed'`)
+    .all<{ uuid: string; original_key: string | null; video_error: string | null }>()
+  const failed = results || []
+  const withFile = failed.filter((row) => row.original_key)
+
+  // A conditional claim on each, so two owners clicking at once can't queue
+  // a run twice.
+  const claimed: typeof withFile = []
+  for (let index = 0; index < withFile.length; index += SCAN_BATCH) {
+    const chunk = withFile.slice(index, index + SCAN_BATCH)
+    const outcomes = await db.batch(
+      chunk.map((row) =>
+        db
+          .prepare(`UPDATE submissions SET video_status = 'processing', video_error = NULL, video_updated_at = ? WHERE uuid = ? AND video_status = 'failed'`)
+          .bind(now, row.uuid)
+      )
+    )
+    chunk.forEach((row, position) => {
+      if (outcomes[position].meta.changes === 1) claimed.push(row)
+    })
+  }
+
+  const jobs = claimed.map((row) => videoJobFromStoredSource(row.uuid, "import", null, row.original_key) as VideoJobMessage)
+  try {
+    await enqueueVideoJobs(env, jobs)
+  } catch (error) {
+    // Back to how they were, so the button is there to try again.
+    for (let index = 0; index < claimed.length; index += SCAN_BATCH) {
+      await db.batch(
+        claimed
+          .slice(index, index + SCAN_BATCH)
+          .map((row) =>
+            db.prepare(`UPDATE submissions SET video_status = 'failed', video_error = ? WHERE uuid = ? AND video_status = 'processing'`).bind(row.video_error, row.uuid)
+          )
+      )
+    }
+    throw error
+  }
+
+  const missing = failed.length - withFile.length
+  if (jobs.length > 0) {
+    await insertAuditLog(db, "wr_imports_reprocessed", "maintenance", null, { actor, details: { queued: jobs.length, missing } })
+  }
+  return { queued: jobs.length, missing }
 }

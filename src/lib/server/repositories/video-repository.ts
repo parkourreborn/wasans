@@ -83,7 +83,8 @@ export type VideoResult = {
 
 // Result of a new submission's processing. Only applies while the
 // submission is still waiting on it, so a late duplicate can't flip a
-// ready video back to failed.
+// ready video back to failed. A reprocessed import read its original from
+// the archive, which stays where it is.
 export async function applySubmissionVideoResult(db: D1Database, uuid: string, result: VideoResult, now: number) {
   const ready = result.status === "ready"
   const outcome = await db.prepare(
@@ -91,7 +92,7 @@ export async function applySubmissionVideoResult(db: D1Database, uuid: string, r
        video_status = ?,
        video_error = ?,
        video_width = ?, video_height = ?, video_fps = ?, video_duration = ?,
-       original_key = CASE WHEN ? THEN 'originals/' || uuid ELSE original_key END,
+       original_key = CASE WHEN ? AND COALESCE(original_key, '') NOT LIKE 'world-records/%' THEN 'originals/' || uuid ELSE original_key END,
        video_updated_at = ?,
        video_processed_at = ?
      WHERE uuid = ? AND video_status = 'processing'`
@@ -185,14 +186,14 @@ export async function getBackfillStats(db: D1Database, now: number) {
 
 export async function listStuckProcessingSubmissions(db: D1Database, now: number, limit: number) {
   const rows = await db.prepare(
-    `SELECT uuid, video_source_type, video_source_ref
+    `SELECT uuid, video_source_type, video_source_ref, original_key
      FROM submissions
      WHERE video_status = 'processing' AND video_updated_at < ?
      ORDER BY video_updated_at ASC
      LIMIT ?`
   )
     .bind(now - STUCK_PROCESSING_SECONDS, limit)
-    .all<{ uuid: string; video_source_type: string | null; video_source_ref: string | null }>()
+    .all<{ uuid: string; video_source_type: string | null; video_source_ref: string | null; original_key: string | null }>()
   return rows.results || []
 }
 
