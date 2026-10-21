@@ -232,7 +232,7 @@ export async function sweepVideoProcessing(db: D1Database, env: CloudflareEnv) {
   const jobs: VideoJobMessage[] = []
 
   for (const row of stuck) {
-    const job = videoJobFromStoredSource(row.uuid, row.video_source_type, row.video_source_ref)
+    const job = videoJobFromStoredSource(row.uuid, row.video_source_type, row.video_source_ref, row.original_key)
     if (job) {
       await touchSubmissionVideo(db, row.uuid, now)
       jobs.push(job)

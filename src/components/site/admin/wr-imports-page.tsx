@@ -11,6 +11,7 @@ import {
   CloudDownloadIcon,
   ExternalLinkIcon,
   FolderSearchIcon,
+  RefreshCwIcon,
   RotateCcwIcon,
   SkipForwardIcon,
 } from "lucide-react"
@@ -52,6 +53,9 @@ type ImportRow = {
   copy_error: string | null
   status: "pending" | "imported" | "merged" | "skipped"
   submission_uuid: string | null
+  // The imported run's video, for an imported file.
+  video_status: "processing" | "ready" | "failed" | null
+  video_error: string | null
   staged: boolean
   copying: boolean
   date: number | null
@@ -105,7 +109,7 @@ export function AdminWrImportsPage() {
   const [lastVersion, setLastVersion] = useState<string | null>(null)
 
   const imports = queue?.imports ?? []
-  const copying = imports.some((row) => row.status === "pending" && !row.staged && !row.copy_error)
+  const copying = imports.some((row) => (row.status === "pending" && !row.staged && !row.copy_error) || row.video_status === "processing")
   const lists: Record<View, ImportRow[]> = {
     review: imports.filter((row) => row.status === "pending"),
     player: imports.filter((row) => row.status === "pending" && row.players.length !== 1),
@@ -121,7 +125,8 @@ export function AdminWrImportsPage() {
     if (target) setSelected(target.drive_file_id)
   }
 
-  // Copies happen on the server, so check back while any are left.
+  // Copies and imported runs' videos are processed on the server, so check
+  // back while any are left.
   useEffect(() => {
     if (!copying) return
     const timer = window.setInterval(refetch, 20 * 1000)
@@ -234,8 +239,8 @@ export function AdminWrImportsPage() {
                       <span className={cn("truncate text-[13px]", row.status === "pending" && row.players.length !== 1 ? "text-gold" : "text-muted-foreground")}>
                         {row.parsed.player ?? "No player in the name"}
                       </span>
-                      <span className={cn("text-right text-[12px]", row.copy_error ? "text-destructive" : "text-subtle-foreground")}>
-                        {row.status === "imported" ? "Imported" : row.status === "merged" ? "Matched" : row.status === "skipped" ? "Skipped" : row.staged ? "Ready" : row.copy_error ? "Copy failed" : row.copying ? "Copying" : "Waiting"}
+                      <span className={cn("text-right text-[12px]", row.copy_error || row.video_status === "failed" ? "text-destructive" : "text-subtle-foreground")}>
+                        {row.video_status === "failed" ? "Video failed" : row.video_status === "processing" ? "Processing" : row.status === "imported" ? "Imported" : row.status === "merged" ? "Matched" : row.status === "skipped" ? "Skipped" : row.staged ? "Ready" : row.copy_error ? "Copy failed" : row.copying ? "Copying" : "Waiting"}
                       </span>
                     </button>
                   </li>
@@ -276,7 +281,9 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
   const [folder, setFolder] = useState(queue.default_folder)
   const [scanning, setScanning] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [reprocessing, setReprocessing] = useState(false)
   const pending = queue.imports.filter((row) => row.status === "pending")
+  const failedVideos = queue.imports.filter((row) => row.video_status === "failed").length
   const copied = pending.filter((row) => row.staged).length
   const failed = pending.filter((row) => !row.staged && row.copy_error).length
   const inProgress = pending.filter((row) => row.copying).length
@@ -311,6 +318,25 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
       toast.error(errorText(err, "Couldn’t retry the copies"))
     } finally {
       setRetrying(false)
+    }
+  }
+
+  // Imported runs whose video failed are processed again from their
+  // archived original.
+  const reprocess = async () => {
+    setReprocessing(true)
+    try {
+      const result = await adminRequest<{ queued: number; missing: number }>("/admin/wr-imports/reprocess", { fallback: "Couldn’t reprocess the videos" })
+      const queued = result?.queued ?? 0
+      toast.success(
+        `Processing ${formatCount(queued)} ${queued === 1 ? "video" : "videos"} again` +
+          (result?.missing ? `. ${formatCount(result.missing)} ${result.missing === 1 ? "has" : "have"} no file to process.` : "")
+      )
+      onChanged()
+    } catch (err) {
+      toast.error(errorText(err, "Couldn’t reprocess the videos"))
+    } finally {
+      setReprocessing(false)
     }
   }
 
@@ -351,6 +377,20 @@ function DriveCard({ queue, onChanged }: { queue: QueueData; onChanged: () => vo
               Retry {formatCount(failed)} failed
             </Button>
           ) : null}
+        </div>
+      ) : null}
+      {failedVideos > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="flex-1 text-[13px] text-muted-foreground">
+            <span className="text-destructive">
+              {formatCount(failedVideos)} imported {failedVideos === 1 ? "run’s video" : "runs’ videos"} failed to process
+            </span>
+            . Their files are safe in the archive, so they can be processed again from there.
+          </span>
+          <Button type="button" variant="outline" onClick={() => void reprocess()} disabled={reprocessing}>
+            {reprocessing ? <Spinner className="size-4" /> : <RefreshCwIcon />}
+            Reprocess {formatCount(failedVideos)} failed
+          </Button>
         </div>
       ) : null}
     </AdminCard>
@@ -491,7 +531,12 @@ function ImportDetail({
       }
       if (!response.ok || !json?.data) throw new Error(json?.error?.message || "Couldn’t save")
       const result = json.data
-      onResolved({ status: result.status === "merged" ? "merged" : "imported", submission_uuid: result.submission_uuid ?? null }, version, result.player)
+      const imported = result.status !== "merged"
+      onResolved(
+        { status: imported ? "imported" : "merged", submission_uuid: result.submission_uuid ?? null, video_status: imported ? "processing" : null },
+        version,
+        result.player
+      )
       toast.success(
         result.status === "merged"
           ? `Matched to the site’s run${result.backdated ? " and backdated it" : ""}`
@@ -732,6 +777,11 @@ function ResolvedDetail({ row, onRestored }: { row: ImportRow; onRestored: () =>
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface p-4 text-[14px]">
         <span className="flex-1">
           {row.status === "imported" ? "Imported as a run." : row.status === "merged" ? "Matched to a run the site already had." : "Skipped."}
+          {row.video_status === "failed" ? (
+            <span className="text-destructive"> Its video failed to process{row.video_error ? `: ${row.video_error}` : "."}</span>
+          ) : row.video_status === "processing" ? (
+            " Its video is being processed."
+          ) : null}
         </span>
         {row.submission_uuid ? (
           <Button asChild variant="outline">

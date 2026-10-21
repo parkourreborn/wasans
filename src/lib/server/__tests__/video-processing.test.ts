@@ -60,6 +60,14 @@ test("stuck jobs are rebuilt from the stored source", () => {
     medalUrl: "https://medal.tv/clips/1",
     attempt: 1,
   })
+  // An import reads its original from the archive once it's there.
+  assert.deepEqual(videoJobFromStoredSource("abc", "import", null, "originals/abc"), { submissionUuid: "abc", reason: "import", attempt: 1 })
+  assert.deepEqual(videoJobFromStoredSource("abc", "import", null, "world-records/Thread/x"), {
+    submissionUuid: "abc",
+    reason: "import",
+    originalKey: "world-records/Thread/x",
+    attempt: 1,
+  })
   assert.equal(videoJobFromStoredSource("abc", "upload", "scores/abc.mp4"), null)
   assert.equal(videoJobFromStoredSource("abc", null, null), null)
 })

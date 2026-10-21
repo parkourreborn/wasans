@@ -66,6 +66,7 @@ export const ADMIN_ACTIONS = [
   "wr_imported",
   "wr_import_matched",
   "wr_import_skipped",
+  "wr_imports_reprocessed",
   "placeholder_runs_moved",
 ] as const
 
@@ -277,6 +278,8 @@ export function describeLog(row: LogRow): { tag: string; tone: "error" | "good" 
       }
     case "wr_import_skipped":
       return { tag: "Import", tone: "muted", text: `${who} skipped a file from the old WR Drive`, meta: str(d.file_name) }
+    case "wr_imports_reprocessed":
+      return { tag: "Import", tone: "admin", text: `${who} reprocessed the failed videos of imported records`, meta: `${num(d.queued) ?? 0} queued` }
     case "placeholder_runs_moved":
       return {
         tag: "Players",

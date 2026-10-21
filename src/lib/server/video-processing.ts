@@ -2,6 +2,8 @@
 // "server-only", so it stays testable like trial-lifecycle.ts. The
 // container that does the actual processing lives in video-worker/.
 
+import { isArchiveKey } from "@/lib/wr-archive"
+
 // Server-side transcoding means the browser no longer has to hand us an
 // H.264 MP4; anything ffmpeg reads is fine. The container enforces the same
 // size cap again while downloading, and the duration cap after probing.
@@ -67,13 +69,14 @@ export function isUploadConsumable(
 }
 
 // "import": a world record from the old WR Drive, whose file is already at
-// originals/{uuid} (see wr-import-service.ts). "drive": that file while it
-// waits in the import queue.
+// originals/{uuid} (see wr-import-service.ts), or in the archive at
+// originalKey when one that failed is reprocessed. "drive": that file while
+// it waits in the import queue.
 export type VideoJobMessage =
   | { submissionUuid: string; reason: "upload"; incomingKey: string; attempt: 1 }
   | { submissionUuid: string; reason: "medal"; medalUrl: string; attempt: 1 }
   | { submissionUuid: string; reason: "backfill"; attempt: 1 }
-  | { submissionUuid: string; reason: "import"; attempt: 1 }
+  | { submissionUuid: string; reason: "import"; originalKey?: string; attempt: 1 }
   // A file waiting in the WR import queue, re-encoded in place at
   // imports/{driveFileId}.
   | { driveFileId: string; reason: "drive"; attempt: 1 }
@@ -83,7 +86,8 @@ export type VideoJobMessage =
 export function videoJobFromStoredSource(
   submissionUuid: string,
   sourceType: string | null,
-  sourceRef: string | null
+  sourceRef: string | null,
+  originalKey: string | null = null
 ): VideoJobMessage | null {
   if (sourceType === "upload" && sourceRef?.startsWith("incoming/")) {
     return { submissionUuid, reason: "upload", incomingKey: sourceRef, attempt: 1 }
@@ -92,7 +96,9 @@ export function videoJobFromStoredSource(
     return { submissionUuid, reason: "medal", medalUrl: sourceRef, attempt: 1 }
   }
   if (sourceType === "import") {
-    return { submissionUuid, reason: "import", attempt: 1 }
+    return isArchiveKey(originalKey)
+      ? { submissionUuid, reason: "import", originalKey, attempt: 1 }
+      : { submissionUuid, reason: "import", attempt: 1 }
   }
   return null
 }

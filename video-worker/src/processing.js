@@ -42,7 +42,8 @@ const MAX_DURATION_SECONDS = 10 * 60
 const MAX_DRIVE_BYTES = 4 * 1024 * 1024 * 1024
 const MAX_PREVIEW_BYTES = 2 * 1024 * 1024
 // "import": a world record from the old WR Drive. The main app has already
-// put its file at originals/{uuid}.
+// put its file at originals/{uuid}, or, when it reprocesses one that failed,
+// names where it's archived (originalKey, read-only).
 // "drive": a file from the old WR Drive waiting in the import queue.
 const REASONS = new Set(["upload", "medal", "backfill", "import", "drive"])
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
@@ -60,7 +61,7 @@ function keysFor(job) {
     return { original: `imports/${job.driveFileId}` }
   }
   return {
-    original: `originals/${job.submissionUuid}`,
+    original: job.originalKey ?? `originals/${job.submissionUuid}`,
     published: `scores/${job.submissionUuid}.mp4`,
     preview: `scores/${job.submissionUuid}-preview.jpg`,
     incoming: job.incomingKey,
@@ -212,19 +213,25 @@ function toJob(body) {
   if (body.reason === "medal" && !/^https:\/\/(www\.)?medal\.tv\//.test(String(body.medalUrl || ""))) {
     return null
   }
+  // An import job only ever reads its original, so this can't be used to
+  // write into the archive.
+  if (body.originalKey != null && (body.reason !== "import" || !String(body.originalKey).startsWith("world-records/"))) {
+    return null
+  }
   return {
     submissionUuid,
     driveFileId,
     reason: body.reason,
     incomingKey: body.reason === "upload" ? body.incomingKey : null,
     medalUrl: body.reason === "medal" ? body.medalUrl : null,
+    originalKey: body.originalKey != null ? String(body.originalKey) : null,
     attempt: Number.isInteger(body.attempt) && body.attempt > 0 ? body.attempt : 1,
   }
 }
 
 function toMessage(job) {
-  const { submissionUuid, driveFileId, reason, incomingKey, medalUrl, attempt } = job
-  return { submissionUuid, driveFileId, reason, incomingKey, medalUrl, attempt }
+  const { submissionUuid, driveFileId, reason, incomingKey, medalUrl, originalKey, attempt } = job
+  return { submissionUuid, driveFileId, reason, incomingKey, medalUrl, originalKey, attempt }
 }
 
 // Queue consumer entry point (see src/index.js). Throws if the container
