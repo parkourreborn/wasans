@@ -57,8 +57,11 @@ const SCAN_BATCH = 50
 // in the queue after this long.
 const CLAIM_TIMEOUT_SECONDS = 10 * 60
 // Files copying at once. Each one that finishes queues the next, so a big
-// backlog never piles up on the video queue.
-const MAX_COPYING = 12
+// backlog never piles up on the video queue. Kept below the video worker's
+// 6 instances: a finished copy's next one is queued straight away and would
+// otherwise take every instance that frees up, leaving players' videos
+// waiting until the queue gives up on them.
+const MAX_COPYING = 4
 // The video container's limit for a Drive file (MAX_DRIVE_BYTES in
 // video-worker/src/processing.js).
 const MAX_DRIVE_BYTES = 4 * 1024 * 1024 * 1024
