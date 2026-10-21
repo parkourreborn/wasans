@@ -9,6 +9,7 @@ import {
   deleteOldVideoUploads,
   failStuckSubmissionVideo,
   findPreviousPersonalBest,
+  findSubmissionOriginalKey,
   getBackfillStats,
   insertVideoUpload,
   listStuckProcessingSubmissions,
@@ -28,6 +29,7 @@ import {
 import { ApiError } from "@/lib/server/v2/http"
 import { archiveIfImported } from "@/lib/server/services/wr-archive-service"
 import { generateShortId } from "@/lib/utils"
+import { isArchiveKey } from "@/lib/wr-archive"
 
 // Generous for real use (one upload per trial, plus retries), tight enough
 // that one account can't mint thousands of upload URLs.
@@ -87,6 +89,8 @@ export async function enqueueVideoJobs(env: CloudflareEnv, jobs: VideoJobMessage
 
 type ResultPayload = {
   reason?: unknown
+  // For an import job: the archived file it read, or null for originals/.
+  original_key?: unknown
   status?: unknown
   error?: unknown
   original_kept?: unknown
@@ -134,6 +138,17 @@ export async function handleVideoResult(
     // Keep the backfill going: each finished item starts the next one.
     ctx.waitUntil(continueBackfill(db, env).catch((error) => console.error("Backfill continuation failed:", error)))
     return { applied: true }
+  }
+
+  // A reprocessed import reads its archived original (see
+  // wr-import-service.ts). A leftover job from before that looked in
+  // originals/ and can only report the file missing, so its result doesn't
+  // count; the run's real job is still on its way.
+  if (payload.reason === "import") {
+    const originalKey = await findSubmissionOriginalKey(db, submissionUuid)
+    if (isArchiveKey(originalKey) && payload.original_key !== originalKey) {
+      return { applied: false }
+    }
   }
 
   const applied = await applySubmissionVideoResult(db, submissionUuid, result, now)

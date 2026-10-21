@@ -81,6 +81,11 @@ export type VideoResult = {
   duration_seconds: number | null
 }
 
+export async function findSubmissionOriginalKey(db: D1Database, uuid: string) {
+  const row = await db.prepare(`SELECT original_key FROM submissions WHERE uuid = ?`).bind(uuid).first<{ original_key: string | null }>()
+  return row?.original_key ?? null
+}
+
 // Result of a new submission's processing. Only applies while the
 // submission is still waiting on it, so a late duplicate can't flip a
 // ready video back to failed. A reprocessed import read its original from
