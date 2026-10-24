@@ -71,27 +71,35 @@ test("records count only if they were still standing on June 1, with their real 
     // Set in April, taken in July.
     entry("Spire", "me", APRIL),
     entry("Spire", "rival", JULY),
-    // Beaten by themselves before June (left out), then again in July (counts).
+    // Beaten by themselves before June (left out), then again in July
+    // (counts). Held since the first of them.
     entry("Vault", "me", APRIL - DAY),
     entry("Vault", "me", APRIL),
     entry("Vault", "me", JULY),
+    // Beaten by themselves, then taken: one hold, from the first.
+    entry("Ledge", "me", APRIL),
+    entry("Ledge", "me", MAY),
+    entry("Ledge", "rival", JULY),
   ]
   // Each trial's last record is its current one.
-  const current = new Set(["Thread", "Ascent", "Spire", "Vault"].map((trial) => history.filter((row) => row.trial_name === trial).pop()!.uuid))
+  const current = new Set(["Thread", "Ascent", "Spire", "Vault", "Ledge"].map((trial) => history.filter((row) => row.trial_name === trial).pop()!.uuid))
   const { held, lost, allTime } = recordsFor(history, "me", current)
 
   assert.deepEqual(
     held.map((record) => [record.trial, record.since]),
     [
-      ["Vault", JULY],
       ["Ascent", APRIL],
+      ["Vault", APRIL - DAY],
     ]
   )
   assert.deepEqual(
     lost.map((record) => [record.trial, record.set, record.held]),
-    [["Spire", APRIL, JULY - APRIL]]
+    [
+      ["Spire", APRIL, JULY - APRIL],
+      ["Ledge", APRIL, JULY - APRIL],
+    ]
   )
-  assert.equal(allTime, 4)
+  assert.equal(allTime, 5)
 })
 
 test("records from the old WR Drive count however long ago they were beaten, but stay out of the feed", () => {
@@ -121,7 +129,10 @@ test("records from the old WR Drive count however long ago they were beaten, but
   const current = new Set([history[3].uuid])
   const { held, lost, allTime } = recordsFor(history, "me", current)
 
-  assert.deepEqual(held.map((record) => record.trial), ["Thread"])
+  assert.deepEqual(
+    held.map((record) => [record.trial, record.since]),
+    [["Thread", APRIL - YEAR / 2]]
+  )
   assert.deepEqual(lost.map((record) => [record.trial, record.takenBy]), [["Thread", "rival"]])
   // Held Thread, lost Thread once, beat their own Thread once, and Depot.
   assert.equal(allTime, 4)
