@@ -7,6 +7,7 @@ import { LocateFixedIcon, PlayIcon } from "lucide-react"
 import { apiV2 } from "@/lib/api"
 import calculateScore from "@/lib/calc-score"
 import { daysBetween, formatAge, formatCount, formatDate, formatDays, formatDelta, formatScore, formatTime } from "@/lib/format"
+import { trialSlug } from "@/lib/trial-slug"
 import { bronze, plats, type TrialName } from "@/lib/trials"
 import { cn } from "@/lib/utils"
 import { useApi } from "@/hooks/use-api"
@@ -295,7 +296,11 @@ export function TrialPage({ trial }: { trial: TrialName }) {
               </Stat>
             </div>
             <p className="max-w-xl text-sm text-muted-foreground">
-              A run scores 0 at the bronze time, 0.300 at platinum and 1.000 at the world record.
+              A run scores 0 at the bronze time, 0.300 at platinum and 1.000 at the world record.{" "}
+              <Link href={`/analytics?trial=${trialSlug(trial)}#trial-dive`} className="underline underline-offset-4 hover:text-foreground">
+                See how the field is spread
+              </Link>
+              .
             </p>
           </dl>
         </div>
